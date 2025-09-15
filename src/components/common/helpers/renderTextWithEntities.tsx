@@ -607,7 +607,7 @@ function processEntity({
         </a>
       );
     case ApiMessageEntityTypes.Pre:
-      return <CodeBlock text={entityText} language={entity.language} noCopy={isProtected} />;
+      return <CodeBlock text={entityText} language={entity.language} noCopy={false} />;
     case ApiMessageEntityTypes.Strike:
       return <del data-entity-type={entity.type}>{renderNestedMessagePart()}</del>;
     case ApiMessageEntityTypes.TextUrl:

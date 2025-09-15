@@ -200,6 +200,24 @@ export type TabState = {
     additionalInfo?: string;
   };
 
+  isCustomerServiceModalOpen?: boolean;
+
+  customerService?: {
+    messages: ApiMessage[];
+    messagesByChatId: Record<string, ApiMessage[]>;
+    lastUpdated: number;
+    replyingToMessage?: ApiMessage;
+    repliedMessageIds: string[]; // 已回复的消息ID数组 (格式: "chatId-messageId")
+    settings?: {
+      monitoredChatIds: string[];
+      filteredUserIds: string[];
+      regexFilters: Array<{
+        source: string;
+        flags: string;
+      }>;
+    };
+  };
+
   reactionPicker?: {
     chatId?: string;
     messageId?: number;

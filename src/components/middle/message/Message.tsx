@@ -732,7 +732,7 @@ const Message: FC<OwnProps & StateProps> = ({
     'Message message-list-item',
     isFirstInGroup && 'first-in-group',
     isProtected && 'hide-on-print',
-    isProtected && !hasTextContent ? 'is-protected' : 'allow-selection',
+    'allow-selection',
     isLastInGroup && 'last-in-group',
     isFirstInDocumentGroup && 'first-in-document-group',
     isLastInDocumentGroup && 'last-in-document-group',
@@ -1675,7 +1675,7 @@ const Message: FC<OwnProps & StateProps> = ({
       id={getMessageHtmlId(message.id)}
       className={containerClassName}
       data-message-id={messageId}
-      onCopy={isProtected ? stopEvent : undefined}
+      onCopy={undefined}
       onMouseDown={handleMouseDown}
       onClick={handleClick}
       onContextMenu={handleContextMenu}

@@ -115,6 +115,7 @@ const LeftMainHeader: FC<OwnProps & StateProps> = ({
     lockScreen,
     openSettingsScreen,
     searchMessagesGlobal,
+    openCustomerService,
   } = getActions();
 
   const oldLang = useOldLang();
@@ -201,6 +202,10 @@ const LeftMainHeader: FC<OwnProps & StateProps> = ({
         shouldResetResultsByType: true,
       });
     }
+  });
+
+  const handleCustomerService = useLastCallback(() => {
+    openCustomerService();
   });
 
   const isSearchRelevant = Boolean(globalSearchChatId)
@@ -313,6 +318,17 @@ const LeftMainHeader: FC<OwnProps & StateProps> = ({
           />
         </SearchInput>
         {isCurrentUserPremium && <StatusButton />}
+        <Button
+          round
+          ripple={!isMobile}
+          size="smaller"
+          color="translucent"
+          ariaLabel={lang('CustomerService')}
+          onClick={handleCustomerService}
+          className={buildClassName(!isCurrentUserPremium && !hasPasscode && 'extra-spacing')}
+        >
+          <Icon name="phone" />
+        </Button>
         {hasPasscode && (
           <Button
             round

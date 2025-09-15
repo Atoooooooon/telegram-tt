@@ -10,6 +10,7 @@ import type {
 import { MAIN_THREAD_ID } from '../../../api/types';
 
 import { SERVICE_NOTIFICATIONS_USER_ID } from '../../../config';
+import { shouldFilterMessage } from '../../../config/customerService';
 import { areDeepEqual } from '../../../util/areDeepEqual';
 import { isUserId } from '../../../util/entities/ids';
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
@@ -176,6 +177,14 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
 
       if (message.reportDeliveryUntilDate && message.reportDeliveryUntilDate > getServerTime()) {
         actions.reportMessageDelivery({ chatId, messageId: id });
+      }
+
+      // Add message to customer service if it passes all filters and not from current user
+      if (!isLocal && !message.isOutgoing) {
+        const messageText = getMessageText(newMessage);
+        if (!shouldFilterMessage(chatId, message.senderId, messageText, global)) {
+          actions.addToCustomerService({ message: newMessage, chatId });
+        }
       }
 
       setGlobal(global);

@@ -112,6 +112,8 @@ export type GlobalState = {
 
   recentlyFoundChatIds?: string[];
 
+  customerServiceActiveChat?: string;
+
   twoFaSettings: {
     hint?: string;
     isLoading?: boolean;

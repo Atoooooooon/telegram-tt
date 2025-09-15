@@ -45,7 +45,36 @@
   }
 
   &.is-protected {
-    user-select: none;
+    /* user-select: none; // 已禁用，允许所有消息的文本选择 */
+  }
+
+  .can-select-text {
+    user-select: text !important;
+
+    * {
+      user-select: text !important;
+    }
+
+    .text-content,
+    .message-text,
+    .embedded-text-wrapper,
+    .message-content {
+      user-select: text !important;
+
+      * {
+        user-select: text !important;
+      }
+    }
+  }
+
+  // 强制覆盖，确保文本内容总是可选择
+  .text-content,
+  .message-content {
+    user-select: text !important;
+
+    * {
+      user-select: text !important;
+    }
   }
 
   > .Avatar,

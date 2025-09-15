@@ -2812,6 +2812,49 @@ export interface ActionPayloads {
     chatId: string;
     messageId: number;
   };
+
+  addToCustomerService: {
+    chatId: string;
+    message: ApiMessage;
+  };
+  
+  toggleCustomerService: {
+    force?: boolean;
+  } & WithTabId;
+  
+  openCustomerService: WithTabId | undefined;
+  
+  closeCustomerService: WithTabId | undefined;
+  
+  clearCustomerServiceMessages: WithTabId | undefined;
+  
+  setCustomerServiceReply: {
+    message?: ApiMessage;
+  } & WithTabId;
+  
+  sendCustomerServiceReply: {
+    text: string;
+    replyToMessage: ApiMessage;
+  } & WithTabId;
+  
+  resolveCustomerServiceMessage: {
+    message: ApiMessage;
+  } & WithTabId;
+  
+  markCustomerServiceMessageReplied: {
+    chatId: string;
+    messageId: number;
+  } & WithTabId;
+
+  saveCustomerServiceSettings: {
+    settings: {
+      monitoredChatIds: string[];
+      filteredUserIds: string[];
+      regexFilters: RegExp[];
+    };
+  } & WithTabId;
+
+  initializeCustomerServiceSettings: WithTabId;
 }
 
 export interface RequiredActionPayloads {

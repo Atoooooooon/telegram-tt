@@ -326,6 +326,18 @@
 
     -webkit-touch-callout: none;
 
+    // 强制允许文本内容选择
+    .text-content,
+    .message-content,
+    .can-select-text,
+    .messageContent {
+      user-select: text !important;
+
+      * {
+        user-select: text !important;
+      }
+    }
+
     &.select-mode-active {
       user-select: auto;
 

@@ -1,0 +1,980 @@
+.modal {
+  // 确保z-index低于媒体查看器
+  z-index: 1000 !important;
+
+  // 覆盖Modal组件的默认样式，强制全屏显示
+  .modal-container {
+    align-items: stretch !important;
+    justify-content: stretch !important;
+  }
+  
+  .modal-dialog {
+    margin: 0 !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    min-width: 100vw !important;
+    border-radius: 0 !important;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+  
+  .modal-content {
+    max-height: none !important;
+    padding: 0 !important;
+    height: 100vh !important;
+    width: 100vw !important;
+    border-radius: 0 !important;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  // 特别针对手机端覆盖Modal的默认限制
+  @media (max-width: 450px) {
+    .modal-dialog {
+      max-width: 100vw !important;  // 覆盖Modal.scss中的calc(100vw - 3rem)
+      width: 100vw !important;
+      min-width: 100vw !important;
+      margin: 0 !important;
+      border-radius: 0 !important;
+      transform: none !important;
+    }
+  }
+  
+  // 确保在所有小屏设备上都是全屏
+  @media (max-width: 768px) {
+    .modal-container {
+      align-items: stretch !important;
+      justify-content: stretch !important;
+    }
+    
+    .modal-dialog {
+      width: 100vw !important;
+      height: 100vh !important;
+      max-width: 100vw !important;
+      max-height: 100vh !important;
+      min-width: 100vw !important;
+      margin: 0 !important;
+      border-radius: 0 !important;
+      transform: none !important;
+      box-shadow: none !important;
+    }
+    
+    .modal-content {
+      max-height: none !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      height: 100vh !important;
+      width: 100vw !important;
+      border-radius: 0 !important;
+    }
+  }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--color-borders);
+  flex-shrink: 0;
+  gap: 1rem;
+  width: 100%;
+  
+  @media (max-width: 768px) {
+    padding: 0.75rem 1rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+}
+
+.title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  
+  @media (max-width: 768px) {
+    font-size: 1.125rem;
+    order: 1;
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.headerInfo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  
+  @media (max-width: 768px) {
+    font-size: 0.8125rem;
+    gap: 0.125rem;
+    order: 3;
+    width: 100%;
+    flex-direction: row;
+    justify-content: center;
+  }
+}
+
+.messageCount {
+  font-weight: var(--font-weight-medium);
+}
+
+.groupCount {
+  font-size: 0.8125rem;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  
+  @media (max-width: 768px) {
+    order: 2;
+    margin-left: auto;
+  }
+}
+
+.settingsButton {
+  flex-shrink: 0;
+}
+
+.closeButton {
+  flex-shrink: 0;
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  padding: 1.5rem;
+  flex-direction: column;
+  
+  @media (max-width: 768px) {
+    padding: 1rem;
+  }
+}
+
+.contentWithComposer {
+  padding-bottom: 8rem;
+  
+  @media (max-width: 768px) {
+    padding-bottom: 8rem;
+  }
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  text-align: center;
+  color: var(--color-text-secondary);
+  padding: 2rem;
+  max-width: 800px;
+  margin: 0 auto;
+  
+  h3 {
+    margin: 1rem 0 2rem 0;
+    color: var(--color-text);
+    font-size: 1.25rem;
+  }
+  
+  @media (max-width: 768px) {
+    padding: 1rem;
+  }
+}
+
+.emptyIcon {
+  font-size: 4rem;
+  opacity: 0.4;
+  color: var(--color-primary);
+}
+
+.configStatus {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  width: 100%;
+  margin: 2rem 0;
+  
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+}
+
+.statusSection {
+  background: var(--color-background);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  border: 1px solid var(--color-borders);
+  text-align: left;
+  transition: all 0.15s ease;
+  
+  &:hover {
+    border-color: var(--color-primary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+  
+  h4 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 1rem 0;
+    font-size: 1rem;
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text);
+  }
+  
+  @media (max-width: 768px) {
+    padding: 1rem;
+  }
+}
+
+.statusIcon {
+  font-size: 1.125rem;
+  color: var(--color-primary);
+  opacity: 0.8;
+}
+
+.statusContent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.statusNumber {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.count {
+  font-size: 2rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary);
+  line-height: 1;
+}
+
+.label {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.statusDetails {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-background-secondary-accent);
+  border-radius: 0.375rem;
+  border-left: 3px solid var(--color-primary);
+}
+
+.regexList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.regexItem {
+  font-family: var(--font-family-monospace);
+  font-size: 0.75rem;
+  background: var(--color-code-bg);
+  color: var(--color-code-text);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--color-borders-light);
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.moreItems {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  font-style: italic;
+  padding: 0.25rem 0;
+}
+
+.emptyHint {
+  background: var(--color-info-bg, var(--color-background-secondary-accent));
+  border: 1px solid var(--color-info-border, var(--color-borders));
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  margin-top: 2rem;
+  text-align: left;
+  max-width: 600px;
+  
+  p {
+    margin: 0.5rem 0;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    
+    &:first-child {
+      margin-top: 0;
+    }
+    
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+  
+  @media (max-width: 768px) {
+    padding: 1rem;
+    margin-top: 1rem;
+  }
+}
+
+.hintIcon {
+  float: left;
+  font-size: 1.125rem;
+  color: var(--color-primary);
+  margin-right: 0.75rem;
+  margin-top: 0.125rem;
+  opacity: 0.7;
+}
+
+.messageList {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  
+  @media (max-width: 768px) {
+    padding: 0.5rem;
+    gap: 0.75rem;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 0.375rem;
+    gap: 0.5rem;
+  }
+}
+
+.message {
+  background: var(--color-background-secondary);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  border: 1px solid var(--color-borders);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  
+  &:hover {
+    background: var(--color-background);
+    border-color: var(--color-borders-secondary);
+  }
+  
+  @media (max-width: 768px) {
+    padding: 0.75rem;
+    border-radius: 0.375rem;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+  }
+}
+
+.messageReplied {
+  border-left: 4px solid var(--color-green);
+  position: relative;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: -1px;
+    right: -1px;
+    bottom: -1px;
+    border: 1px solid var(--color-green);
+    border-radius: 0.5rem;
+    pointer-events: none;
+    opacity: 0.6;
+  }
+  
+  &:hover::before {
+    opacity: 0.8;
+    border-color: var(--color-green);
+  }
+}
+
+.messageHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--color-borders-light);
+  
+  @media (max-width: 768px) {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+  
+  @media (max-width: 768px) {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+}
+
+.chatTitle {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary);
+  font-size: 1rem;
+  line-height: 1.2;
+  flex-shrink: 0;
+  
+  @media (max-width: 768px) {
+    font-size: 0.9375rem;
+  }
+}
+
+.separator {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+  opacity: 0.6;
+  flex-shrink: 0;
+  
+  @media (max-width: 768px) {
+    display: none;
+  }
+}
+
+.senderInfo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  min-width: 0;
+  
+  strong {
+    color: var(--color-text);
+    font-weight: var(--font-weight-medium);
+  }
+  
+  @media (max-width: 768px) {
+    font-size: 0.8125rem;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+}
+
+.senderUsername {
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  opacity: 0.8;
+  
+  @media (max-width: 768px) {
+    font-size: 0.75rem;
+  }
+}
+
+.messageTime {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+  
+  @media (max-width: 768px) {
+    font-size: 0.75rem;
+    align-self: flex-end;
+  }
+}
+
+.messageContent {
+  margin: 0.75rem 0;
+  color: var(--color-text);
+  line-height: 1.5;
+  font-size: 1rem;
+  font-weight: var(--font-weight-medium);
+  background: var(--color-background-secondary-accent);
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  border-left: 3px solid var(--color-primary);
+  user-select: text !important;
+
+  * {
+    user-select: text !important;
+  }
+
+  @media (max-width: 768px) {
+    margin: 0.5rem 0;
+    padding: 0.5rem;
+    font-size: 0.9375rem;
+  }
+}
+
+.messageActions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-borders-light);
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  
+  @media (max-width: 1024px) {
+    gap: 0.5rem;
+  }
+  
+  @media (max-width: 768px) {
+    margin-top: 0.5rem;
+    padding-top: 0.375rem;
+    gap: 0.5rem;
+    justify-content: space-between;
+  }
+  
+  @media (max-width: 480px) {
+    gap: 0.25rem;
+    justify-content: center;
+  }
+}
+
+.contextButton {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-shrink: 0;
+  min-width: auto;
+  padding: 0.375rem 0.75rem;
+  
+  // 桌面端：正常大小
+  @media (min-width: 1025px) {
+    gap: 0.375rem;
+  }
+  
+  // 平板端：适中大小
+  @media (max-width: 1024px) and (min-width: 769px) {
+    gap: 0.25rem;
+    padding: 0.375rem 0.5rem;
+    font-size: 0.875rem;
+  }
+  
+  // 手机端：紧凑模式，只显示图标
+  @media (max-width: 768px) {
+    gap: 0;
+    min-width: 2.5rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0.5rem;
+    justify-content: center;
+    border-radius: 50%;
+  }
+}
+
+.resolveButton {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-shrink: 0;
+  min-width: auto;
+  padding: 0.375rem 0.75rem;
+  
+  // 桌面端：正常大小
+  @media (min-width: 1025px) {
+    gap: 0.375rem;
+  }
+  
+  // 平板端：适中大小
+  @media (max-width: 1024px) and (min-width: 769px) {
+    gap: 0.25rem;
+    padding: 0.375rem 0.5rem;
+    font-size: 0.875rem;
+  }
+  
+  // 手机端：紧凑模式，只显示图标
+  @media (max-width: 768px) {
+    gap: 0;
+    min-width: 2.5rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0.5rem;
+    justify-content: center;
+    border-radius: 50%;
+  }
+}
+
+.buttonText {
+  // 桌面端：正常显示
+  @media (min-width: 1025px) {
+    display: inline;
+  }
+  
+  // 平板端：显示但字体更小
+  @media (max-width: 1024px) and (min-width: 769px) {
+    display: inline;
+    font-size: 0.8125rem;
+  }
+  
+  // 手机端：隐藏文字，只显示图标
+  @media (max-width: 768px) {
+    display: none;
+  }
+}
+
+.composerContainer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  background: var(--color-background);
+  border-top: 1px solid var(--color-borders);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  
+  @media (max-width: 768px) {
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
+  }
+}
+
+// 清空按钮样式
+.clearButton {
+  opacity: 0.8;
+  transition: all 0.15s ease;
+  
+  &:hover:not(:disabled) {
+    opacity: 1;
+    background-color: var(--color-danger-shade) !important;
+    color: var(--color-danger) !important;
+  }
+  
+  &:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+}
+
+// 确认对话框样式
+.confirmModal {
+  :global(.modal-dialog) {
+    width: auto !important;
+    height: auto !important;
+    max-width: 400px !important;
+    max-height: auto !important;
+    margin: auto !important;
+    border-radius: 0.75rem !important;
+    transform: none !important;
+  }
+  
+  :global(.modal-content) {
+    padding: 0 !important;
+    height: auto !important;
+    width: auto !important;
+    border-radius: 0.75rem !important;
+  }
+}
+
+.confirmContent {
+  padding: 1.5rem;
+  
+  @media (max-width: 600px) {
+    padding: 1rem;
+  }
+}
+
+.confirmText {
+  margin: 0 0 1.5rem 0;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--color-text);
+  text-align: center;
+}
+
+.confirmActions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  
+  @media (max-width: 600px) {
+    flex-direction: column-reverse;
+    
+    button {
+      width: 100%;
+    }
+  }
+}
+
+.cancelButton {
+  flex-shrink: 0;
+}
+
+.confirmButton {
+  flex-shrink: 0;
+  min-width: 140px;
+  
+  @media (max-width: 600px) {
+    min-width: auto;
+  }
+}
+
+// 消息媒体内容样式
+.messageMedia {
+  margin: 0.5rem 0;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  max-width: 300px;
+
+  :global(.Photo) {
+    border-radius: 0.5rem;
+    
+    img {
+      border-radius: 0.5rem;
+    }
+  }
+  
+  :global(.Document) {
+    background: var(--color-background-secondary-accent);
+    border-radius: 0.5rem;
+    border: 1px solid var(--color-borders-light);
+  }
+}
+
+// 相册消息媒体组样式
+.messageMediaGroup {
+  margin: 0.5rem 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+
+  .mediaGroupItem {
+    flex: 1 1 auto;
+    min-width: 120px;
+    max-width: 180px;
+
+    .messageMedia {
+      margin: 0;
+      width: 100%;
+      height: auto;
+    }
+
+    :global(.Photo) {
+      border-radius: 0.5rem;
+      width: 100% !important;
+      max-width: none !important;
+
+      img {
+        border-radius: 0.5rem;
+        width: 100% !important;
+        height: auto !important;
+        object-fit: cover;
+        max-height: 150px;
+      }
+    }
+
+    :global(.Document) {
+      background: var(--color-background-secondary-accent);
+      border-radius: 0.5rem;
+      border: 1px solid var(--color-borders-light);
+      width: 100%;
+    }
+  }
+  
+  @media (max-width: 768px) {
+    max-width: 250px;
+  }
+  
+  @media (max-width: 480px) {
+    max-width: 200px;
+  }
+}
+
+.replyContainer {
+  margin: 0.25rem 0 0.5rem 0;
+  border-left: 3px solid var(--color-primary);
+  padding: 0.5rem 0.75rem;
+  background: var(--color-background-secondary-accent);
+  border-radius: 0 0.375rem 0.375rem 0;
+  border: 1px solid var(--color-borders-light);
+  position: relative;
+
+  // 添加引用标识
+  &::before {
+    content: '引用';
+    position: absolute;
+    top: -0.5rem;
+    left: 0.5rem;
+    background: var(--color-primary);
+    color: var(--color-white);
+    font-size: 0.6875rem;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-weight: var(--font-weight-medium);
+  }
+
+  @media (max-width: 768px) {
+    margin: 0.125rem 0 0.375rem 0;
+    padding: 0.375rem 0.5rem;
+
+    &::before {
+      font-size: 0.625rem;
+      padding: 0.0625rem 0.25rem;
+      top: -0.375rem;
+      left: 0.375rem;
+    }
+  }
+}
+
+// 专门为客服模块定制EmbeddedMessage样式
+.replyContainer {
+  :global(.EmbeddedMessage) {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    cursor: default !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    position: relative !important;
+
+    // 隐藏PeerColorWrapper的背景效果避免与引用框冲突
+    background-color: transparent !important;
+
+    // 调整整体布局 - 给图片预留空间
+    padding-left: 0 !important;
+    min-height: 2.5rem !important;
+
+    // 调整标题样式
+    :global(.message-title) {
+      font-size: 0.8125rem !important;
+      font-weight: var(--font-weight-medium) !important;
+      color: var(--color-primary) !important;
+      margin-bottom: 0.25rem !important;
+      padding: 0 !important;
+      padding-left: 2.5rem !important; // 为图片预留空间
+      line-height: 1.2 !important;
+    }
+
+    // 调整内容样式
+    :global(.message-text) {
+      font-size: 0.875rem !important;
+      color: var(--color-text-secondary) !important;
+      line-height: 1.3 !important;
+      margin: 0 !important;
+      user-select: text !important;
+
+      * {
+        user-select: text !important;
+      }
+
+      :global(.embedded-text-wrapper) {
+        padding-left: 2.5rem !important; // 为图片预留空间
+        text-indent: 0 !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        margin: 0 !important;
+        user-select: text !important;
+
+        * {
+          user-select: text !important;
+        }
+      }
+    }
+
+    // 隐藏悬停效果
+    :global(.hover-effect) {
+      display: none !important;
+    }
+
+    // 隐藏涟漪效果
+    :global(.ripple-container) {
+      display: none !important;
+    }
+
+    // 图片缩略图样式 - 固定在左侧
+    :global(.embedded-thumb) {
+      position: absolute !important;
+      left: 0.25rem !important;
+      top: 50% !important;
+      transform: translateY(-50%) !important;
+      cursor: pointer !important;
+      transition: transform 0.1s ease, opacity 0.1s ease !important;
+      z-index: 10 !important;
+      width: 2rem !important;
+      height: 2rem !important;
+
+      &:hover {
+        transform: translateY(-50%) scale(1.05) !important;
+        opacity: 0.9 !important;
+      }
+
+      &:active {
+        transform: translateY(-50%) scale(0.98) !important;
+      }
+
+      // 添加放大镜图标覆盖层
+      &::before {
+        content: '🔍' !important;
+        position: absolute !important;
+        top: 50% !important;
+        left: 50% !important;
+        transform: translate(-50%, -50%) !important;
+        font-size: 0.75rem !important;
+        opacity: 0 !important;
+        color: white !important;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
+        transition: opacity 0.1s ease !important;
+        z-index: 1 !important;
+        pointer-events: none !important;
+      }
+
+      &:hover::before {
+        opacity: 0.8 !important;
+      }
+
+      // 添加深色覆盖层
+      &::after {
+        content: '' !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        background: rgba(0, 0, 0, 0.1) !important;
+        border-radius: inherit !important;
+        opacity: 0 !important;
+        transition: opacity 0.1s ease !important;
+      }
+
+      &:hover::after {
+        opacity: 1 !important;
+      }
+    }
+
+    // 无图片时的布局
+    &:not(:global(.with-thumb)) {
+      :global(.message-title) {
+        padding-left: 0.25rem !important;
+      }
+
+      :global(.embedded-text-wrapper) {
+        padding-left: 0.25rem !important;
+      }
+    }
+
+    // 有图片时的布局已经在上面设置了padding-left: 2.5rem
+  }
+}

@@ -293,6 +293,27 @@ export interface LangPair {
   'SearchFriends': undefined;
   'Search': undefined;
   'Contacts': undefined;
+  'CustomerService': undefined;
+  'CustomerServiceResolve': undefined;
+  'CustomerServiceClickToReply': undefined;
+  'CustomerServiceSettings': undefined;
+  'CustomerServiceGroupFilters': undefined;
+  'CustomerServiceUserFilters': undefined;
+  'CustomerServiceSelectGroups': undefined;
+  'CustomerServiceSelectAll': undefined;
+  'CustomerServiceDeselectAll': undefined;
+  'CustomerServiceFilteredUserIds': undefined;
+  'CustomerServiceAddUserId': undefined;
+  'CustomerServiceRegexFilters': undefined;
+  'CustomerServiceAddRegexFilter': undefined;
+  'CustomerServiceInvalidRegex': undefined;
+  'CustomerServiceGroupsSelected': undefined;
+  'CustomerServiceNoFilteredUsers': undefined;
+  'CustomerServiceNoFilteredMessages': undefined;
+  'CustomerServiceRegexExamples': undefined;
+  'CustomerServiceSaveSettings': undefined;
+  'CustomerServiceResetSettings': undefined;
+  'CustomerServiceCancel': undefined;
   'Settings': undefined;
   'MenuNightMode': undefined;
   'SettingsDisableNightTheme': undefined;
@@ -1696,6 +1717,20 @@ export interface LangPair {
   'RatingBadgeAdded': undefined;
   'RatingBadgeDeducted': undefined;
   'RatingNegativeLevel': undefined;
+  'CustomerServiceSelectGroupsDescription': undefined;
+  'CustomerServiceFilterByTag': undefined;
+  'CustomerServiceNoGroups': undefined;
+  'CustomerServiceFilteredUserIdsDescription': undefined;
+  'CustomerServiceRegexFiltersDescription': undefined;
+  'CustomerServiceRegexPlaceholder': undefined;
+  'CustomerServiceRegexExample1': undefined;
+  'CustomerServiceRegexExample2': undefined;
+  'CustomerServiceRegexExample3': undefined;
+  'CustomerServiceRegexExample4': undefined;
+  'CustomerServiceClearMessages': undefined;
+  'CustomerServiceClearMessagesTitle': undefined;
+  'CustomerServiceAddUserIdPlaceholder': undefined;
+  'CustomerServiceSearchUsers': undefined;
   'LinkDescriptionRatingBack': undefined;
   'LinkDescriptionRatingPreview': undefined;
   'ErrorFocusInaccessibleMessage': undefined;
@@ -2925,6 +2960,9 @@ export interface LangPairWithVariables<V = LangVariable> {
   };
   'RatingLevel': {
     'level': V;
+  };
+  'CustomerServiceClearMessagesConfirm': {
+    'count': V;
   };
 }
 
