@@ -6,6 +6,7 @@ import { ARCHIVED_FOLDER_ID, MAX_ACTIVE_PINNED_CHATS, SERVICE_NOTIFICATIONS_USER
 import { buildCollectionByKey, omit } from '../../../util/iteratees';
 import { isLocalMessageId } from '../../../util/keys/messageKey';
 import { closeMessageNotifications, notifyAboutMessage } from '../../../util/notifications';
+import { getCurrentTabId } from '../../../util/establishMultitabRole';
 import { checkIfHasUnreadReactions, isChatChannel } from '../../helpers';
 import {
   addActionHandler, getGlobal, setGlobal,
@@ -52,7 +53,7 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
   switch (update['@type']) {
     case 'updateChat': {
       const localChat = selectChat(global, update.id);
-      const { isForum: prevIsForum, lastReadOutboxMessageId } = localChat || {};
+      const { isForum: prevIsForum, lastReadOutboxMessageId, lastReadInboxMessageId: prevLastReadInboxMessageId } = localChat || {};
 
       if (update.chat.lastReadOutboxMessageId && lastReadOutboxMessageId
         && update.chat.lastReadOutboxMessageId < lastReadOutboxMessageId) {
@@ -66,6 +67,41 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
 
       if (localChat?.areStoriesHidden !== update.chat.areStoriesHidden) {
         global = updatePeerStoriesHidden(global, update.id, update.chat.areStoriesHidden || false);
+      }
+
+      // 检查是否有消息被标记为已读，如果有则检查是否需要恢复监听（仅在辅助模式下）
+      const newLastReadInboxMessageId = update.chat.lastReadInboxMessageId;
+
+      // 先检查是否在辅助模式下
+      const currentTabId = getCurrentTabId();
+      const tabState = selectTabState(global, currentTabId);
+      const customerService = tabState.customerService;
+      const isAssistMode = customerService?.settings?.mode === 'assist';
+      const hasPausedChats = customerService?.pausedChats && Object.keys(customerService.pausedChats).length > 0;
+
+      if (isAssistMode) {
+        console.log("UpdateChat event for chat:", update.id,
+                    "prevLastRead:", prevLastReadInboxMessageId,
+                    "newLastRead:", newLastReadInboxMessageId,
+                    "hasPausedChats:", hasPausedChats,
+                    "pausedChats:", Object.keys(customerService?.pausedChats || {}));
+      }
+
+      if (newLastReadInboxMessageId && prevLastReadInboxMessageId !== newLastReadInboxMessageId) {
+        if (isAssistMode && hasPausedChats) {
+          console.log("✅ Chat read status updated in assist mode:", update.id,
+                      "from", prevLastReadInboxMessageId, "to", newLastReadInboxMessageId,
+                      "triggering check...");
+          // 延迟触发检查，让状态完全更新
+          setTimeout(() => {
+            actions.checkPausedChatsStatus({ tabId: currentTabId });
+          }, 500);
+        } else if (isAssistMode) {
+          console.log("ℹ️ Chat read status updated but no paused chats to check:", update.id);
+        }
+      } else if (isAssistMode && (newLastReadInboxMessageId || prevLastReadInboxMessageId)) {
+        console.log("🔄 UpdateChat but no read status change:", update.id,
+                    "same value:", newLastReadInboxMessageId);
       }
 
       setGlobal(global);
@@ -148,7 +184,47 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
     }
 
     case 'updateChatInbox': {
-      return updateChat(global, update.id, update.chat);
+      const localChat = selectChat(global, update.id);
+      const { lastReadInboxMessageId: prevLastReadInboxMessageId } = localChat || {};
+
+      global = updateChat(global, update.id, update.chat);
+
+      // 检查是否有消息被标记为已读，如果有则检查是否需要恢复监听（仅在辅助模式下）
+      const newLastReadInboxMessageId = update.chat.lastReadInboxMessageId;
+
+      // 先检查是否在辅助模式下
+      const currentTabId = getCurrentTabId();
+      const tabState = selectTabState(global, currentTabId);
+      const customerService = tabState.customerService;
+      const isAssistMode = customerService?.settings?.mode === 'assist';
+      const hasPausedChats = customerService?.pausedChats && Object.keys(customerService.pausedChats).length > 0;
+
+      if (isAssistMode) {
+        console.log("📨 UpdateChatInbox event for chat:", update.id,
+                    "prevLastRead:", prevLastReadInboxMessageId,
+                    "newLastRead:", newLastReadInboxMessageId,
+                    "hasPausedChats:", hasPausedChats,
+                    "pausedChats:", Object.keys(customerService?.pausedChats || {}));
+      }
+
+      if (newLastReadInboxMessageId && prevLastReadInboxMessageId !== newLastReadInboxMessageId) {
+        if (isAssistMode && hasPausedChats) {
+          console.log("✅ ChatInbox read status updated in assist mode:", update.id,
+                      "from", prevLastReadInboxMessageId, "to", newLastReadInboxMessageId,
+                      "triggering check...");
+          // 延迟触发检查，让状态完全更新
+          setTimeout(() => {
+            actions.checkPausedChatsStatus({ tabId: currentTabId });
+          }, 500);
+        } else if (isAssistMode) {
+          console.log("ℹ️ ChatInbox read status updated but no paused chats to check:", update.id);
+        }
+      } else if (isAssistMode && (newLastReadInboxMessageId || prevLastReadInboxMessageId)) {
+        console.log("🔄 UpdateChatInbox but no read status change:", update.id,
+                    "same value:", newLastReadInboxMessageId);
+      }
+
+      return global;
     }
 
     case 'updateChatTypingStatus': {

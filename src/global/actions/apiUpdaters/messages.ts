@@ -11,6 +11,7 @@ import { MAIN_THREAD_ID } from '../../../api/types';
 
 import { SERVICE_NOTIFICATIONS_USER_ID } from '../../../config';
 import { shouldFilterMessage } from '../../../config/customerService';
+import { callApi } from '../../../api/gramjs';
 import { areDeepEqual } from '../../../util/areDeepEqual';
 import { isUserId } from '../../../util/entities/ids';
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
@@ -182,8 +183,40 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
       // Add message to customer service if it passes all filters and not from current user
       if (!isLocal && !message.isOutgoing) {
         const messageText = getMessageText(newMessage);
-        if (!shouldFilterMessage(chatId, message.senderId, messageText, global)) {
+
+        // 检查该聊天是否被暂停监听（仅在辅助模式下）
+        const tabState = selectTabState(global, getCurrentTabId());
+        const customerService = tabState.customerService;
+        const isAssistMode = customerService?.settings?.mode === 'assist';
+        const isPaused = isAssistMode && customerService?.pausedChats?.[chatId];
+
+        const isFiltered = shouldFilterMessage(chatId, message.senderId, messageText, global);
+
+        if (!isPaused && !isFiltered) {
+          // 未暂停且通过过滤器，添加到客服模块
           actions.addToCustomerService({ message: newMessage, chatId });
+        } else if (isPaused) {
+          console.log("Chat monitoring paused for:", chatId, "message:", message.id, "ignored (assist mode)");
+        } else if (isFiltered) {
+          // 消息被过滤，检查是否启用自动已读功能
+          const shouldAutoRead = customerService?.settings?.autoRead || false;
+          if (shouldAutoRead) {
+            console.log("Auto-reading filtered message:", message.id, "in chat:", chatId);
+            const chat = selectChat(global, chatId);
+            if (chat) {
+              callApi('markMessageListRead', {
+                chat,
+                threadId: MAIN_THREAD_ID,
+                maxId: message.id
+              }).then(() => {
+                console.log("Auto-read successful for filtered message:", message.id);
+              }).catch((error) => {
+                console.error("Auto-read failed for filtered message:", message.id, error);
+              });
+            }
+          } else {
+            console.log("Message filtered but auto-read disabled:", message.id, "in chat:", chatId);
+          }
         }
       }
 

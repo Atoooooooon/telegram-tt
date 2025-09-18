@@ -299,6 +299,7 @@ export interface LangPair {
   'CustomerServiceSettings': undefined;
   'CustomerServiceGroupFilters': undefined;
   'CustomerServiceUserFilters': undefined;
+  'CustomerServiceMessageFilters': undefined;
   'CustomerServiceSelectGroups': undefined;
   'CustomerServiceSelectAll': undefined;
   'CustomerServiceDeselectAll': undefined;
@@ -1738,6 +1739,13 @@ export interface LangPair {
   'ContextMenuHintTouch': undefined;
   'GiftValueForSaleOnFragment': undefined;
   'GiftValueForSaleOnTelegram': undefined;
+  'CustomerServiceMode': undefined;
+  'CustomerServiceOnCallMode': undefined;
+  'CustomerServiceOnCallModeDescription': undefined;
+  'CustomerServiceAssistMode': undefined;
+  'CustomerServiceAssistModeDescription': undefined;
+  'CustomerServiceAutoRead': undefined;
+  'CustomerServiceAutoReadDescription': undefined;
 }
 
 export interface LangPairWithVariables<V = LangVariable> {
