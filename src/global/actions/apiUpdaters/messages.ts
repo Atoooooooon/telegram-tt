@@ -10,7 +10,7 @@ import type {
 import { MAIN_THREAD_ID } from '../../../api/types';
 
 import { SERVICE_NOTIFICATIONS_USER_ID } from '../../../config';
-import { shouldFilterMessage } from '../../../config/customerService';
+import { shouldFilterMessage, isMonitoredChat } from '../../../config/customerService';
 import { callApi } from '../../../api/gramjs';
 import { areDeepEqual } from '../../../util/areDeepEqual';
 import { isUserId } from '../../../util/entities/ids';
@@ -190,33 +190,42 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
         const isAssistMode = customerService?.settings?.mode === 'assist';
         const isPaused = isAssistMode && customerService?.pausedChats?.[chatId];
 
-        const isFiltered = shouldFilterMessage(chatId, message.senderId, messageText, global);
+        // 检查是否为监听的群组
+        const isMonitored = isMonitoredChat(chatId, global);
 
-        if (!isPaused && !isFiltered) {
-          // 未暂停且通过过滤器，添加到客服模块
-          actions.addToCustomerService({ message: newMessage, chatId });
-        } else if (isPaused) {
-          console.log("Chat monitoring paused for:", chatId, "message:", message.id, "ignored (assist mode)");
-        } else if (isFiltered) {
-          // 消息被过滤，检查是否启用自动已读功能
-          const shouldAutoRead = customerService?.settings?.autoRead || false;
-          if (shouldAutoRead) {
-            console.log("Auto-reading filtered message:", message.id, "in chat:", chatId);
-            const chat = selectChat(global, chatId);
-            if (chat) {
-              callApi('markMessageListRead', {
-                chat,
-                threadId: MAIN_THREAD_ID,
-                maxId: message.id
-              }).then(() => {
-                console.log("Auto-read successful for filtered message:", message.id);
-              }).catch((error) => {
-                console.error("Auto-read failed for filtered message:", message.id, error);
-              });
+        if (isMonitored) {
+          // 对于监听的群组，进行过滤检查
+          const isFiltered = shouldFilterMessage(chatId, message.senderId, messageText, global);
+
+          if (!isPaused && !isFiltered) {
+            // 未暂停且通过过滤器，添加到客服模块
+            actions.addToCustomerService({ message: newMessage, chatId });
+          } else if (isPaused) {
+            console.log("Chat monitoring paused for:", chatId, "message:", message.id, "ignored (assist mode)");
+          } else if (isFiltered) {
+            // 消息被过滤（在监听的群组中），检查是否启用自动已读功能
+            const shouldAutoRead = customerService?.settings?.autoRead || false;
+            if (shouldAutoRead) {
+              console.log("Auto-reading filtered message in monitored chat:", message.id, "in chat:", chatId);
+              const chat = selectChat(global, chatId);
+              if (chat) {
+                callApi('markMessageListRead', {
+                  chat,
+                  threadId: MAIN_THREAD_ID,
+                  maxId: message.id
+                }).then(() => {
+                  console.log("Auto-read successful for filtered message:", message.id);
+                }).catch((error) => {
+                  console.error("Auto-read failed for filtered message:", message.id, error);
+                });
+              }
+            } else {
+              console.log("Message filtered in monitored chat but auto-read disabled:", message.id, "in chat:", chatId);
             }
-          } else {
-            console.log("Message filtered but auto-read disabled:", message.id, "in chat:", chatId);
           }
+        } else {
+          // 不是监听的群组，不做任何客服相关处理
+          console.log("Message from non-monitored chat:", chatId, "message:", message.id, "ignored");
         }
       }
 
