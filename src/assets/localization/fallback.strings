@@ -2326,3 +2326,10 @@
 "CustomerServiceAssistModeDescription" = "辅助模式有助于减少其他设备上的通知。收到有用消息后暂停监控。";
 "CustomerServiceAutoRead" = "自动已读过滤消息";
 "CustomerServiceAutoReadDescription" = "自动标记被过滤掉的消息为已读，以减少其他设备上的通知。";
+"CustomerServiceExportSettings" = "导出配置";
+"CustomerServiceImportSettings" = "导入配置";
+"CustomerServiceExportDescription" = "导出当前客服配置到文件";
+"CustomerServiceImportDescription" = "从文件导入客服配置";
+"CustomerServiceImportSuccess" = "配置导入成功";
+"CustomerServiceImportError" = "导入失败：{error}";
+"CustomerServiceExportSuccess" = "配置导出成功";

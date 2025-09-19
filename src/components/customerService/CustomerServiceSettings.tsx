@@ -403,6 +403,36 @@ const CustomerServiceSettings = ({
     });
   });
 
+  // 导出配置
+  const handleExportSettings = useLastCallback(() => {
+    const { exportCustomerServiceSettings } = getActions();
+    exportCustomerServiceSettings({});
+  });
+
+  // 导入配置
+  const handleImportSettings = useLastCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const fileContent = event.target?.result as string;
+          if (fileContent) {
+            const { importCustomerServiceSettings } = getActions();
+            importCustomerServiceSettings({ fileContent });
+            // 重新加载设置以更新UI
+            window.location.reload();
+          }
+        };
+        reader.readAsText(file);
+      }
+    };
+    input.click();
+  });
+
   // 切换模式
   const handleModeChange = useLastCallback((newMode: 'oncall' | 'assist') => {
     setSettings(prev => ({
@@ -853,85 +883,92 @@ const CustomerServiceSettings = ({
         </div>
         
         <div className={styles.footer}>
-          <div className={styles.compactSettings}>
-            <div className={styles.settingGroup}>
-              <label className={styles.settingLabel} title={lang('CustomerServiceOnCallModeDescription')}>
-                <Icon name="phone" className={styles.settingIcon} />
-                {lang('CustomerServiceOnCallMode')}
-              </label>
-              <input
-                type="radio"
-                name="customerServiceMode"
-                checked={settings.mode === 'oncall'}
-                onChange={() => handleModeChange('oncall')}
-                className={styles.compactRadio}
-              />
+          <div className={styles.leftSection}>
+            {/* 模式切换 */}
+            <div className={styles.modeSection}>
+              <span className={styles.sectionLabel}>工作模式:</span>
+              <div className={styles.modeToggle}>
+                <button
+                  type="button"
+                  className={buildClassName(styles.modeButton, settings.mode === 'oncall' && styles.active)}
+                  onClick={() => handleModeChange('oncall')}
+                >
+                  值班
+                </button>
+                <button
+                  type="button"
+                  className={buildClassName(styles.modeButton, settings.mode === 'assist' && styles.active)}
+                  onClick={() => handleModeChange('assist')}
+                >
+                  辅助
+                </button>
+              </div>
             </div>
 
-            <div className={styles.settingGroup}>
-              <label className={styles.settingLabel} title={lang('CustomerServiceAssistModeDescription')}>
-                <Icon name="hand" className={styles.settingIcon} />
-                {lang('CustomerServiceAssistMode')}
-              </label>
-              <input
-                type="radio"
-                name="customerServiceMode"
-                checked={settings.mode === 'assist'}
-                onChange={() => handleModeChange('assist')}
-                className={styles.compactRadio}
-              />
-            </div>
-
-            <div className={styles.settingGroup}>
-              <label className={styles.settingLabel} title={lang('CustomerServiceAutoReadDescription')}>
-                <Icon name="check-circle" className={styles.settingIcon} />
-                {lang('CustomerServiceAutoRead')}
-              </label>
-              <Checkbox
-                checked={settings.autoRead || false}
-                onChange={(e) => handleAutoReadChange(e.currentTarget.checked)}
-                className={styles.compactCheckbox}
-              />
-            </div>
+            {/* 自动已读 */}
+            {/* <div className={styles.autoReadSection}> */}
+              {/* <label className={styles.autoReadLabel}> */}
+                <Checkbox
+                  label="自动已读"
+                  className={styles.autoReadCheckbox}
+                  checked={settings.autoRead || true}
+                  onChange={(e) => handleAutoReadChange(e.currentTarget.checked)}
+                />
+              {/* </label> */}
+            {/* </div> */}
           </div>
 
-          <div className={styles.footerActions}>
-            <div>
-              <Button
-                  size="smaller"
-                  color="translucent"
-                  onClick={handleReset}
-                  className={styles.resetButton}
-              >
-                <Icon name="restart" />
-                {lang('CustomerServiceResetSettings')}
-              </Button>
-            </div>
-            <div>
-              <Button
+          <div className={styles.rightSection}>
+            <Button
                 size="smaller"
-                className={styles.closeButton}
                 color="translucent"
-                onClick={() => {
-                  setSelectedTagId('-1'); // 重置筛选
-                  onClose();
-                }}
+                style="width: 5rem !important;"
+                onClick={handleExportSettings}
+                title={lang('CustomerServiceExportDescription')}
               >
-                <Icon name="close" />
-                {lang('CustomerServiceCancel')}
-              </Button>
-            </div>
-            <div>
-              <Button
-                size="smaller"
-                color="primary"
-                onClick={handleSave}
-                className={styles.saveButton}
-              >
-                <Icon name="check" />
-                {lang('CustomerServiceSaveSettings')}
-              </Button>
-            </div>
+                <Icon name="download" />
+                导出
+            </Button>
+            <Button
+              size="smaller"
+              color="translucent"
+              style="width: 5rem !important;"
+              onClick={handleImportSettings}
+              title={lang('CustomerServiceImportDescription')}
+            >
+              <Icon name="upload" />
+              导入
+            </Button>
+            <Button
+              size="smaller"
+              color="translucent"
+              style="width: 5rem !important;"
+              onClick={handleReset}
+            >
+              <Icon name="restart" />
+              重置
+            </Button>
+            <Button
+              size="smaller"
+              color="translucent"
+              style="width: 5rem !important;"
+              onClick={() => {
+                setSelectedTagId('-1');
+                onClose();
+              }}
+            >
+              <Icon name="close" />
+              取消
+            </Button>
+            <Button
+              size="smaller"
+              color="primary"
+              style="width: 5rem !important;"
+              onClick={handleSave}
+            >
+              <Icon name="check" />
+              保存
+            </Button>
           </div>
         </div>
       </div>

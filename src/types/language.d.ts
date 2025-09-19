@@ -1746,6 +1746,12 @@ export interface LangPair {
   'CustomerServiceAssistModeDescription': undefined;
   'CustomerServiceAutoRead': undefined;
   'CustomerServiceAutoReadDescription': undefined;
+  'CustomerServiceExportSettings': undefined;
+  'CustomerServiceImportSettings': undefined;
+  'CustomerServiceExportDescription': undefined;
+  'CustomerServiceImportDescription': undefined;
+  'CustomerServiceImportSuccess': undefined;
+  'CustomerServiceExportSuccess': undefined;
 }
 
 export interface LangPairWithVariables<V = LangVariable> {
@@ -2971,6 +2977,9 @@ export interface LangPairWithVariables<V = LangVariable> {
   };
   'CustomerServiceClearMessagesConfirm': {
     'count': V;
+  };
+  'CustomerServiceImportError': {
+    'error': V;
   };
 }
 

@@ -2854,6 +2854,12 @@ export interface ActionPayloads {
     };
   } & WithTabId;
 
+  exportCustomerServiceSettings: {} & WithTabId;
+
+  importCustomerServiceSettings: {
+    fileContent: string;
+  } & WithTabId;
+
   initializeCustomerServiceSettings: WithTabId;
 }
 
