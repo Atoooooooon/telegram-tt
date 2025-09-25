@@ -1752,6 +1752,11 @@ export interface LangPair {
   'CustomerServiceImportDescription': undefined;
   'CustomerServiceImportSuccess': undefined;
   'CustomerServiceExportSuccess': undefined;
+  'CustomerServiceSearchGroups': undefined;
+  'CustomerServiceSearchGroupsRegex': undefined;
+  'CustomerServiceSwitchToTextSearch': undefined;
+  'CustomerServiceSwitchToRegexSearch': undefined;
+  'Clear': undefined;
 }
 
 export interface LangPairWithVariables<V = LangVariable> {

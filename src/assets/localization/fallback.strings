@@ -2333,3 +2333,8 @@
 "CustomerServiceImportSuccess" = "配置导入成功";
 "CustomerServiceImportError" = "导入失败：{error}";
 "CustomerServiceExportSuccess" = "配置导出成功";
+"CustomerServiceSearchGroups" = "搜索群组（支持正则表达式）...";
+"CustomerServiceSearchGroupsRegex" = "输入正则表达式搜索群组...";
+"CustomerServiceSwitchToTextSearch" = "切换到文本搜索";
+"CustomerServiceSwitchToRegexSearch" = "切换到正则表达式搜索";
+"Clear" = "清除";
