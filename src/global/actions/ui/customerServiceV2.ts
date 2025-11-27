@@ -96,12 +96,28 @@ addActionHandler('addToCustomerServiceV2', (global, actions, payload): ActionRet
       [chatId]: [...(baseState.messagesByChatId[chatId] || []), message],
     };
 
+    const settings = baseState.settings
+      || loadCustomerServiceV2SettingsFromStorage()
+      || getDefaultCustomerServiceV2Settings();
+
     const nextState: CustomerServiceV2State = {
       ...baseState,
       messages,
       messagesByChatId,
       messageCount: messages.length,
       lastSyncTimestamp: Date.now(),
+      pausedChats: baseState.pausedChats,
+      settings,
+    };
+
+    if (settings.mode === 'assist') {
+      nextState.pausedChats = {
+        ...(nextState.pausedChats || {}),
+        [chatId]: {
+          pausedAt: Date.now(),
+          lastMessageId: message.id,
+        },
+      };
     };
 
     return updateTabState(
@@ -161,6 +177,15 @@ addActionHandler('removeFromCustomerServiceV2', async (global, actions, payload)
       lastSyncTimestamp: Date.now(),
     };
 
+    let pausedChats = nextState.pausedChats;
+    if (nextState.settings?.mode === 'assist' && (!messagesByChatId[chatId] || messagesByChatId[chatId].length === 0)) {
+      if (pausedChats && pausedChats[chatId]) {
+        const { [chatId]: _removed, ...rest } = pausedChats;
+        pausedChats = rest;
+      }
+      nextState.pausedChats = pausedChats;
+    }
+
     global = updateTabState(
       global,
       {
@@ -214,6 +239,16 @@ addActionHandler('removeCustomerServiceV2Messages', (global, actions, payload): 
       messageCount: messages.length,
       lastSyncTimestamp: Date.now(),
     };
+
+    if (nextState.settings?.mode === 'assist' && nextState.pausedChats) {
+      const updatedPaused: typeof nextState.pausedChats = {};
+      Object.entries(nextState.pausedChats).forEach(([pausedChatId, value]) => {
+        if ((messagesByChatId[pausedChatId] || []).length > 0) {
+          updatedPaused[pausedChatId] = value;
+        }
+      });
+      nextState.pausedChats = updatedPaused;
+    }
 
     return updateTabState(
       global,
@@ -285,6 +320,7 @@ addActionHandler('clearCustomerServiceV2Messages', (global, actions, payload): A
     messagesByChatId: {},
     messageCount: 0,
     lastSyncTimestamp: Date.now(),
+    pausedChats: baseState.settings?.mode === 'assist' ? {} : baseState.pausedChats,
   };
 
   return updateTabState(
@@ -488,6 +524,60 @@ addActionHandler('toggleCustomerServiceV2Mode', (global, actions, payload): Acti
   const nextState: CustomerServiceV2State = {
     ...baseState,
     settings: normalized,
+    pausedChats: nextMode === 'assist' ? baseState.pausedChats : undefined,
+  };
+
+  return updateTabState(
+    global,
+    {
+      customerServiceV2: nextState,
+    },
+    tabId,
+  );
+});
+
+addActionHandler('checkPausedChatsStatusV2', (global, actions, payload): ActionReturnType => {
+  const { tabId = getCurrentTabId() } = payload || {};
+  const cs = selectCustomerServiceV2State(global, tabId);
+
+  if (!cs?.pausedChats || !cs.settings || cs.settings.mode !== 'assist') {
+    return global;
+  }
+
+  const updatedPausedChats = { ...cs.pausedChats };
+  let hasChanges = false;
+
+  Object.entries(cs.pausedChats).forEach(([chatId, pauseInfo]) => {
+    const chat = selectChat(global, chatId);
+    if (!chat) {
+      return;
+    }
+
+    const lastTrackedMessageId = pauseInfo.lastMessageId;
+    if (!lastTrackedMessageId) {
+      delete updatedPausedChats[chatId];
+      hasChanges = true;
+      return;
+    }
+
+    const isRead = Boolean(chat.lastReadInboxMessageId && chat.lastReadInboxMessageId >= lastTrackedMessageId);
+    const hasUnread = chat.unreadCount && chat.unreadCount > 0;
+    const replyKey = `${chatId}-${lastTrackedMessageId}`;
+    const isReplied = Boolean(cs.repliedMessageIds && cs.repliedMessageIds.includes(replyKey));
+
+    if (isRead || isReplied || !hasUnread) {
+      delete updatedPausedChats[chatId];
+      hasChanges = true;
+    }
+  });
+
+  if (!hasChanges) {
+    return global;
+  }
+
+  const nextState: CustomerServiceV2State = {
+    ...cs,
+    pausedChats: Object.keys(updatedPausedChats).length ? updatedPausedChats : undefined,
   };
 
   return updateTabState(
