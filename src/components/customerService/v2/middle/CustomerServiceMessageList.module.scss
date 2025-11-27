@@ -81,13 +81,6 @@
       box-shadow: 0 0 0.5rem var(--color-primary);
     }
 
-    // Highlight background
-    .messageContent {
-      background-color: var(--color-chat-hover);
-      border-radius: 0.5rem;
-      padding: 0.25rem;
-      margin: -0.25rem;
-    }
 
     // Always show action buttons for active context
     .messageActions {

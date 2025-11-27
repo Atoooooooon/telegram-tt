@@ -46,7 +46,12 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
   activeContextChatId,
   activeContextMessageId,
 }) => {
-  const { removeFromCustomerServiceV2, openChat, focusMessage } = getActions();
+  const {
+    removeFromCustomerServiceV2,
+    openChat,
+    focusMessage,
+    setCustomerServiceV2Context,
+  } = getActions();
   const lang = useLang();
 
   const handleRemoveMessage = useLastCallback((chatId: string, messageId: number) => {
@@ -54,6 +59,12 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
   });
 
   const handleViewContext = useLastCallback((chatId: string, messageId: number) => {
+    setCustomerServiceV2Context({
+      chatId,
+      messageId,
+      tabId: getCurrentTabId(),
+    });
+
     openChat({
       id: chatId,
       isHalfScreen: true,
