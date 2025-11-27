@@ -81,19 +81,28 @@ export function updateCurrentMessageList<T extends GlobalState>(
     newMessageLists = chatId ? [{ chatId, threadId, type, isHalfScreen }] : [];
   } else if (chatId) {
     const current = messageLists[messageLists.length - 1];
-    if (current?.chatId === chatId && current.threadId === threadId && current.type === type) {
-      return global;
-    }
+    const nextMessageList: MessageList = {
+      chatId,
+      threadId,
+      type,
+      ...(isHalfScreen !== undefined ? { isHalfScreen } : {}),
+    };
 
-    if (current && (current.chatId === TMP_CHAT_ID || shouldReplaceLast)) {
-      newMessageLists = [...messageLists.slice(0, -1), { chatId, threadId, type, isHalfScreen }];
+    if (current?.chatId === chatId && current.threadId === threadId && current.type === type) {
+      if (Boolean(current.isHalfScreen) === Boolean(isHalfScreen)) {
+        return global;
+      }
+
+      newMessageLists = [...messageLists.slice(0, -1), nextMessageList];
+    } else if (current && (current.chatId === TMP_CHAT_ID || shouldReplaceLast)) {
+      newMessageLists = [...messageLists.slice(0, -1), nextMessageList];
     } else {
       const previous = messageLists[messageLists.length - 2];
 
       if (previous?.chatId === chatId && previous.threadId === threadId && previous.type === type) {
         newMessageLists = messageLists.slice(0, -1);
       } else {
-        newMessageLists = [...messageLists, { chatId, threadId, type, isHalfScreen }];
+        newMessageLists = [...messageLists, nextMessageList];
       }
     }
   } else {

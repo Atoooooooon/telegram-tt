@@ -1069,6 +1069,7 @@ export interface ActionPayloads {
     quoteOffset?: number;
     scrollTargetPosition?: ScrollTargetPosition;
     timestamp?: number;
+    isHalfScreen?: boolean; // Preserve customer service split view
   } & WithTabId;
   scrollMessageListToBottom: WithTabId | undefined;
 
@@ -1239,6 +1240,7 @@ export interface ActionPayloads {
     shouldReplaceLast?: boolean;
     noForumTopicPanel?: boolean;
     focusMessageId?: number;
+    isHalfScreen?: boolean; // Forward split-view flag
   } & ({
     isComments: true;
     chatId?: string;

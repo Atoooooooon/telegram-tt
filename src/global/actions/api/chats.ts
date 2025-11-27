@@ -297,7 +297,7 @@ addActionHandler('openThread', (global, actions, payload): ActionReturnType => {
 addActionHandler('openThread', async (global, actions, payload): Promise<void> => {
   const {
     type, isComments, noForumTopicPanel, shouldReplaceHistory, shouldReplaceLast,
-    focusMessageId,
+    focusMessageId, isHalfScreen,
     tabId = getCurrentTabId(),
   } = payload;
   let { chatId } = payload;
@@ -318,6 +318,7 @@ addActionHandler('openThread', async (global, actions, payload): Promise<void> =
         noForumTopicPanel,
         shouldReplaceHistory,
         shouldReplaceLast,
+        isHalfScreen,
         tabId,
       });
       return;
@@ -330,6 +331,7 @@ addActionHandler('openThread', async (global, actions, payload): Promise<void> =
         noForumTopicPanel,
         shouldReplaceHistory,
         shouldReplaceLast,
+        isHalfScreen,
         tabId,
       });
       return;
@@ -366,6 +368,7 @@ addActionHandler('openThread', async (global, actions, payload): Promise<void> =
       noForumTopicPanel,
       shouldReplaceHistory,
       shouldReplaceLast,
+      isHalfScreen,
       tabId,
     });
     return;
@@ -404,6 +407,7 @@ addActionHandler('openThread', async (global, actions, payload): Promise<void> =
       noForumTopicPanel,
       shouldReplaceHistory,
       shouldReplaceLast,
+      isHalfScreen,
     });
   }
 
@@ -497,6 +501,7 @@ addActionHandler('openThread', async (global, actions, payload): Promise<void> =
         noForumTopicPanel,
         shouldReplaceHistory,
         shouldReplaceLast,
+        isHalfScreen,
       });
     },
   });

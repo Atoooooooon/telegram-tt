@@ -10,6 +10,7 @@ import { getActions, getGlobal, withGlobal } from '../../global';
 
 import type { ApiChatFolder, ApiLimitTypeWithModal, ApiStarGiftAuctionState, ApiUser } from '../../api/types';
 import type { TabState } from '../../global/types';
+import { CUSTOMER_SERVICE_VIRTUAL_CHAT_ID } from '../../global/types/customerServiceV2';
 
 import { BASE_EMOJI_KEYWORD_LANG, DEBUG, FOLDERS_POSITION_LEFT, INACTIVE_MARKER } from '../../config';
 import { requestNextMutation } from '../../lib/fasterdom/fasterdom';
@@ -141,6 +142,7 @@ type StateProps = {
   isDeleteMessageModalOpen?: boolean;
   isStarsGiftingPickerModal?: boolean;
   isCustomerServiceModalOpen?: boolean;
+  isCustomerServiceHalfScreen?: boolean;
   isCurrentUserPremium?: boolean;
   noRightColumnAnimation?: boolean;
   withInterfaceAnimations?: boolean;
@@ -192,6 +194,7 @@ const Main = ({
   isDeleteMessageModalOpen,
   isStarsGiftingPickerModal,
   isCustomerServiceModalOpen,
+  isCustomerServiceHalfScreen,
   isPaymentModalOpen,
   isReceiptModalOpen,
   isReactionPickerOpen,
@@ -550,6 +553,7 @@ const Main = ({
     isNarrowMessageList && 'narrow-message-list',
     shouldSkipHistoryAnimations && 'history-animation-disabled',
     isFullscreen && 'is-fullscreen',
+    isCustomerServiceHalfScreen && 'customer-service-half',
     isFoldersSidebarShown && 'folders-sidebar-visible',
   );
 
@@ -671,6 +675,7 @@ export default memo(withGlobal<OwnProps>(
       payment,
       limitReachedModal,
       deleteFolderDialogModal,
+      messageLists,
     } = selectTabState(global);
 
     const selectedGiftAuction = selectTabSelectedGiftAuction(global);
@@ -681,6 +686,8 @@ export default memo(withGlobal<OwnProps>(
     const gameTitle = gameMessage?.content.game?.title;
     const currentMessageList = selectCurrentMessageList(global);
     const { chatId } = currentMessageList || {};
+    const isCustomerServiceHalfScreen = Boolean(currentMessageList?.isHalfScreen)
+      && messageLists.some((messageList) => messageList.chatId === CUSTOMER_SERVICE_VIRTUAL_CHAT_ID);
     const noRightColumnAnimation = !selectPerformanceSettingsValue(global, 'rightColumnAnimations')
       || !selectCanAnimateInterface(global);
 
@@ -722,6 +729,7 @@ export default memo(withGlobal<OwnProps>(
       isDeleteMessageModalOpen: Boolean(deleteMessageModal),
       isStarsGiftingPickerModal: starsGiftingPickerModal?.isOpen,
       isCustomerServiceModalOpen,
+      isCustomerServiceHalfScreen,
       limitReached: limitReachedModal?.limit,
       isPaymentModalOpen: payment.isPaymentModalOpen,
       isReceiptModalOpen: Boolean(payment.receipt),

@@ -3,9 +3,10 @@ import type { FC } from '../../lib/teact/teact';
 import { memo } from '../../lib/teact/teact';
 import { withGlobal } from '../../global';
 
-import buildClassName from '../../util/buildClassName';
 import { selectCurrentMessageList } from '../../global/selectors';
 import { selectIsCustomerServiceV2Open } from '../../global/selectors/customerServiceV2';
+import { selectTabState } from '../../global/selectors/tabs';
+import { CUSTOMER_SERVICE_VIRTUAL_CHAT_ID } from '../../global/types/customerServiceV2';
 
 import CustomerServiceMiddleColumn from '../customerService/v2/middle/CustomerServiceMiddleColumn';
 import MiddleColumn from '../middle/MiddleColumn';
@@ -31,14 +32,14 @@ const MiddleColumnContainer: FC<OwnProps & StateProps> = ({
   // In customer service mode with context viewing (half-screen)
   if (isCustomerServiceV2Open && isHalfScreen) {
     return (
-      <div className={buildClassName(styles.container, styles.splitView)}>
+      <>
         <CustomerServiceMiddleColumn className={styles.customerServiceColumn} />
         <MiddleColumn
           leftColumnRef={leftColumnRef}
           isHalfScreen={true}
           isMobile={isMobile}
         />
-      </div>
+      </>
     );
   }
 
@@ -63,11 +64,17 @@ const MiddleColumnContainer: FC<OwnProps & StateProps> = ({
 export default memo(withGlobal<OwnProps>(
   (global): StateProps => {
     const currentMessageList = selectCurrentMessageList(global);
-    const { isHalfScreen } = currentMessageList || {};
+    const isCurrentHalfScreen = Boolean(currentMessageList?.isHalfScreen);
+    const { messageLists } = selectTabState(global);
+    const hasCustomerServiceContext = messageLists.some(
+      (messageList) => messageList.chatId === CUSTOMER_SERVICE_VIRTUAL_CHAT_ID,
+    );
+    const isHalfScreen = isCurrentHalfScreen && hasCustomerServiceContext;
+    const isCustomerServiceV2Open = selectIsCustomerServiceV2Open(global) || isHalfScreen;
 
     return {
-      isCustomerServiceV2Open: selectIsCustomerServiceV2Open(global),
-      isHalfScreen: Boolean(isHalfScreen),
+      isCustomerServiceV2Open,
+      isHalfScreen,
     };
   },
 )(MiddleColumnContainer));

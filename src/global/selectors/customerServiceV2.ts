@@ -62,10 +62,18 @@ export function selectIsCustomerServiceV2Open<T extends GlobalState>(
   const tabState = selectTabState(global, tabId);
   const { messageLists } = tabState;
 
-  // Get the current (last) message list
-  if (messageLists.length) {
-    const currentMessageList = messageLists[messageLists.length - 1];
-    return currentMessageList?.chatId === CUSTOMER_SERVICE_VIRTUAL_CHAT_ID;
+  if (!messageLists.length) {
+    return false;
+  }
+
+  const currentMessageList = messageLists[messageLists.length - 1];
+
+  if (currentMessageList?.chatId === CUSTOMER_SERVICE_VIRTUAL_CHAT_ID) {
+    return true;
+  }
+
+  if (currentMessageList?.isHalfScreen) {
+    return messageLists.some((messageList) => messageList.chatId === CUSTOMER_SERVICE_VIRTUAL_CHAT_ID);
   }
 
   return false;

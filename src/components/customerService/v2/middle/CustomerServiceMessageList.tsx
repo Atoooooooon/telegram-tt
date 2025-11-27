@@ -62,6 +62,7 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
       focusMessage({
         chatId,
         messageId,
+        isHalfScreen: true,
         tabId: getCurrentTabId(),
       });
     }, 300);

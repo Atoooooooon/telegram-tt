@@ -19,6 +19,10 @@
     display: grid;
     grid-template-columns: auto 1fr;
     grid-template-rows: 100%;
+
+    &.customer-service-half {
+      grid-template-columns: auto clamp(18rem, 28vw, 30rem) minmax(24rem, 1fr);
+    }
   }
 }
 
@@ -173,6 +177,12 @@
 
 #Main.history-animation-disabled .overlay-backdrop {
   transition: none;
+}
+
+@media (min-width: 926px) {
+  #Main.customer-service-half #MiddleColumn {
+    border-left: none;
+  }
 }
 
 #MiddleColumn {

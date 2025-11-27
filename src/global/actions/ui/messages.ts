@@ -369,7 +369,7 @@ addActionHandler('focusMessage', (global, actions, payload): ActionReturnType =>
   const {
     chatId, threadId = MAIN_THREAD_ID, messageListType = 'thread', noHighlight, groupedId, groupedChatId,
     replyMessageId, isResizingContainer, shouldReplaceHistory, noForumTopicPanel, quote, quoteOffset,
-    scrollTargetPosition, timestamp, tabId = getCurrentTabId(),
+    scrollTargetPosition, timestamp, isHalfScreen, tabId = getCurrentTabId(),
   } = payload;
 
   let { messageId } = payload;
@@ -439,6 +439,7 @@ addActionHandler('focusMessage', (global, actions, payload): ActionReturnType =>
       type: messageListType,
       shouldReplaceHistory,
       noForumTopicPanel,
+      isHalfScreen,
       tabId,
     });
     onMessageReady?.();
@@ -466,6 +467,7 @@ addActionHandler('focusMessage', (global, actions, payload): ActionReturnType =>
     type: messageListType,
     shouldReplaceHistory,
     noForumTopicPanel,
+    isHalfScreen,
     tabId,
   });
   actions.loadViewportMessages({
