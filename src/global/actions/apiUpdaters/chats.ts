@@ -6,6 +6,7 @@ import { ARCHIVED_FOLDER_ID, MAX_ACTIVE_PINNED_CHATS, SERVICE_NOTIFICATIONS_USER
 import { buildCollectionByKey, omit } from '../../../util/iteratees';
 import { isLocalMessageId } from '../../../util/keys/messageKey';
 import { closeMessageNotifications, notifyAboutMessage } from '../../../util/notifications';
+import { getCurrentTabId } from '../../../util/establishMultitabRole';
 import { checkIfHasUnreadReactions, isChatChannel } from '../../helpers';
 import {
   addActionHandler, getGlobal, setGlobal,

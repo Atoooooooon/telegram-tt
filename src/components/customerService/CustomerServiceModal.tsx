@@ -1,4 +1,4 @@
-import React, { memo, useState } from '../../lib/teact/teact';
+import React, { memo, useState, useRef, useEffect, useLayoutEffect } from '../../lib/teact/teact';
 import { withGlobal, getActions } from '../../global';
 
 import buildClassName from '../../util/buildClassName';
@@ -81,14 +81,17 @@ const CustomerServiceModal = ({
     target: HTMLElement;
   } | null>(null);
 
+  // 简单的滚动管理
+  const messageListRef = useRef<HTMLDivElement>(null);
+
   const handleClose = useLastCallback(() => {
     onClose();
   });
-  
+
   const handleOpenSettings = useLastCallback(() => {
     setIsSettingsOpen(true);
   });
-  
+
   const handleCloseSettings = useLastCallback(() => {
     setIsSettingsOpen(false);
   });
@@ -400,7 +403,10 @@ const CustomerServiceModal = ({
               </div>
             </div>
           ) : (
-            <div className={styles.messageList}>
+            <div
+              ref={messageListRef}
+              className={styles.messageList}
+            >
               {messages.reduce((grouped, message) => {
                 // 如果消息有groupedId，将其分组
                 if (message.groupedId) {
@@ -447,6 +453,7 @@ const CustomerServiceModal = ({
                   return (
                     <div
                       key={`group-${mainMessage.groupedId}-${index}`}
+                      id={`message-${mainMessage.chatId}-${mainMessage.id}`}
                       className={buildClassName(
                         styles.message,
                         isReplied && styles.messageReplied
@@ -592,8 +599,9 @@ const CustomerServiceModal = ({
                 
                 
                 return (
-                  <div 
-                    key={`${message.chatId}-${message.id}`} 
+                  <div
+                    key={`${message.chatId}-${message.id}`}
+                    id={`message-${message.chatId}-${message.id}`}
                     className={buildClassName(
                       styles.message,
                       isReplied && styles.messageReplied

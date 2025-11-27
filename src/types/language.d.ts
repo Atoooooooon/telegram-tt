@@ -306,6 +306,7 @@ export interface LangPair {
   'CustomerServiceSettings': undefined;
   'CustomerServiceGroupFilters': undefined;
   'CustomerServiceUserFilters': undefined;
+  'CustomerServiceMessageFilters': undefined;
   'CustomerServiceSelectGroups': undefined;
   'CustomerServiceSelectAll': undefined;
   'CustomerServiceDeselectAll': undefined;

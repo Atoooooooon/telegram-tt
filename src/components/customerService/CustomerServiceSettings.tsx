@@ -38,6 +38,8 @@ type StateProps = {
       source: string;
       flags: string;
     }>;
+    mode?: 'oncall' | 'assist';
+    autoRead?: boolean;
   };
 };
 
@@ -45,6 +47,8 @@ type FilterSettings = {
   monitoredChatIds: string[];
   filteredUserIds: string[];
   regexFilters: RegExp[];
+  mode?: 'oncall' | 'assist'; // 添加模式选择
+  autoRead?: boolean; // 添加自动已读选项
 };
 
 const CustomerServiceSettings = ({
@@ -104,6 +108,8 @@ const CustomerServiceSettings = ({
         monitoredChatIds: [...savedSettings.monitoredChatIds],
         filteredUserIds: [...savedSettings.filteredUserIds],
         regexFilters: savedSettings.regexFilters.map(pattern => new RegExp(pattern.source, pattern.flags)),
+        mode: savedSettings.mode || 'oncall',
+        autoRead: savedSettings.autoRead || false,
       };
     }
     
@@ -111,6 +117,8 @@ const CustomerServiceSettings = ({
       monitoredChatIds: [...CUSTOMER_SERVICE_CONFIG.MONITORED_CHAT_IDS],
       filteredUserIds: [...CUSTOMER_SERVICE_CONFIG.FILTERED_USER_IDS],
       regexFilters: [...CUSTOMER_SERVICE_CONFIG.REGEX_FILTERS],
+      mode: 'oncall',
+      autoRead: false,
     };
   });
 
@@ -193,6 +201,8 @@ const CustomerServiceSettings = ({
         monitoredChatIds: [...savedSettings.monitoredChatIds],
         filteredUserIds: [...savedSettings.filteredUserIds],
         regexFilters: savedSettings.regexFilters.map(pattern => new RegExp(pattern.source, pattern.flags)),
+        mode: savedSettings.mode || 'oncall',
+        autoRead: savedSettings.autoRead || false,
       });
       setHasInitialized(true);
     }
@@ -388,7 +398,25 @@ const CustomerServiceSettings = ({
       monitoredChatIds: [...CUSTOMER_SERVICE_CONFIG.MONITORED_CHAT_IDS],
       filteredUserIds: [...CUSTOMER_SERVICE_CONFIG.FILTERED_USER_IDS],
       regexFilters: [...CUSTOMER_SERVICE_CONFIG.REGEX_FILTERS],
+      mode: 'oncall',
+      autoRead: false,
     });
+  });
+
+  // 切换模式
+  const handleModeChange = useLastCallback((newMode: 'oncall' | 'assist') => {
+    setSettings(prev => ({
+      ...prev,
+      mode: newMode,
+    }));
+  });
+
+  // 切换自动已读
+  const handleAutoReadChange = useLastCallback((checked: boolean) => {
+    setSettings(prev => ({
+      ...prev,
+      autoRead: checked,
+    }));
   });
 
   // 获取群组的标签信息
@@ -825,6 +853,47 @@ const CustomerServiceSettings = ({
         </div>
         
         <div className={styles.footer}>
+          <div className={styles.compactSettings}>
+            <div className={styles.settingGroup}>
+              <label className={styles.settingLabel} title={lang('CustomerServiceOnCallModeDescription')}>
+                <Icon name="phone" className={styles.settingIcon} />
+                {lang('CustomerServiceOnCallMode')}
+              </label>
+              <input
+                type="radio"
+                name="customerServiceMode"
+                checked={settings.mode === 'oncall'}
+                onChange={() => handleModeChange('oncall')}
+                className={styles.compactRadio}
+              />
+            </div>
+
+            <div className={styles.settingGroup}>
+              <label className={styles.settingLabel} title={lang('CustomerServiceAssistModeDescription')}>
+                <Icon name="hand" className={styles.settingIcon} />
+                {lang('CustomerServiceAssistMode')}
+              </label>
+              <input
+                type="radio"
+                name="customerServiceMode"
+                checked={settings.mode === 'assist'}
+                onChange={() => handleModeChange('assist')}
+                className={styles.compactRadio}
+              />
+            </div>
+
+            <div className={styles.settingGroup}>
+              <label className={styles.settingLabel} title={lang('CustomerServiceAutoReadDescription')}>
+                <Icon name="check-circle" className={styles.settingIcon} />
+                {lang('CustomerServiceAutoRead')}
+              </label>
+              <Checkbox
+                checked={settings.autoRead || false}
+                onChange={(e) => handleAutoReadChange(e.currentTarget.checked)}
+                className={styles.compactCheckbox}
+              />
+            </div>
+          </div>
 
           <div className={styles.footerActions}>
             <div>
