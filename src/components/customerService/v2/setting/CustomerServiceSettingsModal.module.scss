@@ -166,6 +166,12 @@
   position: relative;
 }
 
+.quickReplyItemDragging {
+  opacity: 0.8;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.15);
+}
+
 .quickReplyItem::before {
   content: '';
   position: absolute;
@@ -189,6 +195,32 @@
   flex-direction: column;
   gap: 0.5rem;
   min-height: 1.9rem;
+}
+
+.quickReplyDragHandle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: grab;
+  padding: 0;
+}
+
+.quickReplyDragHandle:hover {
+  color: var(--color-primary);
+}
+
+.quickReplyDragHandle:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.quickReplyDragHandle:active {
+  cursor: grabbing;
 }
 
 .quickReplyTextInput {

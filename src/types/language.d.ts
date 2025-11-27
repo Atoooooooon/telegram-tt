@@ -314,6 +314,7 @@ export interface LangPair {
   'CustomerServiceQuickReplyModeInsert': undefined;
   'CustomerServiceQuickReplyModeLabel': undefined;
   'CustomerServiceQuickReplyPanelHint': undefined;
+  'CustomerServiceQuickReplyPanelToggle': undefined;
   'CustomerServiceQuickReplyEnglishPlaceholder': undefined;
   'CustomerServiceQuickReplyEnglishTag': undefined;
   'CustomerServiceQuickReplyEnglishAriaLabel': undefined;
@@ -334,6 +335,7 @@ export interface LangPair {
   'CustomerServiceGroupsSelected': undefined;
   'CustomerServiceNoFilteredUsers': undefined;
   'CustomerServiceNoFilteredMessages': undefined;
+  'i18n_dragToSort': undefined;
   'CustomerServiceRegexExamples': undefined;
   'CustomerServiceSaveSettings': undefined;
   'CustomerServiceResetSettings': undefined;

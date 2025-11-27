@@ -1,5 +1,6 @@
 import type { FC } from '../../../../../lib/teact/teact';
-import { memo, useState } from '../../../../../lib/teact/teact';
+import type React from '../../../../../lib/teact/teact';
+import { memo, useCallback, useRef, useState } from '../../../../../lib/teact/teact';
 
 import type { CustomerServiceQuickReply } from '../../../../../global/types/customerServiceV2';
 
@@ -11,7 +12,6 @@ import Icon from '../../../../common/icons/Icon';
 import Button from '../../../../ui/Button';
 import InputText from '../../../../ui/InputText';
 import Switcher from '../../../../ui/Switcher';
-import TextArea from '../../../../ui/TextArea';
 
 import styles from '../CustomerServiceSettingsModal.module.scss';
 
@@ -31,8 +31,12 @@ const QuickRepliesTab: FC<Props> = ({
   const lang = useLang();
   const [newQuickReply, setNewQuickReply] = useState('');
   const [newQuickReplyEnglish, setNewQuickReplyEnglish] = useState('');
+  const [draggedIndex, setDraggedIndex] = useState<number | undefined>();
 
   const safeQuickReplies = quickReplies || [];
+  const pendingQuickRepliesRef = useRef(safeQuickReplies);
+  pendingQuickRepliesRef.current = safeQuickReplies;
+  const dragHandleActiveRef = useRef(false);
 
   const handleQuickReplyChange = (index: number, value: string) => {
     onQuickRepliesChange(
@@ -80,6 +84,69 @@ const QuickRepliesTab: FC<Props> = ({
     setNewQuickReplyEnglish('');
   };
 
+  const moveQuickReply = useCallback((fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) {
+      return;
+    }
+
+    const next = pendingQuickRepliesRef.current.slice();
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    pendingQuickRepliesRef.current = next;
+    onQuickRepliesChange(next);
+  }, [onQuickRepliesChange]);
+
+  const handleDragStart = useCallback((index: number) => (event: React.DragEvent<HTMLDivElement>) => {
+    if (!dragHandleActiveRef.current) {
+      event.preventDefault();
+      return;
+    }
+
+    if (pendingQuickRepliesRef.current.length <= 1) {
+      event.preventDefault();
+      return;
+    }
+
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(index));
+    setDraggedIndex(index);
+  }, []);
+
+  const handleDragOver = useCallback((index: number) => (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+
+    if (pendingQuickRepliesRef.current.length <= 1) {
+      return;
+    }
+
+    if (draggedIndex === undefined || draggedIndex === index) {
+      return;
+    }
+
+    moveQuickReply(draggedIndex, index);
+    setDraggedIndex(index);
+  }, [draggedIndex, moveQuickReply]);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedIndex(undefined);
+    dragHandleActiveRef.current = false;
+  }, []);
+
+  const handleDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDraggedIndex(undefined);
+    dragHandleActiveRef.current = false;
+  }, []);
+
+  const markDragHandleActive = useCallback(() => {
+    dragHandleActiveRef.current = true;
+  }, []);
+
+  const clearDragHandleActive = useCallback(() => {
+    dragHandleActiveRef.current = false;
+  }, []);
+
   return (
     <div className={styles.tabContent}>
       <div className={styles.sectionHeader}>
@@ -97,11 +164,13 @@ const QuickRepliesTab: FC<Props> = ({
           {lang('CustomerServiceQuickReplyPanelHint')}
         </div>
         <Switcher
+          label={lang('CustomerServiceQuickReplyPanelToggle')}
           checked={quickReplyPanelGlobal}
           onCheck={onToggleGlobal}
         />
       </div>
-        <div className={styles.addSection}>
+
+      <div className={styles.addSection}>
         <div className={styles.quickReplyCreator}>
           <div className={styles.quickReplyAddFields}>
             <InputText
@@ -137,8 +206,17 @@ const QuickRepliesTab: FC<Props> = ({
           {safeQuickReplies.map((reply, index) => (
             <div
               key={`quick-reply-${index}`}
-              className={styles.quickReplyItem}
+              className={buildClassName(
+                styles.quickReplyItem,
+                draggedIndex === index && styles.quickReplyItemDragging,
+              )}
               data-mode={reply.mode}
+              draggable={safeQuickReplies.length > 1}
+              onDragStart={handleDragStart(index)}
+              onDragOver={handleDragOver(index)}
+              onDrop={handleDrop}
+              onDragEnd={handleDragEnd}
+              aria-grabbed={draggedIndex === index}
             >
               <div className={styles.quickReplyTextWrapper}>
                 <InputText
@@ -155,6 +233,19 @@ const QuickRepliesTab: FC<Props> = ({
                 />
               </div>
               <div className={styles.quickReplyActions}>
+                <button
+                  type="button"
+                  className={styles.quickReplyDragHandle}
+                  aria-label={lang('i18n_dragToSort')}
+                  disabled={safeQuickReplies.length <= 1}
+                  onMouseDown={markDragHandleActive}
+                  onTouchStart={markDragHandleActive}
+                  onMouseUp={clearDragHandleActive}
+                  onTouchEnd={clearDragHandleActive}
+                  onTouchCancel={clearDragHandleActive}
+                >
+                  <Icon name="sort" />
+                </button>
                 <Button
                   size="tiny"
                   color="translucent"
