@@ -71,7 +71,7 @@ import type {
   PrivacyVisibility,
 } from '../../api/types';
 import type { ApiCredentials } from '../../components/payment/PaymentModal';
-import type { CustomerServiceSettings } from './customerServiceV2';
+import type { CustomerServiceQuickReply, CustomerServiceSettings } from './customerServiceV2';
 import type { FoldersActions } from '../../hooks/reducers/useFoldersReducer';
 import type { ReducerAction } from '../../hooks/useReducer';
 import type { P2pMessage } from '../../lib/vibecalls';

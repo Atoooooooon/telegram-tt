@@ -17,14 +17,14 @@ type OwnProps = {
   className?: string;
   leftColumnRef: ElementRef<HTMLDivElement>;
   leftColumnWidth?: number;
-  onColumnRef?: (node: HTMLDivElement | null) => void;
+  columnRef?: ElementRef<HTMLDivElement>;
 };
 
 const CustomerServiceMiddleColumn: FC<OwnProps> = ({
   className,
   leftColumnRef,
   leftColumnWidth,
-  onColumnRef,
+  columnRef,
 }) => {
   const { setLeftColumnWidth, resetLeftColumnWidth } = getActions();
   const { isDesktop } = useAppLayout();
@@ -43,7 +43,7 @@ const CustomerServiceMiddleColumn: FC<OwnProps> = ({
 
   return (
     <div
-      ref={onColumnRef ?? undefined}
+      ref={columnRef}
       className={buildClassName('CustomerServiceMiddleColumn', styles.root, className)}
     >
       {isDesktop && (

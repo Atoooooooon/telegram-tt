@@ -1,4 +1,7 @@
-import type { CustomerServiceSettings } from '../types/customerServiceV2';
+import type {
+  CustomerServiceQuickReply,
+  CustomerServiceSettings,
+} from '../types/customerServiceV2';
 
 const CUSTOMER_SERVICE_V2_SETTINGS_KEY = 'customerServiceV2Settings';
 const LEGACY_CUSTOMER_SERVICE_SETTINGS_KEY = 'customerServiceSettings';
@@ -10,10 +13,48 @@ type NormalizableSettings = {
   mode?: unknown;
   autoRead?: unknown;
   quickReplies?: unknown;
+  quickReplyPanelGlobal?: unknown;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function normalizeCustomerServiceQuickReplies(raw: unknown): CustomerServiceQuickReply[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw.reduce<CustomerServiceQuickReply[]>((result, item) => {
+    if (item === undefined || item === null) {
+      return result;
+    }
+
+    if (typeof item === 'string') {
+      const text = item.trim();
+      if (text) {
+        result.push({
+          text,
+          mode: 'send',
+        });
+      }
+      return result;
+    }
+
+    if (isRecord(item) && typeof item.text === 'string') {
+      const text = item.text.trim();
+      if (!text) {
+        return result;
+      }
+
+      result.push({
+        text,
+        mode: item.mode === 'insert' ? 'insert' : 'send',
+      });
+    }
+
+    return result;
+  }, []);
 }
 
 function normalizeSettings(raw: unknown): CustomerServiceSettings | undefined {
@@ -28,6 +69,7 @@ function normalizeSettings(raw: unknown): CustomerServiceSettings | undefined {
     mode,
     autoRead,
     quickReplies,
+    quickReplyPanelGlobal,
   } = raw as NormalizableSettings;
 
   const normalized: CustomerServiceSettings = {
@@ -40,7 +82,8 @@ function normalizeSettings(raw: unknown): CustomerServiceSettings | undefined {
     regexFilters: [],
     mode: mode === 'assist' ? 'assist' : 'oncall',
     autoRead: Boolean(autoRead),
-    quickReplies: [],
+    quickReplies: normalizeCustomerServiceQuickReplies(quickReplies),
+    quickReplyPanelGlobal: Boolean(quickReplyPanelGlobal),
   };
 
   if (Array.isArray(regexFilters)) {
@@ -71,21 +114,6 @@ function normalizeSettings(raw: unknown): CustomerServiceSettings | undefined {
       },
       [],
     );
-  }
-
-  if (Array.isArray(quickReplies)) {
-    normalized.quickReplies = quickReplies.reduce<string[]>((result, reply) => {
-      if (reply === undefined || reply === null) {
-        return result;
-      }
-
-      const text = String(reply).trim();
-      if (text) {
-        result.push(text);
-      }
-
-      return result;
-    }, []);
   }
 
   return normalized;

@@ -8,6 +8,7 @@ import { selectIsCustomerServiceV2Open } from '../../global/selectors/customerSe
 import { selectTabState } from '../../global/selectors/tabs';
 import { CUSTOMER_SERVICE_VIRTUAL_CHAT_ID } from '../../global/types/customerServiceV2';
 
+import CustomerServiceQuickReplyPanel from '../customerService/v2/composer/CustomerServiceQuickReplyPanel';
 import CustomerServiceMiddleColumn from '../customerService/v2/middle/CustomerServiceMiddleColumn';
 import MiddleColumn from '../middle/MiddleColumn';
 
@@ -32,6 +33,7 @@ const MiddleColumnContainer: FC<OwnProps & StateProps> = ({
   leftColumnWidth,
 }) => {
   const customerServiceColumnRef = useRef<HTMLDivElement>();
+  const quickReplyPanel = <CustomerServiceQuickReplyPanel />;
 
   // In customer service mode with context viewing (half-screen)
   if (isCustomerServiceV2Open && isHalfScreen) {
@@ -41,16 +43,14 @@ const MiddleColumnContainer: FC<OwnProps & StateProps> = ({
           className={styles.customerServiceColumn}
           leftColumnRef={leftColumnRef}
           leftColumnWidth={leftColumnWidth}
-          onColumnRef={(node) => {
-            customerServiceColumnRef.current = node || undefined;
-          }}
+          columnRef={customerServiceColumnRef}
         />
         <MiddleColumn
           leftColumnRef={leftColumnRef}
-          isHalfScreen={true}
           isMobile={isMobile}
           customerServiceColumnRef={customerServiceColumnRef}
         />
+        {quickReplyPanel}
       </>
     );
   }
@@ -58,24 +58,28 @@ const MiddleColumnContainer: FC<OwnProps & StateProps> = ({
   // In customer service mode without context viewing
   if (isCustomerServiceV2Open) {
     return (
-      <div className={styles.container}>
-        <CustomerServiceMiddleColumn
-          leftColumnRef={leftColumnRef}
-          leftColumnWidth={leftColumnWidth}
-          onColumnRef={(node) => {
-            customerServiceColumnRef.current = node || undefined;
-          }}
-        />
-      </div>
+      <>
+        <div className={styles.container}>
+          <CustomerServiceMiddleColumn
+            leftColumnRef={leftColumnRef}
+            leftColumnWidth={leftColumnWidth}
+            columnRef={customerServiceColumnRef}
+          />
+        </div>
+        {quickReplyPanel}
+      </>
     );
   }
 
   // Normal mode (not in customer service)
   return (
-    <MiddleColumn
-      leftColumnRef={leftColumnRef}
-      isMobile={isMobile}
-    />
+    <>
+      <MiddleColumn
+        leftColumnRef={leftColumnRef}
+        isMobile={isMobile}
+      />
+      {quickReplyPanel}
+    </>
   );
 };
 

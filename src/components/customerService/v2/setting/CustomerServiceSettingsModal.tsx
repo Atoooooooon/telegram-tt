@@ -3,8 +3,13 @@ import { memo, useEffect, useMemo, useState } from '../../../../lib/teact/teact'
 import { getActions, withGlobal } from '../../../../global';
 
 import type { ApiChat } from '../../../../api/types';
+import type {
+  CustomerServiceQuickReply,
+  CustomerServiceQuickReplyMode,
+} from '../../../../global/types/customerServiceV2';
 
 import { CUSTOMER_SERVICE_CONFIG } from '../../../../config/customerService';
+import { normalizeCustomerServiceQuickReplies } from '../../../../global/helpers/customerServiceV2Settings';
 import { selectCustomerServiceV2Settings } from '../../../../global/selectors/customerServiceV2';
 import { selectTabState } from '../../../../global/selectors/tabs';
 import buildClassName from '../../../../util/buildClassName';
@@ -17,6 +22,7 @@ import Icon from '../../../common/icons/Icon';
 import Button from '../../../ui/Button';
 import Checkbox from '../../../ui/Checkbox';
 import InputText from '../../../ui/InputText';
+import Switcher from '../../../ui/Switcher';
 import TextArea from '../../../ui/TextArea';
 import Modal from '../../../ui/Modal';
 import TabList from '../../../ui/TabList';
@@ -38,7 +44,8 @@ type StateProps = {
     }>;
     mode?: 'oncall' | 'assist';
     autoRead?: boolean;
-    quickReplies?: string[];
+    quickReplies?: CustomerServiceQuickReply[];
+    quickReplyPanelGlobal?: boolean;
   };
 };
 
@@ -48,27 +55,13 @@ type FilterSettings = {
   regexFilters: RegExp[];
   mode?: 'oncall' | 'assist'; // 添加模式选择
   autoRead?: boolean; // 添加自动已读选项
-  quickReplies: string[];
+  quickReplies: CustomerServiceQuickReply[];
+  quickReplyPanelGlobal: boolean;
 };
 
-const normalizeQuickReplies = (list?: readonly string[]) => {
-  if (!Array.isArray(list)) {
-    return Array.from(CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES);
-  }
-
-  return list.reduce<string[]>((result, item) => {
-    if (item === undefined || item === null) {
-      return result;
-    }
-
-    const text = item.trim();
-    if (text) {
-      result.push(text);
-    }
-
-    return result;
-  }, []);
-};
+const normalizeQuickReplies = (list?: unknown) => (
+  normalizeCustomerServiceQuickReplies(list ?? CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES)
+);
 
 type SavedSettings = StateProps['savedSettings'];
 
@@ -85,6 +78,7 @@ const buildFilterSettings = (saved?: SavedSettings): FilterSettings => ({
   mode: saved?.mode || 'oncall',
   autoRead: saved?.autoRead || false,
   quickReplies: normalizeQuickReplies(saved?.quickReplies),
+  quickReplyPanelGlobal: Boolean(saved?.quickReplyPanelGlobal),
 });
 
 const CustomerServiceSettingsModal = ({
@@ -147,7 +141,7 @@ const CustomerServiceSettingsModal = ({
   const [searchError, setSearchError] = useState('');
 
   // 设置状态
-  const [settings, setSettings] = useState<FilterSettings>(() => buildFilterSettings(savedSettings));
+  const [settings, setSettings] = useState<FilterSettings>(buildFilterSettings(savedSettings));
 
   // 新添加的用户ID和正则规则输入
   const [newRegexFilter, setNewRegexFilter] = useState('');
@@ -446,7 +440,29 @@ const CustomerServiceSettingsModal = ({
   const handleQuickReplyChange = useLastCallback((index: number, value: string) => {
     setSettings((prev) => {
       const nextQuickReplies = [...(prev.quickReplies || [])];
-      nextQuickReplies[index] = value;
+      const current = nextQuickReplies[index];
+      const updated: CustomerServiceQuickReply = current
+        ? { ...current, text: value }
+        : { text: value, mode: 'send' };
+
+      nextQuickReplies[index] = updated;
+
+      return {
+        ...prev,
+        quickReplies: nextQuickReplies,
+      };
+    });
+  });
+
+  const handleQuickReplyModeChange = useLastCallback((index: number, mode: CustomerServiceQuickReplyMode) => {
+    setSettings((prev) => {
+      const nextQuickReplies = [...(prev.quickReplies || [])];
+      const current = nextQuickReplies[index];
+      const updated: CustomerServiceQuickReply = current
+        ? { ...current, mode }
+        : { text: '', mode };
+
+      nextQuickReplies[index] = updated;
 
       return {
         ...prev,
@@ -473,11 +489,26 @@ const CustomerServiceSettingsModal = ({
       return;
     }
 
+    const newReply: CustomerServiceQuickReply = {
+      text: trimmed,
+      mode: 'send',
+    };
+
     setSettings((prev) => ({
       ...prev,
-      quickReplies: [...(prev.quickReplies || []), trimmed],
+      quickReplies: [
+        ...(prev.quickReplies || []),
+        newReply,
+      ],
     }));
     setNewQuickReply('');
+  });
+
+  const handleQuickReplyPanelGlobalChange = useLastCallback((checked: boolean) => {
+    setSettings((prev) => ({
+      ...prev,
+      quickReplyPanelGlobal: checked,
+    }));
   });
 
   // 保存设置
@@ -491,18 +522,8 @@ const CustomerServiceSettingsModal = ({
       })),
       mode: settings.mode || 'oncall',
       autoRead: Boolean(settings.autoRead),
-      quickReplies: (settings.quickReplies || []).reduce<string[]>((result, reply) => {
-        if (reply === undefined || reply === null) {
-          return result;
-        }
-
-        const text = reply.trim();
-        if (text) {
-          result.push(text);
-        }
-
-        return result;
-      }, []),
+      quickReplies: normalizeQuickReplies(settings.quickReplies),
+      quickReplyPanelGlobal: Boolean(settings.quickReplyPanelGlobal),
     };
 
     saveCustomerServiceV2Settings({ settings: normalizedSettings });
@@ -577,7 +598,7 @@ const CustomerServiceSettingsModal = ({
 
   // 标签选项 - 按照ChatFolders.tsx的模式生成
   const tagOptions = useMemo(() => {
-    const options = [{ value: '-1', text: lang('All') }];
+    const options = [{ value: '-1', text: lang('CustomerServiceAllTags') }];
 
     if (orderedFolderIds && chatFolders) {
       orderedFolderIds.forEach((folderId) => {
@@ -713,14 +734,14 @@ const CustomerServiceSettingsModal = ({
           })
         ) : (
           <div className={styles.emptyState}>
-            <Icon name="folder-open" className={styles.emptyIcon} />
+            <Icon name="folder" className={styles.emptyIcon} />
             <p>{lang('CustomerServiceNoGroups')}</p>
           </div>
         )}
       </div>
 
       <div className={styles.selectedCount}>
-        <Icon name="check-circle" className={styles.countIcon} />
+        <Icon name="check" className={styles.countIcon} />
         <strong>{(settings.monitoredChatIds || []).length}</strong>
         {' '}
         {lang('CustomerServiceGroupsSelected')}
@@ -749,7 +770,6 @@ const CustomerServiceSettingsModal = ({
               onChange={handleSearchChange}
               placeholder={lang('CustomerServiceSearchUsers')}
               className={styles.userAddInput}
-              onFocus={() => setIsSearchDropdownOpen(searchQuery.length > 0)}
             />
           </div>
 
@@ -815,7 +835,7 @@ const CustomerServiceSettingsModal = ({
                     color="translucent"
                     onClick={() => handleRemoveUserId(userId)}
                     className={styles.removeButton}
-                    ariaLabel={lang('Remove')}
+                    ariaLabel={lang('CustomerServiceRemoveFilteredUser')}
                   >
                     <Icon name="close" />
                   </Button>
@@ -826,7 +846,7 @@ const CustomerServiceSettingsModal = ({
         </div>
       ) : (
         <div className={styles.emptyState}>
-          <Icon name="user-check" className={styles.emptyIcon} />
+          <Icon name="user" className={styles.emptyIcon} />
           <p>{lang('CustomerServiceNoFilteredUsers')}</p>
         </div>
       )}
@@ -862,7 +882,7 @@ const CustomerServiceSettingsModal = ({
     <div className={styles.tabContent}>
       <div className={styles.sectionHeader}>
         <h3>
-          <Icon name="filter" className={styles.sectionIcon} />
+          <Icon name="tag-filter" className={styles.sectionIcon} />
           {lang('CustomerServiceRegexFilters')}
         </h3>
         <p className={styles.sectionDescription}>
@@ -909,7 +929,7 @@ const CustomerServiceSettingsModal = ({
             return (
               <div key={index} className={styles.filterItem}>
                 <div className={styles.filterContent}>
-                  <Icon name="code" className={styles.filterIcon} />
+                  <Icon name="document" className={styles.filterIcon} />
                   <div className={styles.regexInfo}>
                     <code className={styles.regexText} title={regex.source}>{regex.source}</code>
                     {presetRule && (
@@ -923,7 +943,7 @@ const CustomerServiceSettingsModal = ({
                     color="translucent"
                     onClick={() => handleRemoveRegexFilter(index)}
                     className={styles.removeButton}
-                    ariaLabel={lang('Remove')}
+                    ariaLabel={lang('CustomerServiceRemoveRegex')}
                   >
                     <Icon name="close" />
                   </Button>
@@ -934,7 +954,7 @@ const CustomerServiceSettingsModal = ({
         </div>
       ) : (
         <div className={styles.emptyState}>
-          <Icon name="filter-off" className={styles.emptyIcon} />
+          <Icon name="tag-crossed" className={styles.emptyIcon} />
           <p>{lang('CustomerServiceNoFilteredMessages')}</p>
         </div>
       )}
@@ -986,12 +1006,23 @@ const CustomerServiceSettingsModal = ({
       <div className={styles.tabContent}>
         <div className={styles.sectionHeader}>
           <h3>
-            <Icon name="flash" className={styles.sectionIcon} />
+            <Icon name="send" className={styles.sectionIcon} />
             {lang('CustomerServiceQuickReplies')}
           </h3>
           <p className={styles.sectionDescription}>
             {lang('CustomerServiceQuickRepliesDescription')}
           </p>
+        </div>
+
+        <div className={styles.quickReplyToggleRow}>
+          <div className={styles.quickReplyToggleHint}>
+            {lang('CustomerServiceQuickReplyPanelHint')}
+          </div>
+          <Switcher
+            label={lang('CustomerServiceQuickReplyPanelGlobal')}
+            checked={Boolean(settings.quickReplyPanelGlobal)}
+            onCheck={handleQuickReplyPanelGlobalChange}
+          />
         </div>
 
         <div className={styles.quickReplyCreator}>
@@ -1000,19 +1031,19 @@ const CustomerServiceSettingsModal = ({
             onChange={(e) => setNewQuickReply(e.currentTarget.value)}
             placeholder={lang('CustomerServiceQuickReplyPlaceholder')}
             className={styles.quickReplyTextarea}
-            rows={2}
-            noReplaceNewlines
           />
-          <Button
-            size="smaller"
-            color="primary"
-            onClick={handleAddQuickReply}
-            disabled={!newQuickReply.trim()}
-            className={styles.quickReplyAddButton}
-          >
-            <Icon name="add" />
-            {lang('CustomerServiceAddQuickReply')}
-          </Button>
+          <div>
+            <Button
+              size="smaller"
+              color="primary"
+              onClick={handleAddQuickReply}
+              disabled={!newQuickReply.trim()}
+              className={styles.quickReplyAddButton}
+            >
+              <Icon name="add" />
+              {lang('CustomerServiceAddQuickReply')}
+            </Button>
+          </div>
         </div>
 
         {quickReplies.length > 0 ? (
@@ -1021,24 +1052,46 @@ const CustomerServiceSettingsModal = ({
               <div
                 key={`quick-reply-${index}`}
                 className={styles.quickReplyItem}
+                data-mode={reply.mode}
               >
-                <TextArea
-                  value={reply}
-                  onChange={(e) => handleQuickReplyChange(index, e.currentTarget.value)}
-                  className={styles.quickReplyTextarea}
-                  rows={2}
-                  noReplaceNewlines
-                />
-                <Button
-                  size="tiny"
-                  color="translucent"
-                  round
-                  className={styles.quickReplyRemoveButton}
-                  onClick={() => handleRemoveQuickReply(index)}
-                  ariaLabel={lang('CustomerServiceDeleteQuickReply')}
-                >
-                  <Icon name="delete" />
-                </Button>
+                <div className={styles.quickReplyTextWrapper}>
+                  <InputText
+                    value={reply.text}
+                    onChange={(e) => handleQuickReplyChange(index, e.currentTarget.value)}
+                    className={styles.quickReplyTextInput}
+                    placeholder={lang('CustomerServiceQuickReplyPlaceholder')}
+                  />
+                </div>
+                <div className={styles.quickReplyActions}>
+                  <Button
+                    size="tiny"
+                    color="translucent"
+                    className={buildClassName(
+                      styles.quickReplyModeButton,
+                      reply.mode === 'send'
+                        ? styles.quickReplyModeSend
+                        : styles.quickReplyModeInsert,
+                    )}
+                    onClick={() => handleQuickReplyModeChange(index, reply.mode === 'send' ? 'insert' : 'send')}
+                    ariaLabel={lang(
+                      reply.mode === 'send'
+                        ? 'CustomerServiceQuickReplyModeSend'
+                        : 'CustomerServiceQuickReplyModeInsert',
+                    )}
+                  >
+                    <Icon name={reply.mode === 'send' ? 'send' : 'edit'} />
+                  </Button>
+                  <Button
+                    size="tiny"
+                    color="translucent"
+                    round
+                    className={styles.quickReplyRemoveButton}
+                    onClick={() => handleRemoveQuickReply(index)}
+                    ariaLabel={lang('CustomerServiceDeleteQuickReply')}
+                  >
+                    <Icon name="delete" />
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
@@ -1062,7 +1115,7 @@ const CustomerServiceSettingsModal = ({
       onClose={handleClose}
       className={styles.modal}
       headerClassName={styles.header}
-      title={(
+      header={(
         <div className={styles.titleRow}>
           <Icon name="settings" className={styles.titleIcon} />
           <TabList
@@ -1131,7 +1184,7 @@ const CustomerServiceSettingsModal = ({
               color="translucent"
               style="width: 5rem !important;"
               onClick={handleExportSettings}
-              title={lang('CustomerServiceExportDescription')}
+              ariaLabel={lang('CustomerServiceExportDescription')}
             >
               <Icon name="download" />
               导出
@@ -1141,9 +1194,9 @@ const CustomerServiceSettingsModal = ({
               color="translucent"
               style="width: 5rem !important;"
               onClick={handleImportSettings}
-              title={lang('CustomerServiceImportDescription')}
+              ariaLabel={lang('CustomerServiceImportDescription')}
             >
-              <Icon name="upload" />
+              <Icon name="open-in-new-tab" />
               导入
             </Button>
             <Button
@@ -1151,8 +1204,9 @@ const CustomerServiceSettingsModal = ({
               color="translucent"
               style="width: 5rem !important;"
               onClick={handleReset}
+              ariaLabel={lang('CustomerServiceResetSettings')}
             >
-              <Icon name="restart" />
+              <Icon name="reload" />
               重置
             </Button>
             <Button

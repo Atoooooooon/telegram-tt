@@ -364,8 +364,15 @@
 "CustomerServiceUserFilters" = "用户过滤";
 "CustomerServiceMessageFilters" = "消息过滤";
 "CustomerServiceQuickReplies" = "快捷回复";
-"CustomerServiceQuickRepliesDescription" = "配置常用回复模板，点击后将自动带入会话并发送。";
+"CustomerServiceQuickRepliesDescription" = "配置常用回复模板，支持自动发送或填入输入框。";
 "CustomerServiceQuickReplyPlaceholder" = "例如：您好，请问有什么可以帮助您的？";
+"CustomerServiceQuickReplyModeSend" = "自动发送";
+"CustomerServiceQuickReplyModeInsert" = "填入输入框";
+"CustomerServiceQuickReplyModeLabel" = "回复方式";
+"CustomerServiceQuickReplyPanelHint" = "按住标题可拖动面板，绿色表示自动发送，蓝色表示填入输入框。";
+"CustomerServiceAllTags" = "所有标签";
+"CustomerServiceRemoveFilteredUser" = "移除过滤用户";
+"CustomerServiceRemoveRegex" = "删除规则";
 "CustomerServiceAddQuickReply" = "新增快捷回复";
 "CustomerServiceDeleteQuickReply" = "删除快捷回复";
 "CustomerServiceNoQuickReplies" = "暂无快捷回复，先添加一个吧";

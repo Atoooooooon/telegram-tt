@@ -1,7 +1,11 @@
 import type { ApiFormattedText } from '../api/types';
 import type { GlobalState } from '../global/types';
-import type { CustomerServiceSettings } from '../global/types/customerServiceV2';
+import type {
+  CustomerServiceQuickReply,
+  CustomerServiceSettings,
+} from '../global/types/customerServiceV2';
 
+import { normalizeCustomerServiceQuickReplies } from '../global/helpers/customerServiceV2Settings';
 import { selectCustomerServiceSettings } from '../global/selectors/customerService';
 import { selectCustomerServiceV2Settings } from '../global/selectors/customerServiceV2';
 
@@ -30,10 +34,19 @@ export const CUSTOMER_SERVICE_CONFIG = {
 
   // 默认快捷回复模板
   QUICK_REPLIES: [
-    '您好，请问有什么可以帮助您的？',
-    '感谢反馈，我们会尽快处理。',
-    '我们已收到您的消息，请您稍等。',
-  ],
+    {
+      text: '您好，请问有什么可以帮助您的？',
+      mode: 'send' as const,
+    },
+    {
+      text: '感谢反馈，我们会尽快处理。',
+      mode: 'send' as const,
+    },
+    {
+      text: '我们已收到您的消息，请您稍等。',
+      mode: 'send' as const,
+    },
+  ] satisfies readonly CustomerServiceQuickReply[],
 
   // 客服消息的最大保存数量
   MAX_MESSAGES_DISPLAY: 100,
@@ -53,11 +66,16 @@ const getEffectiveSettings = (global?: GlobalState): CustomerServiceSettings | u
 
   const v2Settings = selectCustomerServiceV2Settings(global);
   if (v2Settings) {
+    const quickReplies = normalizeCustomerServiceQuickReplies(
+      v2Settings.quickReplies && v2Settings.quickReplies.length
+        ? v2Settings.quickReplies
+        : CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES,
+    );
+
     return {
       ...v2Settings,
-      quickReplies: Array.isArray(v2Settings.quickReplies)
-        ? v2Settings.quickReplies.map((reply) => (typeof reply === 'string' ? reply.trim() : String(reply))).filter(Boolean)
-        : [...CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES],
+      quickReplies,
+      quickReplyPanelGlobal: Boolean(v2Settings.quickReplyPanelGlobal),
     };
   }
 
@@ -93,11 +111,10 @@ const getEffectiveSettings = (global?: GlobalState): CustomerServiceSettings | u
     }).filter((filter) => Boolean(filter.source)) as Array<{ source: string; flags: string }>,
     mode: legacySettings.mode === 'assist' ? 'assist' : 'oncall',
     autoRead: Boolean(legacySettings.autoRead),
-    quickReplies: Array.isArray((legacySettings as { quickReplies?: unknown }).quickReplies)
-      ? (legacySettings as { quickReplies: unknown[] }).quickReplies
-        .map((reply) => (typeof reply === 'string' ? reply.trim() : String(reply)))
-        .filter(Boolean)
-      : [...CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES],
+    quickReplies: normalizeCustomerServiceQuickReplies(
+      (legacySettings as { quickReplies?: unknown }).quickReplies ?? CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES,
+    ),
+    quickReplyPanelGlobal: false,
   };
 };
 

@@ -1,5 +1,12 @@
 import type { ApiMessage } from '../../api/types';
 
+export type CustomerServiceQuickReplyMode = 'send' | 'insert';
+
+export type CustomerServiceQuickReply = {
+  text: string;
+  mode: CustomerServiceQuickReplyMode;
+};
+
 /**
  * Virtual ChatId constant for Customer Service V2
  * This represents the Customer Service view as a virtual chat in the message list
@@ -25,7 +32,9 @@ export type CustomerServiceSettings = {
   /** Operating mode */
   mode: 'oncall' | 'assist';
   /** Predefined quick reply templates */
-  quickReplies?: string[];
+  quickReplies?: CustomerServiceQuickReply[];
+  /** Allow quick reply panel outside customer service context */
+  quickReplyPanelGlobal?: boolean;
 };
 
 /**

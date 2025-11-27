@@ -4,15 +4,17 @@ import type { CustomerServiceSettings, CustomerServiceV2State } from '../../type
 import { MAIN_THREAD_ID } from '../../../api/types';
 
 import { CUSTOMER_SERVICE_CONFIG } from '../../../config/customerService';
+import { EDITABLE_INPUT_ID } from '../../../config';
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
 import { callApi } from '../../../api/gramjs';
 import {
   loadCustomerServiceV2SettingsFromStorage,
+  normalizeCustomerServiceQuickReplies,
   saveCustomerServiceV2SettingsToStorage,
 } from '../../helpers/customerServiceV2Settings';
 import { addActionHandler, getGlobal, setGlobal } from '../../index';
 import { updateTabState } from '../../reducers/tabs';
-import { selectChat, selectTabState } from '../../selectors';
+import { selectChat, selectCurrentMessageList, selectTabState } from '../../selectors';
 import {
   selectCustomerServiceV2Settings,
   selectCustomerServiceV2State,
@@ -57,7 +59,8 @@ function getDefaultCustomerServiceV2Settings(): CustomerServiceSettings {
     }),
     mode: 'oncall',
     autoRead: false,
-    quickReplies: [...CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES],
+    quickReplies: normalizeCustomerServiceQuickReplies(CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES),
+    quickReplyPanelGlobal: false,
   };
 }
 
@@ -489,6 +492,53 @@ addActionHandler('openCustomerServiceV2Settings', (global, actions, payload): Ac
   );
 });
 
+addActionHandler('applyCustomerServiceQuickReply', (global, actions, payload): ActionReturnType => {
+  const { quickReply, tabId = getCurrentTabId() } = payload;
+
+  const trimmedText = quickReply.text.trim();
+  if (!trimmedText) {
+    return global;
+  }
+
+  const currentMessageList = selectCurrentMessageList(global, tabId);
+  if (!currentMessageList?.chatId) {
+    return global;
+  }
+
+  const messageListDescriptor = {
+    chatId: currentMessageList.chatId,
+    threadId: currentMessageList.threadId,
+    type: currentMessageList.type,
+    isHalfScreen: currentMessageList.isHalfScreen,
+  };
+
+  if (quickReply.mode === 'insert') {
+    const input = document.getElementById(EDITABLE_INPUT_ID);
+    const existingText = input?.textContent ?? '';
+    let combinedText = trimmedText;
+
+    if (existingText.trim().length) {
+      const needsSpace = !/[\s\n]$/.test(existingText);
+      combinedText = `${existingText}${needsSpace ? ' ' : ''}${trimmedText}`;
+    }
+
+    actions.openChatWithDraft({
+      chatId: messageListDescriptor.chatId,
+      threadId: messageListDescriptor.threadId,
+      text: { text: combinedText },
+      tabId,
+    });
+  } else {
+    actions.sendMessage({
+      messageList: messageListDescriptor,
+      text: trimmedText,
+      tabId,
+    });
+  }
+
+  return global;
+});
+
 addActionHandler('closeCustomerServiceV2Settings', (global, actions, payload): ActionReturnType => {
   const { tabId = getCurrentTabId() } = payload || {};
 
@@ -519,7 +569,12 @@ addActionHandler('toggleCustomerServiceV2Mode', (global, actions, payload): Acti
     regexFilters: existingSettings.regexFilters || [],
     autoRead: Boolean(existingSettings.autoRead),
     mode: nextMode,
-    quickReplies: existingSettings.quickReplies?.slice() || [...CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES],
+    quickReplies: normalizeCustomerServiceQuickReplies(
+      existingSettings.quickReplies && existingSettings.quickReplies.length
+        ? existingSettings.quickReplies
+        : CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES,
+    ),
+    quickReplyPanelGlobal: Boolean(existingSettings.quickReplyPanelGlobal),
   };
 
   const normalized = normalizeSettingsForSave(updatedSettings);
@@ -603,18 +658,8 @@ function normalizeSettingsForSave(settings: CustomerServiceSettings): CustomerSe
     })),
     mode: settings.mode === 'assist' ? 'assist' : 'oncall',
     autoRead: Boolean(settings.autoRead),
-    quickReplies: (settings.quickReplies || []).reduce<string[]>((result, reply) => {
-      if (reply === undefined || reply === null) {
-        return result;
-      }
-
-      const text = String(reply).trim();
-      if (text) {
-        result.push(text);
-      }
-
-      return result;
-    }, []),
+    quickReplies: normalizeCustomerServiceQuickReplies(settings.quickReplies || []),
+    quickReplyPanelGlobal: Boolean(settings.quickReplyPanelGlobal),
   };
 }
 

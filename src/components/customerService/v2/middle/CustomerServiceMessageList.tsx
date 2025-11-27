@@ -6,7 +6,6 @@ import { getActions, withGlobal } from '../../../../global';
 
 import type { ApiMessage } from '../../../../api/types';
 import { MAIN_THREAD_ID } from '../../../../api/types';
-import { CUSTOMER_SERVICE_CONFIG } from '../../../../config/customerService';
 import type { ObserveFn } from '../../../../hooks/useIntersectionObserver';
 import type { IAlbum } from '../../../../types';
 
@@ -15,7 +14,6 @@ import {
   selectCustomerServiceV2ContextMessageId,
   selectCustomerServiceV2MessageCount,
   selectCustomerServiceV2Messages,
-  selectCustomerServiceV2Settings,
 } from '../../../../global/selectors/customerServiceV2';
 import buildClassName from '../../../../util/buildClassName';
 import { getCurrentTabId } from '../../../../util/establishMultitabRole';
@@ -40,7 +38,6 @@ type StateProps = {
   messageCount: number;
   activeContextChatId?: string;
   activeContextMessageId?: number;
-  quickReplies: string[];
 };
 
 const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
@@ -49,7 +46,6 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
   messageCount,
   activeContextChatId,
   activeContextMessageId,
-  quickReplies,
 }) => {
   const {
     removeFromCustomerServiceV2,
@@ -86,37 +82,6 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
         tabId: getCurrentTabId(),
       });
     }, 300);
-  });
-
-  const handleQuickReply = useLastCallback((targetMessage: ApiMessage, albumData: IAlbum | undefined, replyText: string) => {
-    const trimmed = replyText.trim();
-    if (!trimmed) {
-      return;
-    }
-
-    handleViewContext(targetMessage.chatId, targetMessage.id);
-
-    const tabId = getCurrentTabId();
-    const relatedMessages = albumData ? albumData.messages : [targetMessage];
-
-    sendMessage({
-      messageList: {
-        chatId: targetMessage.chatId,
-        threadId: MAIN_THREAD_ID,
-        type: 'thread',
-        isHalfScreen: true,
-      },
-      text: trimmed,
-      tabId,
-    });
-
-    relatedMessages.forEach((relatedMessage) => {
-      removeFromCustomerServiceV2({
-        chatId: relatedMessage.chatId,
-        messageId: relatedMessage.id,
-        tabId,
-      });
-    });
   });
 
   const observeIntersectionForLoading = useCallback<ObserveFn>((element, targetCallback) => {
@@ -301,25 +266,6 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
                   </Button>
                 </div>
               </div>
-              {quickReplies.length > 0 && (
-                <div className={styles.quickReplyRow}>
-                  {quickReplies.map((reply, quickReplyIndex) => (
-                    <Button
-                      key={`quick-reply-${message.chatId}-${message.id}-${quickReplyIndex}`}
-                      size="tiny"
-                      color="translucent"
-                      className={styles.quickReplyButton}
-                      ariaLabel={reply}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleQuickReply(message, album, reply);
-                      }}
-                    >
-                      {reply}
-                    </Button>
-                  ))}
-                </div>
-              )}
             </div>
           );
         })}
@@ -335,15 +281,12 @@ export default memo(
     const messageCount = selectCustomerServiceV2MessageCount(global, tabId);
     const activeContextChatId = selectCustomerServiceV2ContextChatId(global, tabId);
     const activeContextMessageId = selectCustomerServiceV2ContextMessageId(global, tabId);
-    const settings = selectCustomerServiceV2Settings(global, tabId);
-    const quickReplies = settings?.quickReplies ?? Array.from(CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES);
 
     return {
       messages,
       messageCount,
       activeContextChatId,
       activeContextMessageId,
-      quickReplies,
     };
   })(CustomerServiceMessageList),
 );

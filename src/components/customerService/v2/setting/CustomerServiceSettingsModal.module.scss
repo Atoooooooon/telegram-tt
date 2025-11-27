@@ -140,18 +140,78 @@
 .quickReplyList {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.65rem;
 }
 
 .quickReplyItem {
   display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.85rem;
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-borders);
+  position: relative;
+  overflow: hidden;
+}
+
+.quickReplyItem::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0.3rem;
+  border-radius: 0.3rem;
+}
+
+.quickReplyItem[data-mode='send']::before {
+  background: var(--color-success);
+}
+
+.quickReplyItem[data-mode='insert']::before {
+  background: var(--color-primary);
+}
+
+.quickReplyTextWrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.quickReplyTextInput {
+  width: 100%;
+
+  :global(.input-group) {
+    width: 100%;
+    margin: 0;
+  }
+
+  :global(.form-control) {
+    width: 100%;
+    border: none;
+    background: transparent;
+    padding: 0;
+    font-size: 0.9rem;
+    color: var(--color-text);
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  :global(.form-control:focus) {
+    box-shadow: none;
+    background: transparent;
+  }
+}
+
+.quickReplyActions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .quickReplyRemoveButton {
   flex-shrink: 0;
-  margin-top: 0.25rem;
+  align-self: center;
 }
 
 .quickReplyEmpty {
@@ -169,6 +229,55 @@
 .quickReplyEmptyIcon {
   font-size: 1.5rem;
   color: var(--color-primary);
+}
+
+.quickReplyToggleRow {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.quickReplyToggleHint {
+  flex: 1;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+.quickReplyModeButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: none;
+  transition: background 0.18s ease, transform 0.18s ease;
+
+  :global(.icon) {
+    font-size: 1rem;
+  }
+}
+
+.quickReplyModeButton:hover {
+  transform: translateY(-1px);
+}
+
+.quickReplyModeSend {
+  background: color-mix(in srgb, var(--color-success) 18%, transparent) !important;
+
+  :global(.icon) {
+    color: var(--color-success);
+  }
+}
+
+.quickReplyModeInsert {
+  background: color-mix(in srgb, var(--color-primary) 22%, transparent) !important;
+
+  :global(.icon) {
+    color: var(--color-primary);
+  }
 }
 
 .filterControls {
