@@ -454,18 +454,17 @@
   gap: 0.35rem;
 }
 
-.filterList {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  min-height: 21rem;
-  max-height: 21rem;
-}
+.filterList,
 .regexFilterList {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  min-height: 15rem;
+  max-height: 21rem;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.regexFilterList {
   max-height: 15rem;
 }
 

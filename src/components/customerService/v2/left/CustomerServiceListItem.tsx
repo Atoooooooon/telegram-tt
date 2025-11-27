@@ -72,7 +72,7 @@ const CustomerServiceListItem: FC<OwnProps & StateProps> = ({
   ]);
 
   const subtitle = useMemo(() => (
-    messageCount > 0 ? lang('CustomerServiceOnCallModeDescription') : lang('CustomerServiceEmptyHint')
+    messageCount > 0 ? lang('CustomerServiceNonEmptyHint') : lang('CustomerServiceEmptyHint')
   ), [lang, messageCount]);
 
   return (
