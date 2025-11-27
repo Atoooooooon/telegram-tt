@@ -1,5 +1,5 @@
 import type { ApiMessage } from '../../../api/types';
-import type { ActionReturnType } from '../../types';
+import type { ActionReturnType, GlobalState } from '../../types';
 import type { CustomerServiceSettings, CustomerServiceV2State } from '../../types/customerServiceV2';
 import { MAIN_THREAD_ID } from '../../../api/types';
 
@@ -79,6 +79,29 @@ function getDefaultCustomerServiceV2Settings(): CustomerServiceSettings {
   };
 }
 
+function syncCustomerServiceV2StateAcrossTabs(
+  global: GlobalState,
+  nextState: CustomerServiceV2State,
+): GlobalState {
+  const nextByTabId = { ...global.byTabId };
+
+  Object.values(global.byTabId).forEach((tabState) => {
+    nextByTabId[tabState.id] = {
+      ...tabState,
+      customerServiceV2: {
+        ...nextState,
+        currentContextChatId: tabState.customerServiceV2?.currentContextChatId,
+        currentContextMessageId: tabState.customerServiceV2?.currentContextMessageId,
+      },
+    };
+  });
+
+  return {
+    ...global,
+    byTabId: nextByTabId,
+  };
+}
+
 /**
  * Add message to Customer Service V2
  * Implements FIFO cleanup at 5000 messages
@@ -141,13 +164,7 @@ addActionHandler('addToCustomerServiceV2', (global, actions, payload): ActionRet
       };
     };
 
-    return updateTabState(
-      global,
-      {
-        customerServiceV2: nextState,
-      },
-      tabId,
-    );
+    return syncCustomerServiceV2StateAcrossTabs(global, nextState);
   } catch (error) {
     actions.showNotification({
       message: 'CustomerServiceSyncError',
@@ -207,13 +224,7 @@ addActionHandler('removeFromCustomerServiceV2', async (global, actions, payload)
       nextState.pausedChats = pausedChats;
     }
 
-    global = updateTabState(
-      global,
-      {
-        customerServiceV2: nextState,
-      },
-      tabId,
-    );
+    global = syncCustomerServiceV2StateAcrossTabs(global, nextState);
 
     setGlobal(global);
 
@@ -271,13 +282,7 @@ addActionHandler('removeCustomerServiceV2Messages', (global, actions, payload): 
       nextState.pausedChats = updatedPaused;
     }
 
-    return updateTabState(
-      global,
-      {
-        customerServiceV2: nextState,
-      },
-      tabId,
-    );
+    return syncCustomerServiceV2StateAcrossTabs(global, nextState);
   } catch (error) {
     return global;
   }
@@ -314,13 +319,7 @@ addActionHandler('syncCustomerServiceV2Message', (global, actions, payload): Act
       lastSyncTimestamp: Date.now(),
     };
 
-    return updateTabState(
-      global,
-      {
-        customerServiceV2: nextState,
-      },
-      tabId,
-    );
+    return syncCustomerServiceV2StateAcrossTabs(global, nextState);
   } catch (error) {
     return global;
   }
@@ -365,13 +364,7 @@ addActionHandler('clearCustomerServiceV2Messages', async (global, actions, paylo
     lastSyncTimestamp: Date.now(),
   };
 
-  global = updateTabState(
-    global,
-    {
-      customerServiceV2: nextState,
-    },
-    tabId,
-  );
+  global = syncCustomerServiceV2StateAcrossTabs(global, nextState);
 
   setGlobal(global);
 
@@ -425,13 +418,7 @@ addActionHandler('pauseCustomerServiceV2Chat', (global, actions, payload): Actio
     },
   };
 
-  return updateTabState(
-    global,
-    {
-      customerServiceV2: nextState,
-    },
-    tabId,
-  );
+  return syncCustomerServiceV2StateAcrossTabs(global, nextState);
 });
 
 /**
@@ -451,13 +438,7 @@ addActionHandler('resumeCustomerServiceV2Chat', (global, actions, payload): Acti
     pausedChats,
   };
 
-  return updateTabState(
-    global,
-    {
-      customerServiceV2: nextState,
-    },
-    tabId,
-  );
+  return syncCustomerServiceV2StateAcrossTabs(global, nextState);
 });
 
 /**
@@ -628,13 +609,7 @@ addActionHandler('toggleCustomerServiceV2Mode', (global, actions, payload): Acti
     pausedChats: nextMode === 'assist' ? baseState.pausedChats : undefined,
   };
 
-  return updateTabState(
-    global,
-    {
-      customerServiceV2: nextState,
-    },
-    tabId,
-  );
+  return syncCustomerServiceV2StateAcrossTabs(global, nextState);
 });
 
 addActionHandler('checkPausedChatsStatusV2', (global, actions, payload): ActionReturnType => {
@@ -681,13 +656,7 @@ addActionHandler('checkPausedChatsStatusV2', (global, actions, payload): ActionR
     pausedChats: Object.keys(updatedPausedChats).length ? updatedPausedChats : undefined,
   };
 
-  return updateTabState(
-    global,
-    {
-      customerServiceV2: nextState,
-    },
-    tabId,
-  );
+  return syncCustomerServiceV2StateAcrossTabs(global, nextState);
 });
 
 addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload): Promise<void> => {
@@ -732,11 +701,7 @@ addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload):
       settings: normalized,
     };
 
-    currentGlobal = updateTabState(
-      currentGlobal,
-      { customerServiceV2: nextState },
-      tabId,
-    );
+    currentGlobal = syncCustomerServiceV2StateAcrossTabs(currentGlobal, nextState);
 
     setGlobal(currentGlobal);
     onDownload?.({
@@ -864,13 +829,7 @@ addActionHandler('saveCustomerServiceV2Settings', (global, actions, payload): Ac
     settings: normalized,
   };
 
-  return updateTabState(
-    global,
-    {
-      customerServiceV2: nextState,
-    },
-    tabId,
-  );
+  return syncCustomerServiceV2StateAcrossTabs(global, nextState);
 });
 
 addActionHandler('exportCustomerServiceV2Settings', (global, actions, payload): ActionReturnType => {

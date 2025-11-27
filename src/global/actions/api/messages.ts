@@ -1299,6 +1299,42 @@ addActionHandler('reportChannelSpam', (global, actions, payload): ActionReturnTy
   void callApi('reportChannelSpam', { peer, chat, messageIds });
 });
 
+function scheduleAssistModePausedChatCheck(tabId: number, actions: RequiredGlobalActions) {
+  execAfterActions(() => {
+    const currentGlobal = getGlobal();
+    const tabState = selectTabState(currentGlobal, tabId);
+    if (!tabState) {
+      return;
+    }
+
+    const customerService = tabState.customerService;
+    const customerServiceV2 = selectCustomerServiceV2State(currentGlobal, tabId);
+    const isAssistMode = (customerService?.settings?.mode === 'assist')
+      || (customerServiceV2?.settings?.mode === 'assist');
+    if (!isAssistMode) {
+      return;
+    }
+
+    const hasLegacyPausedChats = Boolean(
+      customerService?.pausedChats && Object.keys(customerService.pausedChats).length > 0,
+    );
+    const hasV2PausedChats = Boolean(
+      customerServiceV2?.pausedChats && Object.keys(customerServiceV2.pausedChats).length > 0,
+    );
+
+    if (!hasLegacyPausedChats && !hasV2PausedChats) {
+      return;
+    }
+
+    if (hasLegacyPausedChats) {
+      actions.checkPausedChatsStatus({ tabId });
+    }
+    if (hasV2PausedChats) {
+      actions.checkPausedChatsStatusV2({ tabId });
+    }
+  });
+}
+
 addActionHandler('markMessageListRead', (global, actions, payload): ActionReturnType => {
   if (selectIsCurrentUserFrozen(global)) return undefined;
   const { maxId, tabId = getCurrentTabId() } = payload;
