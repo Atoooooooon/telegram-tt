@@ -34,15 +34,16 @@ type PanelPosition = {
   left: number;
   top: number;
   width: number;
+  height: number;
 };
 
 const clampValue = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 const MIN_LEFT_OFFSET = 16;
 const MIN_PANEL_WIDTH = 288;
-const MAX_PANEL_WIDTH = 420;
+const MIN_PANEL_HEIGHT = 220;
+const DEFAULT_PANEL_HEIGHT = 320;
 const DEFAULT_VERTICAL_OFFSET = 320;
-const PANEL_ESTIMATED_HEIGHT = 320;
 const POSITION_STORAGE_KEY = 'customerServiceQuickReplyPanelPosition';
 
 const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
@@ -57,16 +58,28 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
   const debugStateRef = useRef<Record<string, unknown>>({});
 
   const panelRef = useRef<HTMLDivElement>();
   const panelPositionRef = useRef<PanelPosition | undefined>();
-  const storedPositionRef = useRef<{ left: number; top: number } | undefined>();
+  const storedPositionRef = useRef<{
+    left: number;
+    top: number;
+    width?: number;
+    height?: number;
+  } | undefined>();
   const dragStateRef = useRef<{
     startX: number;
     startY: number;
     originLeft: number;
     originTop: number;
+  } | undefined>();
+  const resizeStateRef = useRef<{
+    startX: number;
+    startY: number;
+    originWidth: number;
+    originHeight: number;
   } | undefined>();
   const hoverTimeoutRef = useRef<number>();
 
@@ -96,6 +109,12 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
         storedPositionRef.current = {
           left: parsed.left,
           top: parsed.top,
+          width: typeof parsed.width === 'number' && Number.isFinite(parsed.width)
+            ? parsed.width
+            : undefined,
+          height: typeof parsed.height === 'number' && Number.isFinite(parsed.height)
+            ? parsed.height
+            : undefined,
         };
       }
     } catch (error) {
@@ -116,6 +135,7 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
         && prev.left === next.left
         && prev.top === next.top
         && prev.width === next.width
+        && prev.height === next.height
       ) {
         return prev;
       }
@@ -124,8 +144,13 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
     });
   });
 
-  const persistPosition = useLastCallback((left: number, top: number) => {
-    storedPositionRef.current = { left, top };
+  const persistPosition = useLastCallback((left: number, top: number, width: number, height: number) => {
+    storedPositionRef.current = {
+      left,
+      top,
+      width,
+      height,
+    };
     try {
       localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(storedPositionRef.current));
     } catch (error) {
@@ -149,36 +174,54 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
       return;
     }
 
+    const saved = storedPositionRef.current;
     const viewportWidth = document.documentElement?.clientWidth || window.innerWidth || rect.width;
     const viewportHeight = document.documentElement?.clientHeight || window.innerHeight || rect.height;
-    const width = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, rect.width));
+
+    const maxWidth = Math.max(MIN_PANEL_WIDTH, viewportWidth - (MIN_LEFT_OFFSET * 2));
+    const defaultWidth = clampValue(rect.width || MIN_PANEL_WIDTH, MIN_PANEL_WIDTH, maxWidth);
+    let width = saved?.width ?? defaultWidth;
+    width = clampValue(width, MIN_PANEL_WIDTH, maxWidth);
 
     const maxLeft = Math.max(MIN_LEFT_OFFSET, viewportWidth - width - MIN_LEFT_OFFSET);
-    const maxTop = Math.max(MIN_LEFT_OFFSET, viewportHeight - PANEL_ESTIMATED_HEIGHT - MIN_LEFT_OFFSET);
+    const defaultLeft = clampValue(viewportWidth - width - MIN_LEFT_OFFSET, MIN_LEFT_OFFSET, maxLeft);
+    let left = saved?.left ?? defaultLeft;
+    left = clampValue(left, MIN_LEFT_OFFSET, maxLeft);
 
-    const saved = storedPositionRef.current;
-    let left: number;
-    let top: number;
+    const defaultTopCandidate = rect.top - DEFAULT_VERTICAL_OFFSET;
+    const maxTopForMinHeight = Math.max(MIN_LEFT_OFFSET, viewportHeight - MIN_PANEL_HEIGHT - MIN_LEFT_OFFSET);
+    let top = saved?.top ?? defaultTopCandidate;
+    top = clampValue(top, MIN_LEFT_OFFSET, maxTopForMinHeight);
 
-    if (saved) {
-      left = clampValue(saved.left, MIN_LEFT_OFFSET, maxLeft);
-      top = clampValue(saved.top, MIN_LEFT_OFFSET, maxTop);
+    const maxHeightForTop = Math.max(MIN_PANEL_HEIGHT, viewportHeight - top - MIN_LEFT_OFFSET);
+    let height = saved?.height ?? DEFAULT_PANEL_HEIGHT;
+    height = clampValue(height, MIN_PANEL_HEIGHT, maxHeightForTop);
 
-      if (left !== saved.left || top !== saved.top) {
-        persistPosition(left, top);
-      }
-    } else {
-      const defaultLeft = clampValue(viewportWidth - width - MIN_LEFT_OFFSET, MIN_LEFT_OFFSET, maxLeft);
-      const defaultTopCandidate = rect.top - DEFAULT_VERTICAL_OFFSET;
-      const defaultTop = clampValue(defaultTopCandidate, MIN_LEFT_OFFSET, maxTop);
-      left = defaultLeft;
-      top = defaultTop;
+    const allowedTopWithHeight = Math.max(MIN_LEFT_OFFSET, viewportHeight - height - MIN_LEFT_OFFSET);
+    if (top > allowedTopWithHeight) {
+      top = allowedTopWithHeight;
+    }
+
+    const adjustedMaxHeight = Math.max(MIN_PANEL_HEIGHT, viewportHeight - top - MIN_LEFT_OFFSET);
+    if (height > adjustedMaxHeight) {
+      height = adjustedMaxHeight;
+    }
+
+    const shouldPersist = !saved
+      || saved.left !== left
+      || saved.top !== top
+      || saved.width !== width
+      || saved.height !== height;
+
+    if (shouldPersist) {
+      persistPosition(left, top, width, height);
     }
 
     setPanelPosition({
       left,
       top,
       width,
+      height,
     });
   });
 
@@ -339,6 +382,39 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
     setIsDragging(true);
   });
 
+  const handleResizeMouseDown = useLastCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!panelPositionRef.current) {
+      return;
+    }
+
+    event.preventDefault();
+
+    resizeStateRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      originWidth: panelPositionRef.current.width,
+      originHeight: panelPositionRef.current.height,
+    };
+
+    setIsResizing(true);
+  });
+
+  const handleResizeTouchStart = useLastCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (!panelPositionRef.current || event.touches.length !== 1) {
+      return;
+    }
+
+    const touch = event.touches[0];
+    resizeStateRef.current = {
+      startX: touch.clientX,
+      startY: touch.clientY,
+      originWidth: panelPositionRef.current.width,
+      originHeight: panelPositionRef.current.height,
+    };
+
+    setIsResizing(true);
+  });
+
   useEffect(() => {
     if (!isDragging) {
       return undefined;
@@ -350,11 +426,14 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
       }
 
       const viewportWidth = document.documentElement?.clientWidth || window.innerWidth || panelPositionRef.current.width;
-      const viewportHeight = document.documentElement?.clientHeight || window.innerHeight || PANEL_ESTIMATED_HEIGHT;
+      const viewportHeight = document.documentElement?.clientHeight || window.innerHeight
+        || panelPositionRef.current.height
+        || DEFAULT_PANEL_HEIGHT;
       const width = panelPositionRef.current.width;
+      const height = panelPositionRef.current.height;
 
       const maxLeft = Math.max(MIN_LEFT_OFFSET, viewportWidth - width - MIN_LEFT_OFFSET);
-      const maxTop = Math.max(MIN_LEFT_OFFSET, viewportHeight - PANEL_ESTIMATED_HEIGHT - MIN_LEFT_OFFSET);
+      const maxTop = Math.max(MIN_LEFT_OFFSET, viewportHeight - height - MIN_LEFT_OFFSET);
 
       const deltaX = clientX - dragStateRef.current.startX;
       const deltaY = clientY - dragStateRef.current.startY;
@@ -366,6 +445,7 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
         left: nextLeft,
         top: nextTop,
         width,
+        height,
       });
     };
 
@@ -388,7 +468,12 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
       dragStateRef.current = undefined;
 
       if (panelPositionRef.current) {
-        persistPosition(panelPositionRef.current.left, panelPositionRef.current.top);
+        persistPosition(
+          panelPositionRef.current.left,
+          panelPositionRef.current.top,
+          panelPositionRef.current.width,
+          panelPositionRef.current.height,
+        );
       }
 
       document.body.classList.remove('cursor-grabbing');
@@ -411,9 +496,95 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
       document.removeEventListener('touchcancel', handleEnd);
       document.removeEventListener('blur', handleEnd);
       document.body.classList.remove('cursor-grabbing');
-      
+
     };
   }, [isDragging, persistPosition, setPanelPosition]);
+
+  useEffect(() => {
+    if (!isResizing) {
+      return undefined;
+    }
+
+    const resizePanel = (clientX: number, clientY: number) => {
+      if (!resizeStateRef.current || !panelPositionRef.current) {
+        return;
+      }
+
+      const viewportWidth = document.documentElement?.clientWidth || window.innerWidth || panelPositionRef.current.width;
+      const viewportHeight = document.documentElement?.clientHeight || window.innerHeight
+        || panelPositionRef.current.height
+        || DEFAULT_PANEL_HEIGHT;
+
+      const deltaX = clientX - resizeStateRef.current.startX;
+      const deltaY = clientY - resizeStateRef.current.startY;
+
+      const maxWidth = Math.max(MIN_PANEL_WIDTH, viewportWidth - panelPositionRef.current.left - MIN_LEFT_OFFSET);
+      const nextWidth = clampValue(
+        resizeStateRef.current.originWidth + deltaX,
+        MIN_PANEL_WIDTH,
+        maxWidth,
+      );
+
+      const maxHeight = Math.max(MIN_PANEL_HEIGHT, viewportHeight - panelPositionRef.current.top - MIN_LEFT_OFFSET);
+      const nextHeight = clampValue(resizeStateRef.current.originHeight + deltaY, MIN_PANEL_HEIGHT, maxHeight);
+
+      setPanelPosition({
+        left: panelPositionRef.current.left,
+        top: panelPositionRef.current.top,
+        width: nextWidth,
+        height: nextHeight,
+      });
+    };
+
+    const handleMouseMove = (event: MouseEvent) => {
+      event.preventDefault();
+      resizePanel(event.clientX, event.clientY);
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (event.touches.length !== 1) {
+        return;
+      }
+
+      const touch = event.touches[0];
+      resizePanel(touch.clientX, touch.clientY);
+    };
+
+    const handleEnd = () => {
+      setIsResizing(false);
+      resizeStateRef.current = undefined;
+
+      if (panelPositionRef.current) {
+        persistPosition(
+          panelPositionRef.current.left,
+          panelPositionRef.current.top,
+          panelPositionRef.current.width,
+          panelPositionRef.current.height,
+        );
+      }
+
+      document.body.style.cursor = '';
+    };
+
+    document.body.style.cursor = 'nwse-resize';
+
+    document.addEventListener('mousemove', handleMouseMove, { passive: false });
+    document.addEventListener('mouseup', handleEnd, { passive: true });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleEnd, { passive: true });
+    document.addEventListener('touchcancel', handleEnd, { passive: true });
+    document.addEventListener('blur', handleEnd, { passive: true });
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleEnd);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleEnd);
+      document.removeEventListener('touchcancel', handleEnd);
+      document.removeEventListener('blur', handleEnd);
+      document.body.style.cursor = '';
+    };
+  }, [isResizing, persistPosition, setPanelPosition]);
 
   useEffect(() => {
     const handleFocusIn = (event: FocusEvent) => {
@@ -459,6 +630,7 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
       isHovering,
       isVisible,
       isDragging,
+      isResizing,
       panelPosition,
     };
 
@@ -477,6 +649,7 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
     isGlobalEnabled,
     isActivationAllowed,
     isVisible,
+    isResizing,
     panelPosition,
     quickReplies,
   ]);
@@ -501,6 +674,8 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
         quickReplies: quickReplies.length,
         isInputFocused,
         isHovering,
+        isDragging,
+        isResizing,
         panelPosition,
       };
 
@@ -518,8 +693,9 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
           styles.panel,
           styles.panelVisible,
           isDragging && styles.panelDragging,
+          isResizing && styles.panelResizing,
         )}
-        style={`left: ${panelPosition.left}px; top: ${panelPosition.top}px; width: ${panelPosition.width}px;`}
+        style={`left: ${panelPosition.left}px; top: ${panelPosition.top}px; width: ${panelPosition.width}px; height: ${panelPosition.height}px;`}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
@@ -550,6 +726,11 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
             </button>
           ))}
         </div>
+        <div
+          className={styles.resizeHandle}
+          onMouseDown={handleResizeMouseDown}
+          onTouchStart={handleResizeTouchStart}
+        />
       </div>
     </Portal>
   );

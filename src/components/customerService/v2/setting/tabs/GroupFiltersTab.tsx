@@ -58,7 +58,7 @@ const GroupFiltersTab: FC<Props> = ({
       text: lang('CustomerServiceAllTags'),
     }];
 
-    if (!orderedFolderIds || !chatFolders) {
+    if (!orderedFolderIds?.length) {
       return options;
     }
 
