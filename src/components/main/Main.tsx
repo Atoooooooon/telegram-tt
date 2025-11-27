@@ -91,6 +91,7 @@ import GiveawayModal from './premium/GiveawayModal.async';
 import PremiumMainModal from './premium/PremiumMainModal.async';
 import StarsGiftingPickerModal from './premium/StarsGiftingPickerModal.async';
 import SafeLinkModal from './SafeLinkModal.async';
+import CustomerServiceModal from '../customerService/CustomerServiceModal';
 import ConfettiContainer from './visualEffects/ConfettiContainer';
 import SnapEffectContainer from './visualEffects/SnapEffectContainer';
 import WaveContainer from './visualEffects/WaveContainer';
@@ -139,6 +140,7 @@ type StateProps = {
   isGiveawayModalOpen?: boolean;
   isDeleteMessageModalOpen?: boolean;
   isStarsGiftingPickerModal?: boolean;
+  isCustomerServiceModalOpen?: boolean;
   isCurrentUserPremium?: boolean;
   noRightColumnAnimation?: boolean;
   withInterfaceAnimations?: boolean;
@@ -189,6 +191,7 @@ const Main = ({
   isGiveawayModalOpen,
   isDeleteMessageModalOpen,
   isStarsGiftingPickerModal,
+  isCustomerServiceModalOpen,
   isPaymentModalOpen,
   isReceiptModalOpen,
   isReactionPickerOpen,
@@ -239,6 +242,7 @@ const Main = ({
     loadGenericEmojiEffects,
     closePaymentModal,
     clearReceipt,
+    closeCustomerService,
     checkAppVersion,
     openThread,
     toggleLeftColumn,
@@ -630,6 +634,7 @@ const Main = ({
       <DeleteFolderDialog folder={deleteFolderDialog} />
       <ReactionPicker isOpen={isReactionPickerOpen} />
       <DeleteMessageModal isOpen={isDeleteMessageModalOpen} />
+      <CustomerServiceModal isOpen={isCustomerServiceModalOpen} onClose={closeCustomerService} />
     </div>
   );
 };
@@ -657,6 +662,7 @@ export default memo(withGlobal<OwnProps>(
       giveawayModal,
       deleteMessageModal,
       starsGiftingPickerModal,
+      isCustomerServiceModalOpen,
       isMasterTab,
       payment,
       limitReachedModal,
@@ -710,6 +716,7 @@ export default memo(withGlobal<OwnProps>(
       isGiveawayModalOpen: giveawayModal?.isOpen,
       isDeleteMessageModalOpen: Boolean(deleteMessageModal),
       isStarsGiftingPickerModal: starsGiftingPickerModal?.isOpen,
+      isCustomerServiceModalOpen,
       limitReached: limitReachedModal?.limit,
       isPaymentModalOpen: payment.isPaymentModalOpen,
       isReceiptModalOpen: Boolean(payment.receipt),

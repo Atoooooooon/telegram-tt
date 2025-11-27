@@ -23,6 +23,18 @@ body {
 
   user-select: none;
 
+  // 强制允许特定文本内容区域的文本选择，覆盖全局禁用
+  .text-content,
+  .message-content,
+  .can-select-text,
+  .messageContent {
+    user-select: text !important;
+
+    * {
+      user-select: text !important;
+    }
+  }
+
   overflow: hidden;
   overscroll-behavior: none;
 

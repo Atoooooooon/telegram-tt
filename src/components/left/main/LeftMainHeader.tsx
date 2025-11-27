@@ -106,6 +106,7 @@ const LeftMainHeader = ({
     openSettingsScreen,
     searchMessagesGlobal,
     closeForumPanel,
+    openCustomerService,
   } = getActions();
 
   const oldLang = useOldLang();
@@ -202,6 +203,10 @@ const LeftMainHeader = ({
     }
   });
 
+  const handleCustomerService = useLastCallback(() => {
+    openCustomerService();
+  });
+
   const isSearchRelevant = Boolean(globalSearchChatId)
     || content === LeftColumnContent.GlobalSearch
     || content === LeftColumnContent.Contacts;
@@ -288,6 +293,17 @@ const LeftMainHeader = ({
           />
         </SearchInput>
         {isCurrentUserPremium && <StatusButton />}
+        <Button
+          round
+          ripple={!isMobile}
+          size="smaller"
+          color="translucent"
+          ariaLabel={lang('CustomerService')}
+          onClick={handleCustomerService}
+          className={buildClassName(!isCurrentUserPremium && !hasPasscode && 'extra-spacing')}
+        >
+          <Icon name="phone" />
+        </Button>
         {hasPasscode && (
           <Button
             round

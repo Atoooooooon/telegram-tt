@@ -225,6 +225,7 @@ type OwnProps = {
   editableInputId: string;
   className?: string;
   inputPlaceholder?: TeactNode | string;
+  disableClipboardPaste?: boolean;
   onDropHide?: NoneToVoidFunction;
   onForward?: NoneToVoidFunction;
   onFocus?: NoneToVoidFunction;
@@ -1088,6 +1089,10 @@ const Composer = ({
     }
   }, [chatId, handleStoryPickerContextMenuHide, isReactionPickerOpen, storyId, storyReactionPickerAnchor]);
 
+  // 客服模块的Composer不受粘贴禁用限制
+  const isCustomerServiceComposer = className?.includes('customer-service-composer-input');
+  const shouldDisableClipboardPaste = disableClipboardPaste && !isCustomerServiceComposer;
+
   const { className: peerColorClass, style: peerColorStyle } = usePeerColor({
     peer: sendAsPeer || currentUser,
     theme,
@@ -1096,7 +1101,7 @@ const Composer = ({
   const hasGifFromPicker = attachments.some((a) => a.gif);
 
   useClipboardPaste(
-    isForCurrentMessageList || isInStoryViewer,
+    (isForCurrentMessageList || isInStoryViewer) && !shouldDisableClipboardPaste,
     insertFormattedTextAndUpdateCursor,
     handleSetAttachments,
     setNextText,
@@ -2711,6 +2716,9 @@ export default memo(withGlobal<OwnProps>(
       && threadId === currentMessageList?.threadId
       && messageListType === currentMessageList?.type
       && !isStoryViewerOpen;
+
+    // 如果客服模块正在处理这个聊天，则禁用其他Composer的粘贴功能
+    const disableClipboardPaste = global.customerServiceActiveChat === chatId;
     const user = selectUser(global, chatId);
     const canSendVoiceByPrivacy = (user && !userFullInfo?.noVoiceMessages) ?? true;
     const slowMode = chatFullInfo?.slowMode;
