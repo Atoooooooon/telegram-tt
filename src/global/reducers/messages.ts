@@ -106,7 +106,14 @@ export function updateCurrentMessageList<T extends GlobalState>(
       const previous = messageLists[messageLists.length - 2];
 
       if (previous?.chatId === chatId && previous.threadId === threadId && previous.type === type) {
-        newMessageLists = messageLists.slice(0, -1);
+        if (resolvedIsHalfScreen && current?.chatId !== chatId) {
+          const beforePrevious = messageLists.slice(0, -2);
+          newMessageLists = current
+            ? [...beforePrevious, current, nextMessageList]
+            : [...beforePrevious, nextMessageList];
+        } else {
+          newMessageLists = messageLists.slice(0, -1);
+        }
       } else {
         newMessageLists = [...messageLists, nextMessageList];
       }
