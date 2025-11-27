@@ -118,17 +118,24 @@
 .quickReplyCreator {
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
+  gap: 0.75rem;
 }
 
+.quickReplyAddFields {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
 
 .quickReplyAddInput {
-  margin-bottom: 0rem !important;
+  margin-bottom: 0 !important;
   :global(.form-control) {
     padding-left: 0.5rem;
-    margin-bottom: 0rem;
-    width: 35rem;
+    margin-bottom: 0;
+    width: 100%;
   }
 }
 
@@ -165,6 +172,7 @@
   inset: 0 auto 0 0;
   width: 0.3rem;
   border-radius: 0.3rem;
+  margin-left: 1px;
 }
 
 .quickReplyItem[data-mode='send']::before {
@@ -178,13 +186,15 @@
 .quickReplyTextWrapper {
   flex: 1;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 0.5rem;
   min-height: 1.9rem;
 }
 
 .quickReplyTextInput {
   width: 100%;
   margin-bottom: 0 !important;
+
   :global(.input-group) {
     width: 100%;
     margin: 0;
@@ -195,10 +205,11 @@
 
   :global(.form-control) {
     width: 100%;
+    height: 100%;
     border: none;
     background: transparent;
-    padding: 0;
-    line-height: 1.4;
+    padding: 0 0 0 0.5rem;
+    line-height: 0.6;
     font-size: 0.9rem;
     color: var(--color-text);
     text-overflow: ellipsis;

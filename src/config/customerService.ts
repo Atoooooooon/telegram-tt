@@ -36,14 +36,17 @@ export const CUSTOMER_SERVICE_CONFIG = {
   QUICK_REPLIES: [
     {
       text: '您好，请问有什么可以帮助您的？',
+      englishText: 'Hello, how can I help you?',
       mode: 'send' as const,
     },
     {
       text: '感谢反馈，我们会尽快处理。',
+      englishText: 'Thanks for your feedback, we will handle it shortly.',
       mode: 'send' as const,
     },
     {
       text: '我们已收到您的消息，请您稍等。',
+      englishText: 'We have received your message, please wait a moment.',
       mode: 'send' as const,
     },
   ] satisfies readonly CustomerServiceQuickReply[],

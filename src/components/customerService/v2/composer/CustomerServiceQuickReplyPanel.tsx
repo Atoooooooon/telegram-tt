@@ -335,9 +335,22 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
     }
   });
 
-  const handleSelectQuickReply = useLastCallback((reply: CustomerServiceQuickReply) => {
+  const handleSelectQuickReply = useLastCallback((
+    reply: CustomerServiceQuickReply,
+    overrideText?: string,
+  ) => {
+    const baseText = overrideText ?? reply.text;
+    const trimmedText = baseText.trim();
+    if (!trimmedText) {
+      setIsHovering(false);
+      return;
+    }
+
     applyCustomerServiceQuickReply({
-      quickReply: reply,
+      quickReply: {
+        ...reply,
+        text: trimmedText,
+      },
     });
     setIsHovering(false);
     focusComposerInput();
@@ -707,17 +720,46 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
           <span>{lang('CustomerServiceQuickReplies')}</span>
         </div>
         <div className={styles.list}>
-          {quickReplies.map((reply, index) => (
-            <button
-              key={`quick-reply-${index}`}
-              type="button"
-              className={styles.item}
-              data-mode={reply.mode}
-              onClick={() => handleSelectQuickReply(reply)}
-            >
-              <span className={styles.itemText}>{reply.text}</span>
-            </button>
-          ))}
+          {quickReplies.map((reply, index) => {
+            const englishText = (reply.englishText || '').trim();
+            const hasEnglish = Boolean(englishText);
+
+            return (
+              <div
+                key={`quick-reply-${index}`}
+                className={styles.item}
+                data-mode={reply.mode}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleSelectQuickReply(reply)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    handleSelectQuickReply(reply);
+                  }
+                }}
+              >
+                <span className={styles.itemText}>{reply.text}</span>
+                {hasEnglish && (
+                  <div className={styles.itemEnglishRow}>
+                    <button
+                      type="button"
+                      className={styles.itemEnglishButton}
+                      data-mode={reply.mode}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleSelectQuickReply(reply, englishText);
+                      }}
+                      aria-label={lang('CustomerServiceQuickReplyEnglishAriaLabel')}
+                    >
+                      {lang('CustomerServiceQuickReplyEnglishTag')}
+                    </button>
+                    <span className={styles.itemEnglishText}>{englishText}</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
         <div
           className={styles.resizeHandle}

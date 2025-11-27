@@ -314,6 +314,9 @@ export interface LangPair {
   'CustomerServiceQuickReplyModeInsert': undefined;
   'CustomerServiceQuickReplyModeLabel': undefined;
   'CustomerServiceQuickReplyPanelHint': undefined;
+  'CustomerServiceQuickReplyEnglishPlaceholder': undefined;
+  'CustomerServiceQuickReplyEnglishTag': undefined;
+  'CustomerServiceQuickReplyEnglishAriaLabel': undefined;
   'CustomerServiceAllTags': undefined;
   'CustomerServiceRemoveFilteredUser': undefined;
   'CustomerServiceRemoveRegex': undefined;

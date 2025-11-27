@@ -30,6 +30,7 @@ const QuickRepliesTab: FC<Props> = ({
 }) => {
   const lang = useLang();
   const [newQuickReply, setNewQuickReply] = useState('');
+  const [newQuickReplyEnglish, setNewQuickReplyEnglish] = useState('');
 
   const safeQuickReplies = quickReplies || [];
 
@@ -47,22 +48,36 @@ const QuickRepliesTab: FC<Props> = ({
     );
   };
 
+  const handleQuickReplyEnglishChange = (index: number, value: string) => {
+    onQuickRepliesChange(
+      safeQuickReplies.map((reply, i) => (i === index
+        ? { ...reply, englishText: value }
+        : reply)),
+    );
+  };
+
   const handleRemoveQuickReply = (index: number) => {
     onQuickRepliesChange(safeQuickReplies.filter((_, i) => i !== index));
   };
 
   const handleAddQuickReply = () => {
     const trimmed = newQuickReply.trim();
+    const trimmedEnglish = newQuickReplyEnglish.trim();
     if (!trimmed) {
       return;
     }
 
     onQuickRepliesChange([
       ...safeQuickReplies,
-      { text: trimmed, mode: 'send' },
+      {
+        text: trimmed,
+        englishText: trimmedEnglish || undefined,
+        mode: 'send',
+      },
     ]);
 
     setNewQuickReply('');
+    setNewQuickReplyEnglish('');
   };
 
   return (
@@ -88,12 +103,20 @@ const QuickRepliesTab: FC<Props> = ({
       </div>
         <div className={styles.addSection}>
         <div className={styles.quickReplyCreator}>
-          <InputText
-            value={newQuickReply}
-            onChange={(e) => setNewQuickReply(e.currentTarget.value)}
-            placeholder={lang('CustomerServiceQuickReplyPlaceholder')}
-            className={styles.quickReplyAddInput}
-          />
+          <div className={styles.quickReplyAddFields}>
+            <InputText
+              value={newQuickReply}
+              onChange={(e) => setNewQuickReply(e.currentTarget.value)}
+              placeholder={lang('CustomerServiceQuickReplyPlaceholder')}
+              className={styles.quickReplyAddInput}
+            />
+            <InputText
+              value={newQuickReplyEnglish}
+              onChange={(e) => setNewQuickReplyEnglish(e.currentTarget.value)}
+              placeholder={lang('CustomerServiceQuickReplyEnglishPlaceholder')}
+              className={styles.quickReplyAddInput}
+            />
+          </div>
           <div className={styles.addReplyWrapper}>
             <Button
               size="smaller"
@@ -123,6 +146,12 @@ const QuickRepliesTab: FC<Props> = ({
                   onChange={(e) => handleQuickReplyChange(index, e.currentTarget.value)}
                   className={styles.quickReplyTextInput}
                   placeholder={lang('CustomerServiceQuickReplyPlaceholder')}
+                />
+                <InputText
+                  value={reply.englishText || ''}
+                  onChange={(e) => handleQuickReplyEnglishChange(index, e.currentTarget.value)}
+                  className={styles.quickReplyTextInput}
+                  placeholder={lang('CustomerServiceQuickReplyEnglishPlaceholder')}
                 />
               </div>
               <div className={styles.quickReplyActions}>

@@ -42,14 +42,25 @@ export function normalizeCustomerServiceQuickReplies(raw: unknown): CustomerServ
     }
 
     if (isRecord(item) && typeof item.text === 'string') {
+      const record = item as Record<string, unknown>;
       const text = item.text.trim();
       if (!text) {
         return result;
       }
 
+      let englishText: string | undefined;
+      if (typeof item.englishText === 'string') {
+        englishText = item.englishText.trim();
+      } else if (typeof record.textEn === 'string') {
+        englishText = (record.textEn as string).trim();
+      } else if (typeof record.enText === 'string') {
+        englishText = (record.enText as string).trim();
+      }
+
       result.push({
         text,
         mode: item.mode === 'insert' ? 'insert' : 'send',
+        englishText: englishText || undefined,
       });
     }
 

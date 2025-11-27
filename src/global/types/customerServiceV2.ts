@@ -5,6 +5,7 @@ export type CustomerServiceQuickReplyMode = 'send' | 'insert';
 export type CustomerServiceQuickReply = {
   text: string;
   mode: CustomerServiceQuickReplyMode;
+  englishText?: string;
 };
 
 /**

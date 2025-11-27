@@ -370,6 +370,9 @@
 "CustomerServiceQuickReplyModeInsert" = "填入输入框";
 "CustomerServiceQuickReplyModeLabel" = "回复方式";
 "CustomerServiceQuickReplyPanelHint" = "全局开关";
+"CustomerServiceQuickReplyEnglishPlaceholder" = "e.g. Hello, how can I help you?";
+"CustomerServiceQuickReplyEnglishTag" = "英";
+"CustomerServiceQuickReplyEnglishAriaLabel" = "Send English quick reply";
 "CustomerServiceAllTags" = "所有标签";
 "CustomerServiceRemoveFilteredUser" = "移除过滤用户";
 "CustomerServiceRemoveRegex" = "删除规则";
