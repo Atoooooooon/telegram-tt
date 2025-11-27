@@ -1,8 +1,10 @@
 import type { FC } from '../../../../lib/teact/teact';
-import { memo } from '../../../../lib/teact/teact';
+import { memo, useCallback, useMemo } from '../../../../lib/teact/teact';
 import { getActions, withGlobal } from '../../../../global';
 
 import type { ApiMessage } from '../../../../api/types';
+import type { IAlbum } from '../../../../types';
+import type { ObserveFn } from '../../../../hooks/useIntersectionObserver';
 
 import buildClassName from '../../../../util/buildClassName';
 import { getCurrentTabId } from '../../../../util/establishMultitabRole';
@@ -16,9 +18,9 @@ import {
 
 import useLang from '../../../../hooks/useLang';
 import useLastCallback from '../../../../hooks/useLastCallback';
-import { useMemo } from '../../../../lib/teact/teact';
 
 import CustomerServiceSourceBadge from '../shared/CustomerServiceSourceBadge';
+import { groupMessages, isAlbum as isAlbumEntry } from '../../../middle/helpers/groupMessages';
 import Message from '../../../middle/message/Message';
 import Button from '../../../ui/Button';
 import Icon from '../../../common/icons/Icon';
@@ -69,6 +71,37 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
     }, 300);
   });
 
+  const observeIntersectionForLoading = useCallback<ObserveFn>((element, targetCallback) => {
+    if (targetCallback) {
+      targetCallback({
+        isIntersecting: true,
+        intersectionRatio: 1,
+        target: element,
+      } as IntersectionObserverEntry);
+    }
+
+    return () => undefined;
+  }, []);
+
+  const messageEntries = useMemo<(ApiMessage | IAlbum)[]>(() => {
+    if (!messages.length) {
+      return [];
+    }
+
+    const groupedMessages = groupMessages(messages);
+    const flattened: (ApiMessage | IAlbum)[] = [];
+
+    groupedMessages.forEach((dateGroup) => {
+      dateGroup.senderGroups.forEach((senderGroup) => {
+        senderGroup.forEach((item) => {
+          flattened.push(item);
+        });
+      });
+    });
+
+    return flattened;
+  }, [messages]);
+
   // Performance optimization: Memoize message rendering threshold
   const hasLargeMessageCount = useMemo(() => messageCount > 1000, [messageCount]);
 
@@ -97,13 +130,22 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
         </div>
       )}
       <div className={styles.messageList}>
-        {messages.map((message, index) => {
-          const isActiveContext = activeContextChatId === message.chatId
-            && activeContextMessageId === message.id;
+        {messageEntries.map((messageOrAlbum, index) => {
+          const album = isAlbumEntry(messageOrAlbum) ? messageOrAlbum : undefined;
+          const message = album ? album.mainMessage : messageOrAlbum as ApiMessage;
+          const containsContextMessage = activeContextMessageId !== undefined
+            ? album
+              ? album.messages.some((albumMessage) => albumMessage.id === activeContextMessageId)
+              : activeContextMessageId === message.id
+            : false;
+          const isActiveContext = activeContextChatId === message.chatId && containsContextMessage;
+          const key = album
+            ? `cs-msg-${message.chatId}-album-${album.albumId}`
+            : `cs-msg-${message.chatId}-${message.id}-${index}`;
 
           return (
             <div
-              key={`cs-msg-${message.chatId}-${message.id}-${index}`}
+              key={key}
               className={buildClassName(
                 styles.messageWrapper,
                 isActiveContext && styles.activeContext,
@@ -116,10 +158,12 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
               <div className={styles.messageContent}>
                 <Message
                   message={message}
+                  album={album}
                   threadId={message.chatId}
                   messageListType="thread"
                   noComments
                   noReplies
+                  observeIntersectionForLoading={observeIntersectionForLoading}
                   appearanceOrder={index}
                   isJustAdded={false}
                   isFirstInGroup={false}
@@ -145,7 +189,15 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
                     round
                     size="tiny"
                     color="translucent"
-                    onClick={() => handleRemoveMessage(message.chatId, message.id)}
+                    onClick={() => {
+                      if (album) {
+                        album.messages.forEach((albumMessage) => {
+                          handleRemoveMessage(albumMessage.chatId, albumMessage.id);
+                        });
+                      } else {
+                        handleRemoveMessage(message.chatId, message.id);
+                      }
+                    }}
                     ariaLabel={lang('RemoveFromCustomerService')}
                   >
                     <i className="icon icon-close" />
