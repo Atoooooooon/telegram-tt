@@ -1,24 +1,24 @@
-import type React from '../../../lib/teact/teact';
-import { memo, useEffect, useMemo, useState } from '../../../lib/teact/teact';
-import { getActions, withGlobal } from '../../../global';
+import type React from '../../../../lib/teact/teact';
+import { memo, useEffect, useMemo, useState } from '../../../../lib/teact/teact';
+import { getActions, withGlobal } from '../../../../global';
 
-import type { ApiChat } from '../../../api/types';
+import type { ApiChat } from '../../../../api/types';
 
-import { CUSTOMER_SERVICE_CONFIG } from '../../../config/customerService';
-import { selectCustomerServiceV2Settings } from '../../../global/selectors/customerServiceV2';
-import { selectTabState } from '../../../global/selectors/tabs';
-import buildClassName from '../../../util/buildClassName';
-import { getChatFolderIds } from '../../../util/folderManager';
+import { CUSTOMER_SERVICE_CONFIG } from '../../../../config/customerService';
+import { selectCustomerServiceV2Settings } from '../../../../global/selectors/customerServiceV2';
+import { selectTabState } from '../../../../global/selectors/tabs';
+import buildClassName from '../../../../util/buildClassName';
+import { getChatFolderIds } from '../../../../util/folderManager';
 
-import useLang from '../../../hooks/useLang';
-import useLastCallback from '../../../hooks/useLastCallback';
+import useLang from '../../../../hooks/useLang';
+import useLastCallback from '../../../../hooks/useLastCallback';
 
-import Icon from '../../common/icons/Icon';
-import Button from '../../ui/Button';
-import Checkbox from '../../ui/Checkbox';
-import InputText from '../../ui/InputText';
-import Modal from '../../ui/Modal';
-import TabList from '../../ui/TabList';
+import Icon from '../../../common/icons/Icon';
+import Button from '../../../ui/Button';
+import Checkbox from '../../../ui/Checkbox';
+import InputText from '../../../ui/InputText';
+import Modal from '../../../ui/Modal';
+import TabList from '../../../ui/TabList';
 
 import styles from './CustomerServiceSettingsModal.module.scss';
 

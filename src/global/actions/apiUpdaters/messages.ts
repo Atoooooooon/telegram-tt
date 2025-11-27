@@ -386,7 +386,7 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
 
           if (!isPaused && !isFiltered) {
             // 未暂停且通过过滤器，添加到客服模块
-            actions.addToCustomerService({ message: newMessage, chatId, tabId: currentTabId });
+            actions.addToCustomerServiceV2({ message: newMessage, chatId, tabId: currentTabId });
           } else if (isPaused) {
             console.log("Chat monitoring paused for:", chatId, "message:", message.id, "ignored (assist mode)");
           } else if (isFiltered) {

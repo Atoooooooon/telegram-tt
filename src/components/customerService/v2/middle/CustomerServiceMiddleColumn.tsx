@@ -7,7 +7,7 @@ import buildClassName from '../../../../util/buildClassName';
 import useAppLayout from '../../../../hooks/useAppLayout';
 import { useResize } from '../../../../hooks/useResize';
 
-import CustomerServiceSettingsModal from '../CustomerServiceSettingsModal';
+import CustomerServiceSettingsModal from '../setting/CustomerServiceSettingsModal';
 import CustomerServiceMessageList from './CustomerServiceMessageList';
 import CustomerServiceMiddleHeader from './CustomerServiceMiddleHeader';
 
