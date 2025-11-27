@@ -314,11 +314,33 @@ addActionHandler('syncCustomerServiceV2Message', (global, actions, payload): Act
 /**
  * Clear all Customer Service V2 messages
  */
-addActionHandler('clearCustomerServiceV2Messages', (global, actions, payload): ActionReturnType => {
+addActionHandler('clearCustomerServiceV2Messages', async (global, actions, payload): Promise<void> => {
   const { tabId = getCurrentTabId() } = payload || {};
 
   const cs = selectCustomerServiceV2State(global, tabId);
   const baseState = ensureCustomerServiceV2State(cs);
+
+  const markReadPromises = Object.entries(baseState.messagesByChatId || {}).map(([chatId, chatMessages]) => {
+    if (!chatMessages || chatMessages.length === 0) {
+      return undefined;
+    }
+
+    const chat = selectChat(global, chatId);
+    if (!chat) {
+      return undefined;
+    }
+
+    const maxMessageId = chatMessages.reduce((max, { id }) => (id > max ? id : max), 0);
+    if (!maxMessageId) {
+      return undefined;
+    }
+
+    return callApi('markMessageListRead', {
+      chat,
+      threadId: MAIN_THREAD_ID,
+      maxId: maxMessageId,
+    }).catch(() => undefined);
+  }).filter(Boolean) as Promise<unknown>[];
 
   const nextState: CustomerServiceV2State = {
     ...baseState,
@@ -326,16 +348,21 @@ addActionHandler('clearCustomerServiceV2Messages', (global, actions, payload): A
     messagesByChatId: {},
     messageCount: 0,
     lastSyncTimestamp: Date.now(),
-    pausedChats: baseState.settings?.mode === 'assist' ? {} : baseState.pausedChats,
   };
 
-  return updateTabState(
+  global = updateTabState(
     global,
     {
       customerServiceV2: nextState,
     },
     tabId,
   );
+
+  setGlobal(global);
+
+  if (markReadPromises.length > 0) {
+    await Promise.allSettled(markReadPromises);
+  }
 });
 
 /**
