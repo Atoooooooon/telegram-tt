@@ -241,7 +241,7 @@ const CustomerServiceCloudSyncModal: FC<Props> = ({ isOpen, onClose, onDownloade
             onClick={handleClose}
             disabled={isLoading}
           >
-            {lang('Cancel')}
+            {lang('CustomerServiceCloudSyncCancel')}
           </Button>
           {existingInfo ? (
             <>
@@ -251,6 +251,8 @@ const CustomerServiceCloudSyncModal: FC<Props> = ({ isOpen, onClose, onDownloade
                   color="translucent"
                   onClick={handleUploadExisting}
                   disabled={isLoading}
+                  loadingLabelKey={lang("CustomerServiceCloudSyncPleaseWait")}
+                  isLoading={isLoading}
                 >
                   <Icon name="reload" />
                   {lang('CustomerServiceCloudSyncUpdate')}
@@ -261,6 +263,7 @@ const CustomerServiceCloudSyncModal: FC<Props> = ({ isOpen, onClose, onDownloade
                 color="primary"
                 onClick={handleDownloadExisting}
                 isLoading={isLoading}
+                loadingLabelKey={lang("CustomerServiceCloudSyncPleaseWait")}
               >
                 <Icon name="cloud-download" />
                 {lang('CustomerServiceCloudSyncSync')}
@@ -272,6 +275,7 @@ const CustomerServiceCloudSyncModal: FC<Props> = ({ isOpen, onClose, onDownloade
               color="primary"
               onClick={handleDetectOrUpload}
               isLoading={isLoading}
+              loadingLabelKey={lang("CustomerServiceCloudSyncPleaseWait")}
             >
               <Icon name="cloud-download" />
               {lang('CustomerServiceCloudSyncStart')}

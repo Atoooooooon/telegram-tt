@@ -65,6 +65,7 @@ export type OwnProps = {
   iconName?: IconName;
   iconAlignment?: 'top' | 'bottom' | 'start' | 'end';
   iconClassName?: string;
+  loadingLabelKey?: string;
   onClick?: (e: ReactMouseEvent<HTMLButtonElement, MouseEvent>) => void;
   onContextMenu?: (e: ReactMouseEvent<HTMLButtonElement, MouseEvent>) => void;
   onMouseDown?: (e: ReactMouseEvent<HTMLButtonElement>) => void;
@@ -201,7 +202,7 @@ const Button = ({
     if (isLoading) {
       return (
         <div>
-          <span dir={isRtl ? 'auto' : undefined}>{lang('Cache.ClearProgress')}</span>
+          <span dir={isRtl ? 'auto' : undefined}>{lang(loadingLabelKey)}</span>
           <Spinner color={isText ? 'blue' : 'white'} />
         </div>
       );
