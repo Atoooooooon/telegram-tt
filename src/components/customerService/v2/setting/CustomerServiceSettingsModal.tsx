@@ -129,7 +129,6 @@ const CustomerServiceSettingsModal = ({
   });
 
   // 新添加的用户ID和正则规则输入
-  const [newUserId, setNewUserId] = useState('');
   const [newRegexFilter, setNewRegexFilter] = useState('');
   const [regexValidationError, setRegexValidationError] = useState('');
 
@@ -194,6 +193,37 @@ const CustomerServiceSettingsModal = ({
 
   // 标记是否已经初始化，避免覆盖用户编辑
   const [hasInitialized, setHasInitialized] = useState(false);
+  useEffect(() => {
+    if (!isOpen) {
+      setHasInitialized(false);
+      return;
+    }
+
+    if (hasInitialized) {
+      return;
+    }
+
+    if (savedSettings) {
+      setSettings({
+        monitoredChatIds: [...savedSettings.monitoredChatIds],
+        filteredUserIds: [...savedSettings.filteredUserIds],
+        regexFilters: savedSettings.regexFilters.map((pattern) => new RegExp(pattern.source, pattern.flags)),
+        mode: savedSettings.mode || 'oncall',
+        autoRead: savedSettings.autoRead || false,
+      });
+      setHasInitialized(true);
+      return;
+    }
+
+    setSettings({
+      monitoredChatIds: [...CUSTOMER_SERVICE_CONFIG.MONITORED_CHAT_IDS],
+      filteredUserIds: [...CUSTOMER_SERVICE_CONFIG.FILTERED_USER_IDS],
+      regexFilters: [...CUSTOMER_SERVICE_CONFIG.REGEX_FILTERS],
+      mode: 'oncall',
+      autoRead: false,
+    });
+    setHasInitialized(true);
+  }, [hasInitialized, isOpen, savedSettings]);
 
   const handleClose = useLastCallback(() => {
     setSelectedTagId('-1');
@@ -201,7 +231,6 @@ const CustomerServiceSettingsModal = ({
     setGroupSearchQuery('');
     setSearchError('');
     setSearchQuery('');
-    setNewUserId('');
     setNewRegexFilter('');
     setRegexValidationError('');
     setIsAllSelected(false);
@@ -298,10 +327,6 @@ const CustomerServiceSettingsModal = ({
     }));
   });
 
-  const handleUserId = useLastCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setNewUserId(e.currentTarget.value);
-  });
-
   const handleRegexFilter = useLastCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.currentTarget.value;
     setNewRegexFilter(value);
@@ -334,34 +359,6 @@ const CustomerServiceSettingsModal = ({
         ...prev,
         monitoredChatIds: [...new Set([...(prev.monitoredChatIds || []), ...allGroupIds])],
       }));
-    }
-  });
-
-  // 添加用户ID过滤
-  const handleAddUserId = useLastCallback(() => {
-    const trimmedInput = newUserId.trim();
-    if (!trimmedInput) return;
-
-    // 支持批量输入，用空格分隔多个ID
-    const userIds = trimmedInput.split(/\s+/).filter((id) => id.trim());
-    const validIds: string[] = [];
-
-    userIds.forEach((id) => {
-      const trimmedId = id.trim();
-      // 基本验证：检查是否为数字或以-开头的数字（群组ID）
-      const isValidId = /^-?\d+$/.test(trimmedId);
-      if (isValidId && !(settings.filteredUserIds || []).includes(trimmedId)) {
-        validIds.push(trimmedId);
-      }
-    });
-
-    // 批量添加有效的ID
-    if (validIds.length > 0) {
-      setSettings((prev) => ({
-        ...prev,
-        filteredUserIds: [...(prev.filteredUserIds || []), ...validIds],
-      }));
-      setNewUserId('');
     }
   });
 
@@ -494,14 +491,6 @@ const CustomerServiceSettingsModal = ({
     input.click();
   });
 
-  // 切换模式
-  const handleModeChange = useLastCallback((newMode: 'oncall' | 'assist') => {
-    setSettings((prev) => ({
-      ...prev,
-      mode: newMode,
-    }));
-  });
-
   // 切换自动已读
   const handleAutoReadChange = useLastCallback((checked: boolean) => {
     setSettings((prev) => ({
@@ -618,7 +607,6 @@ const CustomerServiceSettingsModal = ({
             color={isAllSelected ? 'translucent' : 'primary'}
             onClick={handleSelectAll}
             className={styles.selectAllButton}
-            style={{ paddingInline: '0.75rem', minWidth: 'auto' }}
           >
             <Icon name={isAllSelected ? 'close' : 'check'} />
             {isAllSelected ? lang('CustomerServiceDeselectAll') : lang('CustomerServiceSelectAll')}
@@ -830,27 +818,27 @@ const CustomerServiceSettingsModal = ({
       </div>
 
       <div className={styles.addSection}>
-          <div className={styles.regexAddInputWrapper}>
-              <InputText
-                value={newRegexFilter}
-                onChange={handleRegexFilter}
-                placeholder={lang('CustomerServiceRegexPlaceholder')}
-                className={styles.regexAddInput}
-                error={regexValidationError}
-              />
-            <div className={styles.addRexWrapper}>
-              <Button
-                size="smaller"
-                color="primary"
-                onClick={handleAddRegexFilter}
-                disabled={!newRegexFilter.trim() || Boolean(regexValidationError)}
-                className={styles.addButton}
-              >
-                <Icon name="add" />
-                {lang('Add')}
-              </Button>
-            </div>
+        <div className={styles.regexAddInputWrapper}>
+          <InputText
+            value={newRegexFilter}
+            onChange={handleRegexFilter}
+            placeholder={lang('CustomerServiceRegexPlaceholder')}
+            className={styles.regexAddInput}
+            error={regexValidationError}
+          />
+          <div className={styles.addRexWrapper}>
+            <Button
+              size="smaller"
+              color="primary"
+              onClick={handleAddRegexFilter}
+              disabled={!newRegexFilter.trim() || Boolean(regexValidationError)}
+              className={styles.addButton}
+            >
+              <Icon name="add" />
+              {lang('Add')}
+            </Button>
           </div>
+        </div>
         {regexValidationError && (
           <div className={styles.validationError}>
             <Icon name="warning" className={styles.errorIcon} />

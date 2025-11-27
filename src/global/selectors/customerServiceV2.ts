@@ -2,6 +2,7 @@ import type { ApiMessage } from '../../api/types';
 import type { GlobalState } from '../types';
 import { CUSTOMER_SERVICE_VIRTUAL_CHAT_ID, type CustomerServiceV2State } from '../types/customerServiceV2';
 
+import { loadCustomerServiceV2SettingsFromStorage } from '../helpers/customerServiceV2Settings';
 import { selectTabState } from './tabs';
 
 /**
@@ -101,7 +102,7 @@ export function selectCustomerServiceV2Settings(
   tabId?: number,
 ) {
   const cs = selectCustomerServiceV2State(global, tabId);
-  return cs?.settings;
+  return cs?.settings || loadCustomerServiceV2SettingsFromStorage();
 }
 
 /**
