@@ -701,13 +701,13 @@ const CustomerServiceSettingsModal = ({
 
       <div className={styles.addSection}>
         <div className={styles.searchContainer}>
-          <div className={styles.addInputWrapper}>
+          <div className={styles.userAddInputWrapper}>
             <Icon name="search" className={styles.inputIcon} />
             <InputText
               value={searchQuery}
               onChange={handleSearchChange}
               placeholder={lang('CustomerServiceSearchUsers')}
-              className={styles.addInput}
+              className={styles.userAddInput}
               onFocus={() => setIsSearchDropdownOpen(searchQuery.length > 0)}
             />
           </div>
@@ -830,30 +830,27 @@ const CustomerServiceSettingsModal = ({
       </div>
 
       <div className={styles.addSection}>
-        <div className={styles.inputGroup}>
-          <div className={styles.addInputWrapper}>
-            <Icon name="code" className={styles.inputIcon} />
-            <InputText
-              value={newRegexFilter}
-              onChange={handleRegexFilter}
-              placeholder={lang('CustomerServiceRegexPlaceholder')}
-              className={styles.addInput}
-              error={regexValidationError}
-            />
+          <div className={styles.regexAddInputWrapper}>
+              <InputText
+                value={newRegexFilter}
+                onChange={handleRegexFilter}
+                placeholder={lang('CustomerServiceRegexPlaceholder')}
+                className={styles.regexAddInput}
+                error={regexValidationError}
+              />
+            <div className={styles.addRexWrapper}>
+              <Button
+                size="smaller"
+                color="primary"
+                onClick={handleAddRegexFilter}
+                disabled={!newRegexFilter.trim() || Boolean(regexValidationError)}
+                className={styles.addButton}
+              >
+                <Icon name="add" />
+                {lang('Add')}
+              </Button>
+            </div>
           </div>
-          <div className={styles.addRexWrapper}>
-            <Button
-              size="smaller"
-              color="primary"
-              onClick={handleAddRegexFilter}
-              disabled={!newRegexFilter.trim() || Boolean(regexValidationError)}
-              className={styles.addButton}
-            >
-              <Icon name="add" />
-              {lang('Add')}
-            </Button>
-          </div>
-        </div>
         {regexValidationError && (
           <div className={styles.validationError}>
             <Icon name="warning" className={styles.errorIcon} />
@@ -862,33 +859,8 @@ const CustomerServiceSettingsModal = ({
         )}
       </div>
 
-      <div className={styles.presetSection}>
-        <h4 className={styles.presetTitle}>
-          <Icon name="star" className={styles.presetIcon} />
-          Quick Add Common Rules:
-        </h4>
-        <div className={styles.presetButtons}>
-          {presetRegexRules.map((rule, index) => {
-            const isAlreadyAdded = (settings.regexFilters || []).some((regex) => regex.source === rule.pattern);
-            return (
-              <Button
-                key={index}
-                size="tiny"
-                color={isAlreadyAdded ? 'translucent' : 'secondary'}
-                onClick={() => handleAddPresetRegex(rule.pattern)}
-                disabled={isAlreadyAdded}
-                className={styles.presetButton}
-                title={rule.description}
-              >
-                <code>{rule.pattern}</code>
-              </Button>
-            );
-          })}
-        </div>
-      </div>
-
       {(settings.regexFilters || []).length > 0 ? (
-        <div className={styles.filterList}>
+        <div className={styles.regexFilterList}>
           {(settings.regexFilters || []).map((regex, index) => {
             // 查找匹配的预设规则描述
             const presetRule = presetRegexRules.find((rule) => rule.pattern === regex.source);
@@ -904,15 +876,17 @@ const CustomerServiceSettingsModal = ({
                     )}
                   </div>
                 </div>
-                <Button
-                  size="tiny"
-                  color="translucent"
-                  onClick={() => handleRemoveRegexFilter(index)}
-                  className={styles.removeButton}
-                  ariaLabel={lang('Remove')}
-                >
-                  <Icon name="close" />
-                </Button>
+                <div>
+                  <Button
+                    size="tiny"
+                    color="translucent"
+                    onClick={() => handleRemoveRegexFilter(index)}
+                    className={styles.removeButton}
+                    ariaLabel={lang('Remove')}
+                  >
+                    <Icon name="close" />
+                  </Button>
+                </div>
               </div>
             );
           })}
