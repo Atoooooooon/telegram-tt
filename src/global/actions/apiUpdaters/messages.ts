@@ -372,10 +372,10 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
         const messageText = getMessageText(newMessage);
 
         // 检查该聊天是否被暂停监听（仅在辅助模式下）
-        const tabState = selectTabState(global, getCurrentTabId());
-        const customerService = tabState.customerService;
-        const isAssistMode = customerService?.settings?.mode === 'assist';
-        const isPaused = isAssistMode && customerService?.pausedChats?.[chatId];
+        const currentTabId = getCurrentTabId();
+        const customerServiceV2 = selectCustomerServiceV2State(global, currentTabId);
+        const isAssistMode = customerServiceV2?.settings?.mode === 'assist';
+        const isPaused = isAssistMode && customerServiceV2?.pausedChats?.[chatId];
 
         // 检查是否为监听的群组
         const isMonitored = isMonitoredChat(chatId, global);
@@ -386,12 +386,12 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
 
           if (!isPaused && !isFiltered) {
             // 未暂停且通过过滤器，添加到客服模块
-            actions.addToCustomerService({ message: newMessage, chatId });
+            actions.addToCustomerService({ message: newMessage, chatId, tabId: currentTabId });
           } else if (isPaused) {
             console.log("Chat monitoring paused for:", chatId, "message:", message.id, "ignored (assist mode)");
           } else if (isFiltered) {
             // 消息被过滤（在监听的群组中），检查是否启用自动已读功能
-            const shouldAutoRead = customerService?.settings?.autoRead || false;
+            const shouldAutoRead = customerServiceV2?.settings?.autoRead || false;
             if (shouldAutoRead) {
               console.log("Auto-reading filtered message in monitored chat:", message.id, "in chat:", chatId);
               const chat = selectChat(global, chatId);
@@ -413,6 +413,16 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
         } else {
           // 不是监听的群组，不做任何客服相关处理
           console.log("Message from non-monitored chat:", chatId, "message:", message.id, "ignored");
+        }
+
+        // Customer Service V2: Dual-write to CS V2 state (reuses same filter logic)
+        if (isMonitored) {
+          const isFiltered = shouldFilterMessage(chatId, message.senderId, messageText, global);
+          if (!isPaused && !isFiltered) {
+            // Add to CS V2 ephemeral state
+            const currentTabId = getCurrentTabId();
+            actions.addToCustomerServiceV2({ message: newMessage, chatId, tabId: currentTabId });
+          }
         }
       }
 
@@ -620,6 +630,10 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
       global = updateWithLocalMedia(global, chatId, id, false, message);
 
       setGlobal(global);
+
+      // Customer Service V2: Sync message edits
+      const currentTabId = getCurrentTabId();
+      actions.syncCustomerServiceV2Message({ message: newMessage, tabId: currentTabId });
 
       break;
     }
@@ -1598,6 +1612,10 @@ export function deleteMessages<T extends GlobalState>(
 
     setGlobal(global);
 
+    // Customer Service V2: Sync message deletions
+    const currentTabId = getCurrentTabId();
+    actions.removeCustomerServiceV2Messages({ messageIds: ids, tabId: currentTabId });
+
     const isAnimatingAsSnap = selectCanAnimateSnapEffect(global);
 
     setTimeout(() => {
@@ -1663,7 +1681,7 @@ export function deleteMessages<T extends GlobalState>(
 }
 
 function deleteScheduledMessages<T extends GlobalState>(
-  chatId: string, ids: number[], actions: RequiredGlobalActions, global: T,
+  chatId: string, ids: number[], _actions: RequiredGlobalActions, global: T,
 ) {
   ids.forEach((id) => {
     global = updateScheduledMessage(global, chatId, id, {

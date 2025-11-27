@@ -1231,6 +1231,7 @@ export interface ActionPayloads {
     shouldReplaceHistory?: boolean;
     shouldReplaceLast?: boolean;
     noForumTopicPanel?: boolean;
+    isHalfScreen?: boolean; // For customer service context panel
   } & WithTabId;
   openThread: {
     type?: MessageListType;
@@ -1258,6 +1259,7 @@ export interface ActionPayloads {
     shouldReplaceLast?: boolean;
     noForumTopicPanel?: boolean;
     isComments?: boolean;
+    isHalfScreen?: boolean; // For customer service context panel
   } & WithTabId;
   openPrivateChannel: {
     id: string;

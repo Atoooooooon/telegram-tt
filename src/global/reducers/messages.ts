@@ -72,12 +72,13 @@ export function updateCurrentMessageList<T extends GlobalState>(
   type: MessageListType = 'thread',
   shouldReplaceHistory?: boolean,
   shouldReplaceLast?: boolean,
+  isHalfScreen?: boolean,
   ...[tabId = getCurrentTabId()]: TabArgs<T>
 ): T {
   const { messageLists } = selectTabState(global, tabId);
   let newMessageLists: MessageList[];
   if (shouldReplaceHistory || (IS_TEST && !IS_MOCKED_CLIENT)) {
-    newMessageLists = chatId ? [{ chatId, threadId, type }] : [];
+    newMessageLists = chatId ? [{ chatId, threadId, type, isHalfScreen }] : [];
   } else if (chatId) {
     const current = messageLists[messageLists.length - 1];
     if (current?.chatId === chatId && current.threadId === threadId && current.type === type) {
@@ -85,14 +86,14 @@ export function updateCurrentMessageList<T extends GlobalState>(
     }
 
     if (current && (current.chatId === TMP_CHAT_ID || shouldReplaceLast)) {
-      newMessageLists = [...messageLists.slice(0, -1), { chatId, threadId, type }];
+      newMessageLists = [...messageLists.slice(0, -1), { chatId, threadId, type, isHalfScreen }];
     } else {
       const previous = messageLists[messageLists.length - 2];
 
       if (previous?.chatId === chatId && previous.threadId === threadId && previous.type === type) {
         newMessageLists = messageLists.slice(0, -1);
       } else {
-        newMessageLists = [...messageLists, { chatId, threadId, type }];
+        newMessageLists = [...messageLists, { chatId, threadId, type, isHalfScreen }];
       }
     }
   } else {

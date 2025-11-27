@@ -3818,6 +3818,9 @@ export interface LangPairWithVariables<V = LangVariable> {
   'UnofficialSecurityRisk': {
     'peer': V;
   };
+  'CustomerServiceFromChat': {
+    'chatName': V;
+  };
 }
 
 export interface LangPairPlural {

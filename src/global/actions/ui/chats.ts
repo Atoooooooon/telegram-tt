@@ -25,6 +25,7 @@ addActionHandler('processOpenChatOrThread', (global, actions, payload): ActionRe
     shouldReplaceHistory = false,
     shouldReplaceLast = false,
     noForumTopicPanel,
+    isHalfScreen,
     tabId = getCurrentTabId(),
   } = payload;
 
@@ -93,7 +94,9 @@ addActionHandler('processOpenChatOrThread', (global, actions, payload): ActionRe
 
   actions.updatePageTitle({ tabId });
 
-  return updateCurrentMessageList(global, chatId, threadId, type, shouldReplaceHistory, shouldReplaceLast, tabId);
+  return updateCurrentMessageList(
+    global, chatId, threadId, type, shouldReplaceHistory, shouldReplaceLast, isHalfScreen, tabId,
+  );
 });
 
 addActionHandler('openChatInNewTab', (global, actions, payload): ActionReturnType => {

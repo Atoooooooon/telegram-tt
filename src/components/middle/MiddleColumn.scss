@@ -8,6 +8,18 @@
   min-width: 0;
   height: 100%;
 
+  // Half screen mode for customer service context panel
+  &.half-screen {
+    @media (min-width: 926px) {
+      position: relative;
+      right: auto;
+      width: 100%;
+      max-width: none;
+      z-index: 1;
+      box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+    }
+  }
+
   .messages-layout {
     --slide-transition: 450ms cubic-bezier(0.25, 1, 0.5, 1);
 

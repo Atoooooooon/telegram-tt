@@ -161,6 +161,7 @@ type StateProps = {
   isAccountFrozen?: boolean;
   freezeAppealChat?: ApiChat;
   shouldBlockSendInMonoforum?: boolean;
+  isHalfScreen?: boolean; // For customer service context panel
 };
 
 function isImage(item: DataTransferItem) {
@@ -228,6 +229,7 @@ function MiddleColumn({
   isAccountFrozen,
   freezeAppealChat,
   shouldBlockSendInMonoforum,
+  isHalfScreen,
 }: OwnProps & StateProps) {
   const {
     openChat,
@@ -441,6 +443,7 @@ function MiddleColumn({
 
   const className = buildClassName(
     MASK_IMAGE_DISABLED ? 'mask-image-disabled' : 'mask-image-enabled',
+    isHalfScreen && 'half-screen',
   );
 
   const bgClassName = buildClassName(
@@ -789,7 +792,7 @@ export default memo(withGlobal<OwnProps>(
       return state as Complete<StateProps>;
     }
 
-    const { chatId, threadId, type: messageListType } = currentMessageList;
+    const { chatId, threadId, type: messageListType, isHalfScreen } = currentMessageList;
     const isPrivate = isUserId(chatId);
     const chat = selectChat(global, chatId);
     const bot = selectBot(global, chatId);
@@ -891,6 +894,7 @@ export default memo(withGlobal<OwnProps>(
       isAccountFrozen,
       freezeAppealChat,
       shouldBlockSendInMonoforum,
+      isHalfScreen,
     } as Complete<StateProps>;
   },
 )(MiddleColumn));

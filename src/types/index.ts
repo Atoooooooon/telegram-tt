@@ -562,6 +562,7 @@ export interface MessageList {
   chatId: string;
   threadId: ThreadId;
   type: MessageListType;
+  isHalfScreen?: boolean; // For customer service context panel
 }
 
 export interface ActiveEmojiInteraction {

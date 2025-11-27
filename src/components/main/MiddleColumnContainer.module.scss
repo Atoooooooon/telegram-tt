@@ -1,0 +1,20 @@
+.container {
+  display: contents;
+}
+
+.splitView {
+  display: flex;
+  width: 100%;
+  height: 100%;
+
+  @media (min-width: 926px) {
+    display: grid;
+    grid-template-columns: clamp(18rem, 28vw, 30rem) minmax(24rem, 1fr);
+  }
+}
+
+.customerServiceColumn {
+  @media (min-width: 926px) {
+    border-left: 1px solid var(--color-borders);
+  }
+}

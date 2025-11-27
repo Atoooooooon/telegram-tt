@@ -68,7 +68,7 @@ import LeftColumn from '../left/LeftColumn';
 import MediaViewer from '../mediaViewer/MediaViewer.async';
 import ReactionPicker from '../middle/message/reactions/ReactionPicker.async';
 import MessageListHistoryHandler from '../middle/MessageListHistoryHandler';
-import MiddleColumn from '../middle/MiddleColumn';
+import MiddleColumnContainer from './MiddleColumnContainer';
 import AudioPlayer from '../middle/panes/AudioPlayer';
 import ModalContainer from '../modals/ModalContainer';
 import PaymentModal from '../payment/PaymentModal.async';
@@ -543,6 +543,7 @@ const Main = ({
     });
   }, [isMiddleColumnOpen, isRightColumnOpen, noRightColumnAnimation, forceUpdate]);
 
+
   const className = buildClassName(
     willAnimateLeftColumnRef.current && 'left-column-animating',
     willAnimateRightColumnRef.current && 'right-column-animating',
@@ -583,7 +584,10 @@ const Main = ({
     <div ref={containerRef} id="Main" className={className}>
       <FoldersSidebar isMobile={isMobile} isActive={isFoldersSidebarShown} />
       <LeftColumn ref={leftColumnRef} isFoldersSidebarShown={isFoldersSidebarShown} />
-      <MiddleColumn leftColumnRef={leftColumnRef} isMobile={isMobile} />
+      <MiddleColumnContainer
+        leftColumnRef={leftColumnRef}
+        isMobile={isMobile}
+      />
       <RightColumn isMobile={isMobile} />
       <MediaViewer isOpen={isMediaViewerOpen} />
       <StoryViewer isOpen={isStoryViewerOpen} />
@@ -675,7 +679,8 @@ export default memo(withGlobal<OwnProps>(
 
     const gameMessage = openedGame && selectChatMessage(global, openedGame.chatId, openedGame.messageId);
     const gameTitle = gameMessage?.content.game?.title;
-    const { chatId } = selectCurrentMessageList(global) || {};
+    const currentMessageList = selectCurrentMessageList(global);
+    const { chatId } = currentMessageList || {};
     const noRightColumnAnimation = !selectPerformanceSettingsValue(global, 'rightColumnAnimations')
       || !selectCanAnimateInterface(global);
 

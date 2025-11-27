@@ -217,7 +217,7 @@ function abortChatRequestsForCurrentChat<T extends GlobalState>(
 
 addActionHandler('openChat', (global, actions, payload): ActionReturnType => {
   const {
-    id, type, noForumTopicPanel, shouldReplaceHistory, shouldReplaceLast,
+    id, type, noForumTopicPanel, shouldReplaceHistory, shouldReplaceLast, isHalfScreen,
     tabId = getCurrentTabId(),
   } = payload;
 
@@ -228,6 +228,7 @@ addActionHandler('openChat', (global, actions, payload): ActionReturnType => {
     noForumTopicPanel,
     shouldReplaceHistory,
     shouldReplaceLast,
+    isHalfScreen,
     tabId,
   });
 
