@@ -97,8 +97,16 @@
   position: relative;
 }
 
+.messageContentInteractive {
+  cursor: pointer;
+}
+
 .sourceBadge {
   align-self: flex-start;
+}
+
+.sourceBadgeInteractive {
+  cursor: pointer;
 }
 
 .messageActions {
@@ -128,11 +136,6 @@
 
   :global(.icon) {
     font-size: 1.125rem;
-  }
-
-  // View Context button (arrow-right icon)
-  &:first-child :global(.icon) {
-    color: var(--color-primary);
   }
 
   // Remove button (close icon)

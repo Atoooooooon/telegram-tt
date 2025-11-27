@@ -9,6 +9,19 @@
   margin-bottom: 0.375rem;
 }
 
+.interactive {
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+
+  &:hover {
+    background-color: var(--color-background-secondary-accent);
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
+}
+
 .avatar {
   flex-shrink: 0;
 }

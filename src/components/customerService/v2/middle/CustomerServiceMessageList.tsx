@@ -1,30 +1,30 @@
 import type { FC } from '../../../../lib/teact/teact';
+import type React from '../../../../lib/teact/teact';
+
 import { memo, useCallback, useMemo } from '../../../../lib/teact/teact';
 import { getActions, withGlobal } from '../../../../global';
 
 import type { ApiMessage } from '../../../../api/types';
-import type { IAlbum } from '../../../../types';
 import type { ObserveFn } from '../../../../hooks/useIntersectionObserver';
-
-import buildClassName from '../../../../util/buildClassName';
-import { getCurrentTabId } from '../../../../util/establishMultitabRole';
+import type { IAlbum } from '../../../../types';
 
 import {
-  selectCustomerServiceV2Messages,
-  selectCustomerServiceV2MessageCount,
   selectCustomerServiceV2ContextChatId,
   selectCustomerServiceV2ContextMessageId,
+  selectCustomerServiceV2MessageCount,
+  selectCustomerServiceV2Messages,
 } from '../../../../global/selectors/customerServiceV2';
+import buildClassName from '../../../../util/buildClassName';
+import { getCurrentTabId } from '../../../../util/establishMultitabRole';
+import { groupMessages, isAlbum as isAlbumEntry } from '../../../middle/helpers/groupMessages';
 
 import useLang from '../../../../hooks/useLang';
 import useLastCallback from '../../../../hooks/useLastCallback';
 
-import CustomerServiceSourceBadge from '../shared/CustomerServiceSourceBadge';
-import { groupMessages, isAlbum as isAlbumEntry } from '../../../middle/helpers/groupMessages';
+import Icon from '../../../common/icons/Icon';
 import Message from '../../../middle/message/Message';
 import Button from '../../../ui/Button';
-import Icon from '../../../common/icons/Icon';
-import Loading from '../../../ui/Loading';
+import CustomerServiceSourceBadge from '../shared/CustomerServiceSourceBadge';
 
 import styles from './CustomerServiceMessageList.module.scss';
 
@@ -109,7 +109,7 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
     return (
       <div className={buildClassName(styles.emptyState, className)}>
         <div className={styles.emptyIcon}>
-          <Icon name='animals' />
+          <Icon name="animals" />
         </div>
         <h3 className={styles.emptyTitle}>
           {lang('CustomerServiceEmpty')}
@@ -143,6 +143,57 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
             ? `cs-msg-${message.chatId}-album-${album.albumId}`
             : `cs-msg-${message.chatId}-${message.id}-${index}`;
 
+          const messageContentClassName = buildClassName(
+            styles.messageContent,
+            styles.messageContentInteractive,
+          );
+
+          const handleContextNavigation = (targetMessageId: number) => {
+            handleViewContext(message.chatId, targetMessageId);
+          };
+
+          const handleContentClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
+            if (event.defaultPrevented) {
+              return;
+            }
+
+            if (event.button !== 0) {
+              return;
+            }
+
+            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+              return;
+            }
+
+            const target = event.target as HTMLElement;
+            if (
+              target.closest(`.${styles.messageActions}`)
+              || target.closest('button')
+              || target.closest('a')
+              || target.closest('[data-prevent-cs-context]')
+            ) {
+              return;
+            }
+
+            const selection = window.getSelection && window.getSelection();
+            if (selection && selection.toString()) {
+              return;
+            }
+
+            const messageElement = target.closest<HTMLElement>('[data-message-id]');
+            const targetMessageId = messageElement?.dataset.messageId
+              ? Number(messageElement.dataset.messageId)
+              : message.id;
+
+            if (Number.isNaN(targetMessageId)) {
+              return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            handleContextNavigation(targetMessageId);
+          };
+
           return (
             <div
               key={key}
@@ -153,9 +204,13 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
             >
               <CustomerServiceSourceBadge
                 message={message}
-                className={styles.sourceBadge}
+                className={buildClassName(styles.sourceBadge, styles.sourceBadgeInteractive)}
+                onClick={() => handleContextNavigation(message.id)}
               />
-              <div className={styles.messageContent}>
+              <div
+                className={messageContentClassName}
+                onClickCapture={handleContentClickCapture}
+              >
                 <Message
                   message={message}
                   album={album}
@@ -171,19 +226,13 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
                   isFirstInDocumentGroup={false}
                   isLastInDocumentGroup={false}
                   isLastInList={false}
-                  onMetaClick={() => {alert('ready...');}}
+                  onMetaClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    handleContextNavigation(message.id);
+                  }}
                 />
                 <div className={styles.messageActions}>
-                  <Button
-                    className={styles.actionButton}
-                    round
-                    size="tiny"
-                    color="translucent"
-                    onClick={() => handleViewContext(message.chatId, message.id)}
-                    ariaLabel={lang('ViewContext')}
-                  >
-                    <i className="icon icon-arrow-right" />
-                  </Button>
                   <Button
                     className={styles.actionButton}
                     round

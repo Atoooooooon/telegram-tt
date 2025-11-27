@@ -4,12 +4,13 @@ import { withGlobal } from '../../../../global';
 
 import type { ApiChat, ApiMessage, ApiPeer } from '../../../../api/types';
 
-import buildClassName from '../../../../util/buildClassName';
 import { getPeerFullTitle } from '../../../../global/helpers/peers';
 import { selectChat } from '../../../../global/selectors';
 import { selectSender } from '../../../../global/selectors/messages';
+import buildClassName from '../../../../util/buildClassName';
 
 import useLang from '../../../../hooks/useLang';
+import useLastCallback from '../../../../hooks/useLastCallback';
 
 import Avatar from '../../../common/Avatar';
 
@@ -18,6 +19,7 @@ import styles from './CustomerServiceSourceBadge.module.scss';
 type OwnProps = {
   message: ApiMessage;
   className?: string;
+  onClick?: NoneToVoidFunction;
 };
 
 type StateProps = {
@@ -25,7 +27,12 @@ type StateProps = {
   sender?: ApiPeer;
 };
 
-const CustomerServiceSourceBadge: FC<OwnProps & StateProps> = ({ chat, sender, className }) => {
+const CustomerServiceSourceBadge: FC<OwnProps & StateProps> = ({
+  chat,
+  sender,
+  className,
+  onClick,
+}) => {
   const lang = useLang();
 
   const chatTitle = chat?.title || lang('DeletedChat');
@@ -38,11 +45,29 @@ const CustomerServiceSourceBadge: FC<OwnProps & StateProps> = ({ chat, sender, c
     : lang('CustomerServiceFromChatChatOnly', { chatName: chatTitle });
 
   const avatarPeer = sender && !isSenderSameAsChat ? sender : chat;
+  const handleKeyDown = useLastCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!onClick) {
+      return;
+    }
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onClick();
+    }
+  });
 
   return (
     <div
-      className={buildClassName(styles.root, className)}
+      className={buildClassName(
+        styles.root,
+        onClick && styles.interactive,
+        className,
+      )}
       aria-label={ariaLabel}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={handleKeyDown}
     >
       {avatarPeer ? (
         <Avatar
