@@ -24,6 +24,8 @@ export type CustomerServiceSettings = {
   autoRead?: boolean;
   /** Operating mode */
   mode: 'oncall' | 'assist';
+  /** Predefined quick reply templates */
+  quickReplies?: string[];
 };
 
 /**
@@ -47,6 +49,9 @@ export type CustomerServiceV2State = {
 
   /** Multi-chat lookup map for efficient message display */
   messagesByChatId: Record<string, ApiMessage[]>;
+
+  /** Messages that have been replied to */
+  repliedMessageIds?: string[];
 
   /** Shared settings with V1 */
   settings?: CustomerServiceSettings;

@@ -17,6 +17,7 @@ import {
   selectCustomerServiceV2Settings,
   selectCustomerServiceV2State,
 } from '../../selectors/customerServiceV2';
+import useLang from '../../../hooks/useLang';
 
 function ensureCustomerServiceV2State(state?: CustomerServiceV2State): CustomerServiceV2State {
   if (state) {
@@ -26,6 +27,7 @@ function ensureCustomerServiceV2State(state?: CustomerServiceV2State): CustomerS
   return {
     messages: [],
     messagesByChatId: {},
+    repliedMessageIds: [],
     lastSyncTimestamp: Date.now(),
     messageCount: 0,
   };
@@ -55,6 +57,7 @@ function getDefaultCustomerServiceV2Settings(): CustomerServiceSettings {
     }),
     mode: 'oncall',
     autoRead: false,
+    quickReplies: [...CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES],
   };
 }
 
@@ -159,7 +162,7 @@ addActionHandler('removeFromCustomerServiceV2', async (global, actions, payload)
     global = getGlobal();
     const cs = selectCustomerServiceV2State(global, tabId);
     const baseState = ensureCustomerServiceV2State(cs);
-
+    const lang = useLang();
     const messages = baseState.messages.filter(
       (msg) => !(msg.chatId === chatId && msg.id === messageId),
     );
@@ -198,7 +201,7 @@ addActionHandler('removeFromCustomerServiceV2', async (global, actions, payload)
 
     // Show confirmation
     actions.showNotification({
-      message: 'CustomerServiceMessageRemoved',
+      message: lang('CustomerServiceMessageRemoved'),
       tabId,
     });
   } catch (error) {
@@ -516,6 +519,7 @@ addActionHandler('toggleCustomerServiceV2Mode', (global, actions, payload): Acti
     regexFilters: existingSettings.regexFilters || [],
     autoRead: Boolean(existingSettings.autoRead),
     mode: nextMode,
+    quickReplies: existingSettings.quickReplies?.slice() || [...CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES],
   };
 
   const normalized = normalizeSettingsForSave(updatedSettings);
@@ -599,6 +603,18 @@ function normalizeSettingsForSave(settings: CustomerServiceSettings): CustomerSe
     })),
     mode: settings.mode === 'assist' ? 'assist' : 'oncall',
     autoRead: Boolean(settings.autoRead),
+    quickReplies: (settings.quickReplies || []).reduce<string[]>((result, reply) => {
+      if (reply === undefined || reply === null) {
+        return result;
+      }
+
+      const text = String(reply).trim();
+      if (text) {
+        result.push(text);
+      }
+
+      return result;
+    }, []),
   };
 }
 

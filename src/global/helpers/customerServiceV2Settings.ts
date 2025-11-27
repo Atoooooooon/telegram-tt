@@ -9,6 +9,7 @@ type NormalizableSettings = {
   regexFilters?: unknown;
   mode?: unknown;
   autoRead?: unknown;
+  quickReplies?: unknown;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -26,6 +27,7 @@ function normalizeSettings(raw: unknown): CustomerServiceSettings | undefined {
     regexFilters,
     mode,
     autoRead,
+    quickReplies,
   } = raw as NormalizableSettings;
 
   const normalized: CustomerServiceSettings = {
@@ -38,6 +40,7 @@ function normalizeSettings(raw: unknown): CustomerServiceSettings | undefined {
     regexFilters: [],
     mode: mode === 'assist' ? 'assist' : 'oncall',
     autoRead: Boolean(autoRead),
+    quickReplies: [],
   };
 
   if (Array.isArray(regexFilters)) {
@@ -68,6 +71,21 @@ function normalizeSettings(raw: unknown): CustomerServiceSettings | undefined {
       },
       [],
     );
+  }
+
+  if (Array.isArray(quickReplies)) {
+    normalized.quickReplies = quickReplies.reduce<string[]>((result, reply) => {
+      if (reply === undefined || reply === null) {
+        return result;
+      }
+
+      const text = String(reply).trim();
+      if (text) {
+        result.push(text);
+      }
+
+      return result;
+    }, []);
   }
 
   return normalized;

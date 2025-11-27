@@ -17,6 +17,7 @@ import Icon from '../../../common/icons/Icon';
 import Button from '../../../ui/Button';
 import Checkbox from '../../../ui/Checkbox';
 import InputText from '../../../ui/InputText';
+import TextArea from '../../../ui/TextArea';
 import Modal from '../../../ui/Modal';
 import TabList from '../../../ui/TabList';
 
@@ -37,6 +38,7 @@ type StateProps = {
     }>;
     mode?: 'oncall' | 'assist';
     autoRead?: boolean;
+    quickReplies?: string[];
   };
 };
 
@@ -46,7 +48,44 @@ type FilterSettings = {
   regexFilters: RegExp[];
   mode?: 'oncall' | 'assist'; // 添加模式选择
   autoRead?: boolean; // 添加自动已读选项
+  quickReplies: string[];
 };
+
+const normalizeQuickReplies = (list?: readonly string[]) => {
+  if (!Array.isArray(list)) {
+    return Array.from(CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES);
+  }
+
+  return list.reduce<string[]>((result, item) => {
+    if (item === undefined || item === null) {
+      return result;
+    }
+
+    const text = item.trim();
+    if (text) {
+      result.push(text);
+    }
+
+    return result;
+  }, []);
+};
+
+type SavedSettings = StateProps['savedSettings'];
+
+const buildFilterSettings = (saved?: SavedSettings): FilterSettings => ({
+  monitoredChatIds: saved?.monitoredChatIds
+    ? [...saved.monitoredChatIds]
+    : Array.from(CUSTOMER_SERVICE_CONFIG.MONITORED_CHAT_IDS),
+  filteredUserIds: saved?.filteredUserIds
+    ? [...saved.filteredUserIds]
+    : Array.from(CUSTOMER_SERVICE_CONFIG.FILTERED_USER_IDS),
+  regexFilters: saved?.regexFilters
+    ? saved.regexFilters.map((pattern) => new RegExp(pattern.source, pattern.flags))
+    : [...CUSTOMER_SERVICE_CONFIG.REGEX_FILTERS],
+  mode: saved?.mode || 'oncall',
+  autoRead: saved?.autoRead || false,
+  quickReplies: normalizeQuickReplies(saved?.quickReplies),
+});
 
 const CustomerServiceSettingsModal = ({
   isOpen,
@@ -81,9 +120,10 @@ const CustomerServiceSettingsModal = ({
     // 尝试从聊天列表中查找（可能是群组或私聊）
     const chat = Object.values(chats).find((chat) => chat.id === userId);
     if (chat) {
+      const username = chat.usernames?.[0]?.username;
       return {
         title: chat.title || 'Unknown Chat',
-        username: chat.username,
+        username,
         isChat: true,
       };
     }
@@ -107,30 +147,14 @@ const CustomerServiceSettingsModal = ({
   const [searchError, setSearchError] = useState('');
 
   // 设置状态
-  const [settings, setSettings] = useState<FilterSettings>(() => {
-    // 优先使用已保存的设置，否则使用配置文件的默认值
-    if (savedSettings) {
-      return {
-        monitoredChatIds: [...savedSettings.monitoredChatIds],
-        filteredUserIds: [...savedSettings.filteredUserIds],
-        regexFilters: savedSettings.regexFilters.map((pattern) => new RegExp(pattern.source, pattern.flags)),
-        mode: savedSettings.mode || 'oncall',
-        autoRead: savedSettings.autoRead || false,
-      };
-    }
-
-    return {
-      monitoredChatIds: [...CUSTOMER_SERVICE_CONFIG.MONITORED_CHAT_IDS],
-      filteredUserIds: [...CUSTOMER_SERVICE_CONFIG.FILTERED_USER_IDS],
-      regexFilters: [...CUSTOMER_SERVICE_CONFIG.REGEX_FILTERS],
-      mode: 'oncall',
-      autoRead: false,
-    };
-  });
+  const [settings, setSettings] = useState<FilterSettings>(() => buildFilterSettings(savedSettings));
 
   // 新添加的用户ID和正则规则输入
   const [newRegexFilter, setNewRegexFilter] = useState('');
   const [regexValidationError, setRegexValidationError] = useState('');
+
+  // 快捷回复输入
+  const [newQuickReply, setNewQuickReply] = useState('');
 
   // 用户搜索状态
   const [searchQuery, setSearchQuery] = useState('');
@@ -170,15 +194,16 @@ const CustomerServiceSettingsModal = ({
     Object.values(chats).forEach((chat) => {
       if (!chat || !chat.title) return;
 
+      const normalizedUsername = chat.usernames?.[0]?.username;
       const titleMatch = chat.title.toLowerCase().includes(query);
-      const usernameMatch = chat.username && chat.username.toLowerCase().includes(query);
+      const usernameMatch = normalizedUsername && normalizedUsername.toLowerCase().includes(query);
       const idMatch = chat.id.includes(query);
 
       if (titleMatch || usernameMatch || idMatch) {
         results.push({
           id: chat.id,
           name: chat.title,
-          username: chat.username,
+          username: normalizedUsername,
           type: 'chat',
         });
       }
@@ -204,24 +229,12 @@ const CustomerServiceSettingsModal = ({
     }
 
     if (savedSettings) {
-      setSettings({
-        monitoredChatIds: [...savedSettings.monitoredChatIds],
-        filteredUserIds: [...savedSettings.filteredUserIds],
-        regexFilters: savedSettings.regexFilters.map((pattern) => new RegExp(pattern.source, pattern.flags)),
-        mode: savedSettings.mode || 'oncall',
-        autoRead: savedSettings.autoRead || false,
-      });
+      setSettings(buildFilterSettings(savedSettings));
       setHasInitialized(true);
       return;
     }
 
-    setSettings({
-      monitoredChatIds: [...CUSTOMER_SERVICE_CONFIG.MONITORED_CHAT_IDS],
-      filteredUserIds: [...CUSTOMER_SERVICE_CONFIG.FILTERED_USER_IDS],
-      regexFilters: [...CUSTOMER_SERVICE_CONFIG.REGEX_FILTERS],
-      mode: 'oncall',
-      autoRead: false,
-    });
+    setSettings(buildFilterSettings());
     setHasInitialized(true);
   }, [hasInitialized, isOpen, savedSettings]);
 
@@ -233,6 +246,7 @@ const CustomerServiceSettingsModal = ({
     setSearchQuery('');
     setNewRegexFilter('');
     setRegexValidationError('');
+    setNewQuickReply('');
     setIsAllSelected(false);
     setHasInitialized(false);
     closeCustomerServiceV2Settings({});
@@ -250,13 +264,7 @@ const CustomerServiceSettingsModal = ({
   // 只在首次加载且未初始化时更新设置状态
   useEffect(() => {
     if (savedSettings && !hasInitialized) {
-      setSettings({
-        monitoredChatIds: [...savedSettings.monitoredChatIds],
-        filteredUserIds: [...savedSettings.filteredUserIds],
-        regexFilters: savedSettings.regexFilters.map((pattern) => new RegExp(pattern.source, pattern.flags)),
-        mode: savedSettings.mode || 'oncall',
-        autoRead: savedSettings.autoRead || false,
-      });
+      setSettings(buildFilterSettings(savedSettings));
       setHasInitialized(true);
     }
   }, [savedSettings, hasInitialized]);
@@ -435,6 +443,43 @@ const CustomerServiceSettingsModal = ({
     }));
   });
 
+  const handleQuickReplyChange = useLastCallback((index: number, value: string) => {
+    setSettings((prev) => {
+      const nextQuickReplies = [...(prev.quickReplies || [])];
+      nextQuickReplies[index] = value;
+
+      return {
+        ...prev,
+        quickReplies: nextQuickReplies,
+      };
+    });
+  });
+
+  const handleRemoveQuickReply = useLastCallback((index: number) => {
+    setSettings((prev) => {
+      const nextQuickReplies = [...(prev.quickReplies || [])];
+      nextQuickReplies.splice(index, 1);
+
+      return {
+        ...prev,
+        quickReplies: nextQuickReplies,
+      };
+    });
+  });
+
+  const handleAddQuickReply = useLastCallback(() => {
+    const trimmed = newQuickReply.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    setSettings((prev) => ({
+      ...prev,
+      quickReplies: [...(prev.quickReplies || []), trimmed],
+    }));
+    setNewQuickReply('');
+  });
+
   // 保存设置
   const handleSave = useLastCallback(() => {
     const normalizedSettings = {
@@ -446,6 +491,18 @@ const CustomerServiceSettingsModal = ({
       })),
       mode: settings.mode || 'oncall',
       autoRead: Boolean(settings.autoRead),
+      quickReplies: (settings.quickReplies || []).reduce<string[]>((result, reply) => {
+        if (reply === undefined || reply === null) {
+          return result;
+        }
+
+        const text = reply.trim();
+        if (text) {
+          result.push(text);
+        }
+
+        return result;
+      }, []),
     };
 
     saveCustomerServiceV2Settings({ settings: normalizedSettings });
@@ -455,13 +512,8 @@ const CustomerServiceSettingsModal = ({
 
   // 重置设置
   const handleReset = useLastCallback(() => {
-    setSettings({
-      monitoredChatIds: [...CUSTOMER_SERVICE_CONFIG.MONITORED_CHAT_IDS],
-      filteredUserIds: [...CUSTOMER_SERVICE_CONFIG.FILTERED_USER_IDS],
-      regexFilters: [...CUSTOMER_SERVICE_CONFIG.REGEX_FILTERS],
-      mode: 'oncall',
-      autoRead: false,
-    });
+    setSettings(buildFilterSettings());
+    setNewQuickReply('');
   });
 
   // 导出配置
@@ -547,6 +599,7 @@ const CustomerServiceSettingsModal = ({
     { title: lang('CustomerServiceGroupFilters') },
     { title: lang('CustomerServiceUserFilters') },
     { title: lang('CustomerServiceMessageFilters') },
+    { title: lang('CustomerServiceQuickReplies') },
   ];
 
   const renderGroupFilters = () => (
@@ -926,6 +979,79 @@ const CustomerServiceSettingsModal = ({
     </div>
   );
 
+  const renderQuickReplies = () => {
+    const quickReplies = settings.quickReplies || [];
+
+    return (
+      <div className={styles.tabContent}>
+        <div className={styles.sectionHeader}>
+          <h3>
+            <Icon name="flash" className={styles.sectionIcon} />
+            {lang('CustomerServiceQuickReplies')}
+          </h3>
+          <p className={styles.sectionDescription}>
+            {lang('CustomerServiceQuickRepliesDescription')}
+          </p>
+        </div>
+
+        <div className={styles.quickReplyCreator}>
+          <TextArea
+            value={newQuickReply}
+            onChange={(e) => setNewQuickReply(e.currentTarget.value)}
+            placeholder={lang('CustomerServiceQuickReplyPlaceholder')}
+            className={styles.quickReplyTextarea}
+            rows={2}
+            noReplaceNewlines
+          />
+          <Button
+            size="smaller"
+            color="primary"
+            onClick={handleAddQuickReply}
+            disabled={!newQuickReply.trim()}
+            className={styles.quickReplyAddButton}
+          >
+            <Icon name="add" />
+            {lang('CustomerServiceAddQuickReply')}
+          </Button>
+        </div>
+
+        {quickReplies.length > 0 ? (
+          <div className={styles.quickReplyList}>
+            {quickReplies.map((reply, index) => (
+              <div
+                key={`quick-reply-${index}`}
+                className={styles.quickReplyItem}
+              >
+                <TextArea
+                  value={reply}
+                  onChange={(e) => handleQuickReplyChange(index, e.currentTarget.value)}
+                  className={styles.quickReplyTextarea}
+                  rows={2}
+                  noReplaceNewlines
+                />
+                <Button
+                  size="tiny"
+                  color="translucent"
+                  round
+                  className={styles.quickReplyRemoveButton}
+                  onClick={() => handleRemoveQuickReply(index)}
+                  ariaLabel={lang('CustomerServiceDeleteQuickReply')}
+                >
+                  <Icon name="delete" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className={styles.quickReplyEmpty}>
+            <Icon name="animals" className={styles.quickReplyEmptyIcon} />
+            <span>{lang('CustomerServiceNoQuickReplies')}</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   if (!isOpen) {
     return undefined;
   }
@@ -954,6 +1080,7 @@ const CustomerServiceSettingsModal = ({
           {activeTab === 0 && renderGroupFilters()}
           {activeTab === 1 && renderUserFilters()}
           {activeTab === 2 && renderMessageFilters()}
+          {activeTab === 3 && renderQuickReplies()}
         </div>
 
         <div className={styles.footer}>

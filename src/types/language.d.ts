@@ -307,6 +307,18 @@ export interface LangPair {
   'CustomerServiceGroupFilters': undefined;
   'CustomerServiceUserFilters': undefined;
   'CustomerServiceMessageFilters': undefined;
+  'CustomerServiceQuickReplies': undefined;
+  'CustomerServiceQuickRepliesDescription': undefined;
+  'CustomerServiceQuickReplyPlaceholder': undefined;
+  'CustomerServiceAddQuickReply': undefined;
+  'CustomerServiceDeleteQuickReply': undefined;
+  'CustomerServiceNoQuickReplies': undefined;
+  'CustomerServiceQuickReplies': undefined;
+  'CustomerServiceQuickRepliesDescription': undefined;
+  'CustomerServiceQuickReplyPlaceholder': undefined;
+  'CustomerServiceAddQuickReply': undefined;
+  'CustomerServiceDeleteQuickReply': undefined;
+  'CustomerServiceNoQuickReplies': undefined;
   'CustomerServiceSelectGroups': undefined;
   'CustomerServiceSelectAll': undefined;
   'CustomerServiceDeselectAll': undefined;

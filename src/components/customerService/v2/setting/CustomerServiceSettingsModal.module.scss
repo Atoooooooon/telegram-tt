@@ -114,6 +114,63 @@
   color: var(--color-text-secondary);
 }
 
+.quickReplyCreator {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.quickReplyTextarea {
+  width: 100%;
+
+  :global(textarea) {
+    width: 100%;
+    min-height: 3.5rem;
+    resize: vertical;
+  }
+}
+
+.quickReplyAddButton {
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.quickReplyList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.quickReplyItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.quickReplyRemoveButton {
+  flex-shrink: 0;
+  margin-top: 0.25rem;
+}
+
+.quickReplyEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  border: 1px dashed var(--color-borders);
+  border-radius: 0.75rem;
+  color: var(--color-text-secondary);
+  background: var(--color-background-secondary);
+}
+
+.quickReplyEmptyIcon {
+  font-size: 1.5rem;
+  color: var(--color-primary);
+}
+
 .filterControls {
   display: flex;
   align-items: center;

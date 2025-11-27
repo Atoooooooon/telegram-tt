@@ -363,6 +363,12 @@
 "CustomerServiceGroupFilters" = "群组过滤";
 "CustomerServiceUserFilters" = "用户过滤";
 "CustomerServiceMessageFilters" = "消息过滤";
+"CustomerServiceQuickReplies" = "快捷回复";
+"CustomerServiceQuickRepliesDescription" = "配置常用回复模板，点击后将自动带入会话并发送。";
+"CustomerServiceQuickReplyPlaceholder" = "例如：您好，请问有什么可以帮助您的？";
+"CustomerServiceAddQuickReply" = "新增快捷回复";
+"CustomerServiceDeleteQuickReply" = "删除快捷回复";
+"CustomerServiceNoQuickReplies" = "暂无快捷回复，先添加一个吧";
 "CustomerServiceSelectGroups" = "选择要监控的群组";
 "CustomerServiceSelectAll" = "全选";
 "CustomerServiceDeselectAll" = "取消全选";

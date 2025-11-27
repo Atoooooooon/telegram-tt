@@ -10,9 +10,7 @@ export const CUSTOMER_SERVICE_CONFIG = {
   // 监听的群组ID列表 - 这里填写实际的群组ID
   MONITORED_CHAT_IDS: [
     // 示例群组ID，实际使用时请替换为真实的群组ID
-    '-1001234567890', // 技术支持群
-    '-4618248704', // 产品反馈群
-    '-4549167178', // 用户咨询群
+    '-000000001', // 初始化
   ],
 
   // 过滤的用户ID列表 - 过滤机器人和不需要客服回复的用户
@@ -28,6 +26,13 @@ export const CUSTOMER_SERVICE_CONFIG = {
     // /^\/\w+/, // 过滤所有以 / 开头的命令
     // /^@\w+/, // 过滤所有 @ 提及
     // /^\[系统\]/, // 过滤系统消息
+  ],
+
+  // 默认快捷回复模板
+  QUICK_REPLIES: [
+    '您好，请问有什么可以帮助您的？',
+    '感谢反馈，我们会尽快处理。',
+    '我们已收到您的消息，请您稍等。',
   ],
 
   // 客服消息的最大保存数量
@@ -48,7 +53,12 @@ const getEffectiveSettings = (global?: GlobalState): CustomerServiceSettings | u
 
   const v2Settings = selectCustomerServiceV2Settings(global);
   if (v2Settings) {
-    return v2Settings;
+    return {
+      ...v2Settings,
+      quickReplies: Array.isArray(v2Settings.quickReplies)
+        ? v2Settings.quickReplies.map((reply) => (typeof reply === 'string' ? reply.trim() : String(reply))).filter(Boolean)
+        : [...CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES],
+    };
   }
 
   const legacySettings = selectCustomerServiceSettings(global);
@@ -83,6 +93,11 @@ const getEffectiveSettings = (global?: GlobalState): CustomerServiceSettings | u
     }).filter((filter) => Boolean(filter.source)) as Array<{ source: string; flags: string }>,
     mode: legacySettings.mode === 'assist' ? 'assist' : 'oncall',
     autoRead: Boolean(legacySettings.autoRead),
+    quickReplies: Array.isArray((legacySettings as { quickReplies?: unknown }).quickReplies)
+      ? (legacySettings as { quickReplies: unknown[] }).quickReplies
+        .map((reply) => (typeof reply === 'string' ? reply.trim() : String(reply)))
+        .filter(Boolean)
+      : [...CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES],
   };
 };
 
