@@ -55,7 +55,7 @@ const CustomerServiceMiddleHeader: FC<OwnProps & StateProps> = ({
         </h3>
         <span className={styles.subtitle}>
           {messageCount > 0
-            ? `${messageCount} ${messageCount === 1 ? 'message' : 'messages'}`
+            ? lang('CustomerServiceMessagesCount', { count: messageCount })
             : lang('CustomerServiceEmpty')}
         </span>
       </div>
@@ -65,7 +65,9 @@ const CustomerServiceMiddleHeader: FC<OwnProps & StateProps> = ({
         <div className={styles.modeIndicator}>
           <Icon name={currentMode === 'oncall' ? 'phone' : 'recent'} />
           <span className={styles.modeText}>
-            {currentMode === 'oncall' ? 'On Call' : 'Assist'}
+            {currentMode === 'oncall'
+              ? lang('CustomerServiceOnCallMode')
+              : lang('CustomerServiceAssistMode')}
           </span>
         </div>
 

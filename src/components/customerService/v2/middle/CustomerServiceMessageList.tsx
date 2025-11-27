@@ -92,7 +92,7 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
       {hasLargeMessageCount && (
         <div className={styles.performanceHint}>
           <i className="icon icon-info" />
-          <span>{messageCount} messages loaded. Consider clearing old messages for better performance.</span>
+          <span>{lang('CustomerServicePerformanceHint', { count: messageCount })}</span>
         </div>
       )}
       <div className={styles.messageList}>
@@ -109,7 +109,7 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
               )}
             >
               <CustomerServiceSourceBadge
-                chatId={message.chatId}
+                message={message}
                 className={styles.sourceBadge}
               />
               <div className={styles.messageContent}>

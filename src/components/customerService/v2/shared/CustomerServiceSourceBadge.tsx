@@ -1,61 +1,52 @@
 import type { FC } from '../../../../lib/teact/teact';
 import { memo } from '../../../../lib/teact/teact';
-import { getActions, withGlobal } from '../../../../global';
+import { withGlobal } from '../../../../global';
 
-import type { ApiChat } from '../../../../api/types';
+import type { ApiChat, ApiMessage, ApiPeer } from '../../../../api/types';
 
 import buildClassName from '../../../../util/buildClassName';
-import { getCurrentTabId } from '../../../../util/establishMultitabRole';
-
+import { getPeerFullTitle } from '../../../../global/helpers/peers';
 import { selectChat } from '../../../../global/selectors';
+import { selectSender } from '../../../../global/selectors/messages';
 
 import useLang from '../../../../hooks/useLang';
-import useLastCallback from '../../../../hooks/useLastCallback';
 
 import Avatar from '../../../common/Avatar';
 
 import styles from './CustomerServiceSourceBadge.module.scss';
 
 type OwnProps = {
-  chatId: string;
+  message: ApiMessage;
   className?: string;
 };
 
 type StateProps = {
   chat?: ApiChat;
+  sender?: ApiPeer;
 };
 
-const CustomerServiceSourceBadge: FC<OwnProps & StateProps> = ({
-  chatId,
-  chat,
-  className,
-}) => {
-  const { openChat } = getActions();
+const CustomerServiceSourceBadge: FC<OwnProps & StateProps> = ({ chat, sender, className }) => {
   const lang = useLang();
 
-  const handleClick = useLastCallback(() => {
-    if (!chat) return;
-
-    openChat({
-      id: chatId,
-      isHalfScreen: true,
-      tabId: getCurrentTabId(),
-    });
-  });
-
   const chatTitle = chat?.title || lang('DeletedChat');
+  const senderName = sender ? getPeerFullTitle(lang, sender) : lang('CustomerServiceUnknownUser');
+  const isSenderSameAsChat = chat?.id === sender?.id;
+
+  const displaySender = !isSenderSameAsChat ? senderName : undefined;
+  const ariaLabel = displaySender
+    ? lang('CustomerServiceFromChat', { chatName: chatTitle, senderName: displaySender })
+    : lang('CustomerServiceFromChatChatOnly', { chatName: chatTitle });
+
+  const avatarPeer = sender && !isSenderSameAsChat ? sender : chat;
 
   return (
     <div
       className={buildClassName(styles.root, className)}
-      onClick={handleClick}
-      role="button"
-      tabIndex={0}
-      aria-label={lang('CustomerServiceFromChat', { chatName: chatTitle })}
+      aria-label={ariaLabel}
     >
-      {chat ? (
+      {avatarPeer ? (
         <Avatar
-          chat={chat}
+          peer={avatarPeer}
           size="small"
           className={styles.avatar}
         />
@@ -64,19 +55,28 @@ const CustomerServiceSourceBadge: FC<OwnProps & StateProps> = ({
           <span>?</span>
         </div>
       )}
-      <span className={styles.chatName}>
-        {chatTitle}
-      </span>
+      <div className={styles.info}>
+        <span className={styles.chatName}>
+          {chatTitle}
+        </span>
+        {displaySender && (
+          <span className={styles.senderName}>
+            {displaySender}
+          </span>
+        )}
+      </div>
     </div>
   );
 };
 
 export default memo(
-  withGlobal<OwnProps>((global, { chatId }): StateProps => {
-    const chat = selectChat(global, chatId);
+  withGlobal<OwnProps>((global, { message }): StateProps => {
+    const chat = selectChat(global, message.chatId);
+    const sender = selectSender(global, message);
 
     return {
       chat,
+      sender,
     };
   })(CustomerServiceSourceBadge),
 );
