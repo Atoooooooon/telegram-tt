@@ -3,7 +3,7 @@ import {
   memo, useEffect, useMemo, useState,
 } from '../../../../../lib/teact/teact';
 
-import type { ApiChat } from '../../../../../api/types';
+import type { ApiChat, ApiChatFullInfo } from '../../../../../api/types';
 
 import buildClassName from '../../../../../util/buildClassName';
 import { getChatFolderIds } from '../../../../../util/folderManager';
@@ -19,6 +19,7 @@ import styles from '../CustomerServiceSettingsModal.module.scss';
 
 type Props = {
   chats: Record<string, ApiChat>;
+  chatFullInfos: Record<string, ApiChatFullInfo>;
   chatFolders: Record<number, any>;
   orderedFolderIds?: number[];
   monitoredChatIds: string[];
@@ -29,6 +30,7 @@ const DEFAULT_TAG_OPTION = '-1';
 
 const GroupFiltersTab: FC<Props> = ({
   chats,
+  chatFullInfos,
   chatFolders,
   orderedFolderIds,
   monitoredChatIds,
@@ -43,16 +45,50 @@ const GroupFiltersTab: FC<Props> = ({
   const safeChats = chats || {};
   const safeChatFolders = chatFolders || {};
   const safeMonitoredChatIds = monitoredChatIds || [];
+  const safeChatFullInfos = chatFullInfos || {};
+
+  const migratedLegacyChatIds = useMemo(() => {
+    const legacyIds = new Set<string>();
+
+    Object.values(safeChats).forEach((chat) => {
+      if (chat?.migratedTo?.chatId) {
+        legacyIds.add(chat.id);
+      }
+    });
+
+    Object.values(safeChatFullInfos).forEach((fullInfo) => {
+      const migratedFromId = fullInfo?.migratedFrom?.chatId;
+      if (migratedFromId) {
+        legacyIds.add(migratedFromId);
+      }
+    });
+
+    return legacyIds;
+  }, [safeChats, safeChatFullInfos]);
 
   const allGroupChats = useMemo(() => {
-    return Object.values(safeChats).filter((chat) =>
-      chat
-      && (chat.type === 'chatTypeBasicGroup' || chat.type === 'chatTypeSuperGroup')
-      && !chat.isNotJoined,
-    );
-  }, [safeChats]);
+    return Object.values(safeChats).filter((chat) => {
+      if (!chat || chat.isNotJoined) {
+        return false;
+      }
 
-  const tagOptions = useMemo(() => {
+      if (chat.type === 'chatTypeSuperGroup') {
+        return true;
+      }
+
+      if (chat.type === 'chatTypeBasicGroup') {
+        if (migratedLegacyChatIds.has(chat.id)) {
+          return false;
+        }
+
+        return true;
+      }
+
+      return false;
+    });
+  }, [safeChats, migratedLegacyChatIds]);
+
+ const tagOptions = useMemo(() => {
     const options = [{
       value: DEFAULT_TAG_OPTION,
       text: lang('CustomerServiceAllTags'),
@@ -106,11 +142,30 @@ const GroupFiltersTab: FC<Props> = ({
       }
     }
 
+    const sorted = filtered.slice();
+    const monitoredSet = new Set(safeMonitoredChatIds);
+
+    sorted.sort((chatA, chatB) => {
+      const isChatAChecked = monitoredSet.has(chatA.id);
+      const isChatBChecked = monitoredSet.has(chatB.id);
+
+      if (isChatAChecked !== isChatBChecked) {
+        return isChatAChecked ? 1 : -1;
+      }
+
+      return (chatA.title || '').localeCompare(chatB.title || '');
+    });
+
     return {
-      filteredChats: filtered,
+      filteredChats: sorted,
       hasRegexError: regexError,
     };
-  }, [allGroupChats, groupSearchQuery, selectedTagId]);
+  }, [
+    allGroupChats,
+    groupSearchQuery,
+    selectedTagId,
+    safeMonitoredChatIds,
+  ]);
 
   useEffect(() => {
     if (!groupChats.length) {

@@ -2,7 +2,7 @@ import type React from '../../../../lib/teact/teact';
 import { memo, useEffect, useMemo, useState } from '../../../../lib/teact/teact';
 import { getActions, withGlobal } from '../../../../global';
 
-import type { ApiChat } from '../../../../api/types';
+import type { ApiChat, ApiChatFullInfo } from '../../../../api/types';
 import type { CustomerServiceQuickReply } from '../../../../global/types/customerServiceV2';
 
 import { CUSTOMER_SERVICE_CONFIG } from '../../../../config/customerService';
@@ -29,6 +29,7 @@ import styles from './CustomerServiceSettingsModal.module.scss';
 type StateProps = {
   isOpen?: boolean;
   chats: Record<string, ApiChat>;
+  chatFullInfos: Record<string, ApiChatFullInfo>;
   users: Record<string, any>;
   chatFolders: Record<number, any>;
   orderedFolderIds?: number[];
@@ -77,6 +78,7 @@ const buildFilterSettings = (saved?: SavedSettings): FilterSettings => ({
 const CustomerServiceSettingsModal = ({
   isOpen,
   chats,
+  chatFullInfos,
   users,
   chatFolders,
   orderedFolderIds,
@@ -258,6 +260,7 @@ const CustomerServiceSettingsModal = ({
           {activeTab === 0 && (
             <GroupFiltersTab
               chats={chats}
+              chatFullInfos={chatFullInfos}
               chatFolders={chatFolders}
               orderedFolderIds={orderedFolderIds}
               monitoredChatIds={settings.monitoredChatIds}
@@ -356,6 +359,7 @@ const CustomerServiceSettingsModal = ({
 
 export default memo(withGlobal((global): StateProps => {
   const chats = global.chats.byId;
+  const chatFullInfos = global.chats.fullInfoById;
   const users = global.users.byId;
   const {
     byId: chatFolders,
@@ -367,6 +371,7 @@ export default memo(withGlobal((global): StateProps => {
   return {
     isOpen: tabState.isCustomerServiceV2SettingsOpen,
     chats,
+    chatFullInfos: chatFullInfos || {},
     users,
     chatFolders: chatFolders || {},
     orderedFolderIds,
