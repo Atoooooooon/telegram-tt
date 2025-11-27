@@ -369,7 +369,7 @@
 "CustomerServiceQuickReplyModeSend" = "自动发送";
 "CustomerServiceQuickReplyModeInsert" = "填入输入框";
 "CustomerServiceQuickReplyModeLabel" = "回复方式";
-"CustomerServiceQuickReplyPanelHint" = "按住标题可拖动面板，绿色表示自动发送，蓝色表示填入输入框。";
+"CustomerServiceQuickReplyPanelHint" = "全局开关";
 "CustomerServiceAllTags" = "所有标签";
 "CustomerServiceRemoveFilteredUser" = "移除过滤用户";
 "CustomerServiceRemoveRegex" = "删除规则";

@@ -550,9 +550,6 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
             </button>
           ))}
         </div>
-        <div className={styles.hint}>
-          {lang('CustomerServiceQuickReplyPanelHint')}
-        </div>
       </div>
     </Portal>
   );
