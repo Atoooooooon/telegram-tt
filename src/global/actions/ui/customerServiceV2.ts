@@ -13,6 +13,11 @@ import {
   normalizeCustomerServiceQuickReplies,
   saveCustomerServiceV2SettingsToStorage,
 } from '../../helpers/customerServiceV2Settings';
+import {
+  computeCustomerServiceSettingsHash,
+  loadCustomerServiceCloudSyncPreference,
+  updateCustomerServiceCloudSyncPreferenceForToken,
+} from '../../helpers/customerServiceCloudSyncPreference';
 import { addActionHandler, getGlobal, setGlobal } from '../../index';
 import { updateTabState } from '../../reducers/tabs';
 import { selectChat, selectCurrentMessageList, selectTabState } from '../../selectors';
@@ -21,6 +26,7 @@ import {
   selectCustomerServiceV2State,
 } from '../../selectors/customerServiceV2';
 import useLang from '../../../hooks/useLang';
+import { getTranslationFn } from '../../../util/localization';
 
 function ownersMatch(left?: string, right?: string): boolean {
   if (!left || !right) {
@@ -48,6 +54,29 @@ function ensureCustomerServiceV2State(state?: CustomerServiceV2State): CustomerS
     lastSyncTimestamp: Date.now(),
     messageCount: 0,
   };
+}
+
+let hasScheduledCustomerServiceAutoCloudSync = false;
+
+function logCustomerServiceCloudSyncDebug(...args: unknown[]) {
+  if (typeof console === 'undefined') {
+    return;
+  }
+
+  // eslint-disable-next-line no-console
+  console.log('[CustomerServiceCloudSync]', ...args);
+}
+
+function maskCloudSyncToken(token?: string) {
+  if (!token) {
+    return undefined;
+  }
+
+  if (token.length <= 6) {
+    return `${token[0] ?? ''}***${token[token.length - 1] ?? ''}`;
+  }
+
+  return `${token.slice(0, 3)}***${token.slice(-2)}`;
 }
 
 function getDefaultCustomerServiceV2Settings(): CustomerServiceSettings {
@@ -450,6 +479,15 @@ addActionHandler('initCustomerServiceV2', (global, actions, payload): ActionRetu
 
   const tabState = selectTabState(global, tabId);
 
+  if (!hasScheduledCustomerServiceAutoCloudSync) {
+    hasScheduledCustomerServiceAutoCloudSync = true;
+    void actions.autoSyncCustomerServiceV2Cloud({ tabId });
+    // Run auto-sync again shortly after initial boot to ensure state/user data is ready
+    setTimeout(() => {
+      void actions.autoSyncCustomerServiceV2Cloud({ tabId });
+    }, 2000);
+  }
+
   // Only initialize if not already present
   if (!tabState.customerServiceV2) {
     const settings = loadCustomerServiceV2SettingsFromStorage() || undefined;
@@ -665,6 +703,7 @@ addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload):
     tabId = getCurrentTabId(),
     operation = 'auto',
     existingData,
+    localSettings,
     onExisting,
     onDownload,
     onUpload,
@@ -682,10 +721,25 @@ addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload):
   const currentUserId = currentGlobal.currentUserId ? String(currentGlobal.currentUserId) : undefined;
 
   const getLocalSettings = () => (
-    baseState.settings
+    localSettings
+    || baseState.settings
     || loadCustomerServiceV2SettingsFromStorage()
     || getDefaultCustomerServiceV2Settings()
   );
+
+  const updatePreferenceMetadata = (normalizedSettings: CustomerServiceSettings, meta?: {
+    ownerId?: string;
+    version?: number;
+    updatedAt?: number;
+  }) => {
+    updateCustomerServiceCloudSyncPreferenceForToken(trimmedToken, (prev) => ({
+      ...prev,
+      ownerId: meta?.ownerId ?? prev.ownerId,
+      lastVersion: meta?.version ?? prev.lastVersion,
+      lastUpdatedAt: meta?.updatedAt ?? prev.lastUpdatedAt,
+      lastSettingsHash: computeCustomerServiceSettingsHash(normalizedSettings),
+    }));
+  };
 
   const persistSettings = (nextSettings: CustomerServiceSettings, meta?: {
     ownerId?: string;
@@ -704,6 +758,7 @@ addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload):
     currentGlobal = syncCustomerServiceV2StateAcrossTabs(currentGlobal, nextState);
 
     setGlobal(currentGlobal);
+    updatePreferenceMetadata(normalized, meta);
     onDownload?.({
       ownerId: meta?.ownerId,
       version: meta?.version,
@@ -718,9 +773,16 @@ addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload):
         throw new Error('当前用户未登录，无法上传配置');
       }
 
+      const normalizedLocal = normalizeSettingsForSave(getLocalSettings());
       const response = await uploadCustomerServiceCloudConfig(trimmedToken, {
         ownerId: currentUserId,
-        settings: normalizeSettingsForSave(getLocalSettings()),
+        settings: normalizedLocal,
+      });
+
+      updatePreferenceMetadata(normalizedLocal, {
+        ownerId: currentUserId,
+        version: response.version,
+        updatedAt: response.updatedAt,
       });
 
       onUpload?.({
@@ -786,9 +848,16 @@ addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload):
       throw new Error('当前用户未登录，无法创建云端配置');
     }
 
+    const normalizedLocal = normalizeSettingsForSave(getLocalSettings());
     const response = await uploadCustomerServiceCloudConfig(trimmedToken, {
       ownerId: currentUserId,
-      settings: normalizeSettingsForSave(getLocalSettings()),
+      settings: normalizedLocal,
+    });
+
+    updatePreferenceMetadata(normalizedLocal, {
+      ownerId: currentUserId,
+      version: response.version,
+      updatedAt: response.updatedAt,
     });
 
     onUpload?.({
@@ -797,6 +866,171 @@ addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload):
     });
   } catch (error) {
     onError?.(error instanceof Error ? error : new Error('Cloud sync failed'));
+  }
+});
+
+addActionHandler('autoSyncCustomerServiceV2Cloud', async (global, actions, payload): Promise<void> => {
+  const { tabId = getCurrentTabId() } = payload || {};
+  const preference = loadCustomerServiceCloudSyncPreference();
+  if (!preference?.token) {
+    return;
+  }
+
+  const trimmedToken = preference.token.trim();
+  if (!trimmedToken) {
+    return;
+  }
+
+  let currentGlobal = global;
+  const baseState = ensureCustomerServiceV2State(selectCustomerServiceV2State(currentGlobal, tabId));
+  const currentUserId = currentGlobal.currentUserId ? String(currentGlobal.currentUserId) : undefined;
+  const translate = getTranslationFn();
+
+  logCustomerServiceCloudSyncDebug('autoSync:start', {
+    tabId,
+    token: maskCloudSyncToken(trimmedToken),
+    preferenceVersion: preference.lastVersion,
+    preferenceHash: preference.lastSettingsHash,
+    preferenceOwnerId: preference.ownerId,
+    currentUserId,
+  });
+
+  const persistDownloadedSettings = (settings: CustomerServiceSettings, meta?: {
+    ownerId?: string;
+    version?: number;
+    updatedAt?: number;
+  }) => {
+    const normalized = normalizeSettingsForSave(settings);
+    saveCustomerServiceV2SettingsToStorage(normalized);
+
+    currentGlobal = getGlobal();
+    const refreshedState = ensureCustomerServiceV2State(selectCustomerServiceV2State(currentGlobal, tabId));
+
+    const nextState: CustomerServiceV2State = {
+      ...refreshedState,
+      settings: normalized,
+    };
+
+    currentGlobal = syncCustomerServiceV2StateAcrossTabs(currentGlobal, nextState);
+    setGlobal(currentGlobal);
+
+    updateCustomerServiceCloudSyncPreferenceForToken(trimmedToken, (prev) => ({
+      ...prev,
+      ownerId: meta?.ownerId ?? prev.ownerId,
+      lastVersion: meta?.version ?? prev.lastVersion,
+      lastUpdatedAt: meta?.updatedAt ?? prev.lastUpdatedAt,
+      lastSettingsHash: computeCustomerServiceSettingsHash(normalized),
+    }));
+
+    logCustomerServiceCloudSyncDebug('autoSync:applyCloudSettings', {
+      token: maskCloudSyncToken(trimmedToken),
+      version: meta?.version,
+      ownerId: meta?.ownerId,
+      updatedAt: meta?.updatedAt,
+    });
+
+    actions.showNotification({
+      message: translate('CustomerServiceCloudSyncUpdated'),
+      tabId,
+    });
+  };
+
+  try {
+    const cloud = await fetchCustomerServiceCloudConfig(trimmedToken, currentUserId);
+    if (!cloud?.settings) {
+      logCustomerServiceCloudSyncDebug('autoSync:noCloudSettings', {
+        token: maskCloudSyncToken(trimmedToken),
+      });
+      return;
+    }
+
+    // Lightweight bubble to indicate that an automatic cloud sync is in progress.
+    // actions.showNotification({
+    //   message: translate('CustomerServiceCloudSyncChecking'),
+    //   tabId,
+    // });
+
+    const ownerId = cloud.ownerId ? String(cloud.ownerId) : undefined;
+    const normalizedIncoming = normalizeSettingsForSave(cloud.settings as CustomerServiceSettings);
+    const incomingHash = computeCustomerServiceSettingsHash(normalizedIncoming);
+    const remoteVersion = typeof cloud.version === 'number' ? cloud.version : 0;
+    const lastVersion = preference.lastVersion || 0;
+    const hasRemoteChanged = preference.lastVersion !== remoteVersion
+      || preference.lastSettingsHash !== incomingHash;
+
+    const canUpdate = cloud.canUpdate ?? ownersMatch(ownerId, currentUserId);
+
+    logCustomerServiceCloudSyncDebug('autoSync:fetched', {
+      token: maskCloudSyncToken(trimmedToken),
+      ownerId,
+      remoteVersion,
+      lastVersion,
+      canUpdate,
+      hasRemoteChanged,
+      incomingHash,
+      storedHash: preference.lastSettingsHash,
+    });
+
+    if (!canUpdate) {
+      if (hasRemoteChanged) {
+        persistDownloadedSettings(normalizedIncoming, {
+          ownerId,
+          version: remoteVersion,
+          updatedAt: cloud.updatedAt,
+        });
+      } else {
+        updateCustomerServiceCloudSyncPreferenceForToken(trimmedToken, (prev) => ({
+          ...prev,
+          ownerId: ownerId ?? prev.ownerId,
+          lastVersion: remoteVersion,
+          lastUpdatedAt: cloud.updatedAt ?? prev.lastUpdatedAt,
+          lastSettingsHash: incomingHash,
+        }));
+        logCustomerServiceCloudSyncDebug('autoSync:noChangeNonOwner', {
+          token: maskCloudSyncToken(trimmedToken),
+          remoteVersion,
+        });
+        actions.showNotification({
+          message: translate('CustomerServiceCloudSyncNoChange'),
+          tabId,
+        });
+      }
+      return;
+    }
+
+    if (hasRemoteChanged && remoteVersion > lastVersion) {
+      persistDownloadedSettings(normalizedIncoming, {
+        ownerId: ownerId || currentUserId,
+        version: remoteVersion,
+        updatedAt: cloud.updatedAt,
+      });
+      return;
+    }
+
+    updateCustomerServiceCloudSyncPreferenceForToken(trimmedToken, (prev) => ({
+      ...prev,
+      ownerId: ownerId ?? prev.ownerId ?? currentUserId,
+      lastVersion: remoteVersion,
+      lastUpdatedAt: cloud.updatedAt ?? prev.lastUpdatedAt,
+      lastSettingsHash: incomingHash,
+    }));
+    logCustomerServiceCloudSyncDebug('autoSync:noChangeOwner', {
+      token: maskCloudSyncToken(trimmedToken),
+      remoteVersion,
+    });
+    actions.showNotification({
+      message: translate('CustomerServiceCloudSyncNoChange'),
+      tabId,
+    });
+  } catch (error) {
+    logCustomerServiceCloudSyncDebug('autoSync:error', {
+      token: maskCloudSyncToken(preference.token),
+      error,
+    });
+    actions.showNotification({
+      message: translate('CustomerServiceCloudSyncFailed'),
+      tabId,
+    });
   }
 });
 
@@ -829,7 +1063,25 @@ addActionHandler('saveCustomerServiceV2Settings', (global, actions, payload): Ac
     settings: normalized,
   };
 
-  return syncCustomerServiceV2StateAcrossTabs(global, nextState);
+  const nextGlobal = syncCustomerServiceV2StateAcrossTabs(global, nextState);
+
+  // After saving locally, if current user is the owner of a managed cloud token,
+  // upload the latest settings in the background.
+  const preference = loadCustomerServiceCloudSyncPreference();
+  const token = preference?.token?.trim();
+  const currentUserId = nextGlobal.currentUserId ? String(nextGlobal.currentUserId) : undefined;
+  const ownerId = preference?.ownerId;
+
+  if (token && currentUserId && ownerId && ownersMatch(ownerId, currentUserId)) {
+    void actions.syncCustomerServiceV2Cloud({
+      tabId,
+      token,
+      operation: 'upload',
+      localSettings: normalized,
+    });
+  }
+
+  return nextGlobal;
 });
 
 addActionHandler('exportCustomerServiceV2Settings', (global, actions, payload): ActionReturnType => {

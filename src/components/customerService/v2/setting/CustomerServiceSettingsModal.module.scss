@@ -285,6 +285,12 @@
   }
 }
 
+.cloudSyncAutoListen {
+  :global(.Checkbox) {
+    margin: 0;
+  }
+}
+
 .cloudSyncStatusSuccess,
 .cloudSyncStatusError {
   display: flex;

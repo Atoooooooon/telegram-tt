@@ -112,7 +112,7 @@ addActionHandler('initShared', (): ActionReturnType => {
   startWebsync();
 });
 
-addActionHandler('initMain', (global): ActionReturnType => {
+addActionHandler('initMain', (global, actions): ActionReturnType => {
   const { hasWebNotifications, hasPushNotifications } = selectSettingsKeys(global);
   if (hasWebNotifications && hasPushNotifications) {
     // Most of the browsers only show the notifications permission prompt after the first user gesture.
@@ -127,6 +127,11 @@ addActionHandler('initMain', (global): ActionReturnType => {
       document.addEventListener(event, subscribeAfterUserGesture, { once: true });
     });
   }
+
+  // Initialize Customer Service V2 module (including one-time auto cloud sync)
+  actions.initCustomerServiceV2({ tabId: getCurrentTabId() });
+
+  return global;
 });
 
 addCallback((global: GlobalState) => {

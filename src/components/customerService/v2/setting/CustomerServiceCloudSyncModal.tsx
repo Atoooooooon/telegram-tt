@@ -1,14 +1,23 @@
 import type { FC } from '../../../../lib/teact/teact';
-import { memo, useState } from '../../../../lib/teact/teact';
+import { memo, useEffect, useState } from '../../../../lib/teact/teact';
 import { getActions } from '../../../../global';
 
 import type { CustomerServiceSettings } from '../../../../global/types/customerServiceV2';
 
+import {
+  clearCustomerServiceCloudSyncPreference,
+  loadCustomerServiceCloudSyncPreference,
+  saveCustomerServiceCloudSyncPreference,
+} from '../../../../global/helpers/customerServiceCloudSyncPreference';
 import useLastCallback from '../../../../hooks/useLastCallback';
+import useSelector from '../../../../hooks/data/useSelector';
 import useLang from '../../../../hooks/useLang';
+
+import type { GlobalState } from '../../../../global/types';
 
 import Icon from '../../../common/icons/Icon';
 import Button from '../../../ui/Button';
+import Checkbox from '../../../ui/Checkbox';
 import InputText from '../../../ui/InputText';
 import Modal from '../../../ui/Modal';
 
@@ -34,15 +43,58 @@ type ExistingInfo = {
   settings: CustomerServiceSettings;
 };
 
+type ListenerRole = 'owner' | 'follower' | 'unknown';
+
+function ownersMatch(left?: string, right?: string): boolean {
+  if (!left || !right) {
+    return false;
+  }
+  if (left === right) {
+    return true;
+  }
+
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+
+  return Number.isFinite(leftNumber) && Number.isFinite(rightNumber) && leftNumber === rightNumber;
+}
+
 const CustomerServiceCloudSyncModal: FC<Props> = ({ isOpen, onClose, onDownloaded, onUploaded }) => {
   const { syncCustomerServiceV2Cloud } = getActions();
   const lang = useLang();
+  const currentUserId = useSelector((global: GlobalState) => (
+    global.currentUserId ? String(global.currentUserId) : undefined
+  ));
 
   const [token, setToken] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<Status>();
   const [lastToken, setLastToken] = useState<string>();
   const [existingInfo, setExistingInfo] = useState<ExistingInfo>();
+  const [isAutoListening, setIsAutoListening] = useState(false);
+  const [listenerRole, setListenerRole] = useState<ListenerRole>('unknown');
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const preference = loadCustomerServiceCloudSyncPreference();
+    if (preference?.token) {
+      setToken(preference.token);
+      setIsAutoListening(true);
+      if (preference.ownerId && currentUserId) {
+        setListenerRole(
+          ownersMatch(preference.ownerId, currentUserId) ? 'owner' : 'follower',
+        );
+      } else {
+        setListenerRole('unknown');
+      }
+    } else {
+      setIsAutoListening(false);
+      setListenerRole('unknown');
+    }
+  }, [isOpen, currentUserId]);
 
   const resetState = useLastCallback(() => {
     setToken('');
@@ -50,12 +102,22 @@ const CustomerServiceCloudSyncModal: FC<Props> = ({ isOpen, onClose, onDownloade
     setStatus(undefined);
     setLastToken(undefined);
     setExistingInfo(undefined);
+    setListenerRole('unknown');
   });
 
   const clearForm = useLastCallback(() => {
-    setToken('');
+    if (!isAutoListening) {
+      setToken('');
+    }
     setLastToken(undefined);
     setExistingInfo(undefined);
+  });
+
+  const handleAutoListenChange = useLastCallback((checked: boolean) => {
+    setIsAutoListening(checked);
+    if (!checked) {
+      clearCustomerServiceCloudSyncPreference();
+    }
   });
 
   const getDetectedMessage = useLastCallback((ownerId?: string) => (
@@ -95,6 +157,12 @@ const CustomerServiceCloudSyncModal: FC<Props> = ({ isOpen, onClose, onDownloade
     setStatus(undefined);
     setLastToken(trimmed);
     setExistingInfo(undefined);
+    if (isAutoListening) {
+      saveCustomerServiceCloudSyncPreference({
+        token: trimmed,
+        mode: 'listen',
+      });
+    }
 
     syncCustomerServiceV2Cloud({
       token: trimmed,
@@ -112,13 +180,17 @@ const CustomerServiceCloudSyncModal: FC<Props> = ({ isOpen, onClose, onDownloade
           type: 'success',
           message: getDetectedMessage(info.ownerId),
         });
+        setListenerRole('owner');
       },
-      onDownload: ({ ownerId }) => {
+      onDownload: ({ ownerId, canUpdate }) => {
         setIsLoading(false);
         setStatus({
           type: 'success',
           message: getDownloadSuccessMessage(ownerId),
         });
+        if (typeof canUpdate === 'boolean') {
+          setListenerRole(canUpdate ? 'owner' : 'follower');
+        }
         clearForm();
         onDownloaded?.();
       },
@@ -205,6 +277,18 @@ const CustomerServiceCloudSyncModal: FC<Props> = ({ isOpen, onClose, onDownloade
 
   const canUpdate = Boolean(existingInfo && existingInfo.canUpdate !== false);
 
+  const autoListenLabel = listenerRole === 'owner'
+    ? lang('CustomerServiceCloudSyncListenLabelOwner')
+    : listenerRole === 'follower'
+      ? lang('CustomerServiceCloudSyncListenLabelNonOwner')
+      : lang('CustomerServiceCloudSyncListenLabel');
+
+  const autoListenDescriptionKey = listenerRole === 'owner'
+    ? 'CustomerServiceCloudSyncListenDescriptionOwner'
+    : listenerRole === 'follower'
+      ? 'CustomerServiceCloudSyncListenDescriptionNonOwner'
+      : 'CustomerServiceCloudSyncListenDescription';
+
   return (
     <Modal
       isOpen={isOpen}
@@ -224,6 +308,16 @@ const CustomerServiceCloudSyncModal: FC<Props> = ({ isOpen, onClose, onDownloade
           className={styles.cloudSyncInput}
           disabled={isLoading}
         />
+
+        <div className={styles.cloudSyncAutoListen}>
+          <Checkbox
+            checked={isAutoListening}
+            onCheck={handleAutoListenChange}
+            label={autoListenLabel}
+            subLabel={lang(autoListenDescriptionKey)}
+            disabled={isLoading}
+          />
+        </div>
 
         {status && (
           <div
