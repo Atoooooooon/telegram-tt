@@ -22,7 +22,6 @@ import { getMessageKey, isLocalMessageId } from '../../../util/keys/messageKey';
 import { notifyAboutMessage } from '../../../util/notifications';
 import { onTickEnd } from '../../../util/schedulers';
 import { getServerTime } from '../../../util/serverTime';
-import { callApi } from '../../../api/gramjs';
 import {
   addPaidReaction,
   checkIfHasUnreadReactions,

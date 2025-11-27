@@ -303,11 +303,17 @@ addActionHandler('removeCustomerServiceV2Messages', (global, actions, payload): 
 
     if (nextState.settings?.mode === 'assist' && nextState.pausedChats) {
       const updatedPaused: typeof nextState.pausedChats = {};
-      Object.entries(nextState.pausedChats).forEach(([pausedChatId, value]) => {
+      const pausedChatIds = Object.keys(nextState.pausedChats);
+      for (let i = 0; i < pausedChatIds.length; i += 1) {
+        const pausedChatId = pausedChatIds[i];
+        const value = nextState.pausedChats[pausedChatId];
+        if (!value) {
+          continue;
+        }
         if ((messagesByChatId[pausedChatId] || []).length > 0) {
           updatedPaused[pausedChatId] = value;
         }
-      });
+      }
       nextState.pausedChats = updatedPaused;
     }
 
@@ -668,18 +674,28 @@ addActionHandler('checkPausedChatsStatusV2', (global, actions, payload): ActionR
 
   const updatedPausedChats = { ...cs.pausedChats };
   let hasChanges = false;
+  const pausedChatIds = Object.keys(cs.pausedChats);
 
-  Object.entries(cs.pausedChats).forEach(([chatId, pauseInfo]) => {
+  for (let i = 0; i < pausedChatIds.length; i += 1) {
+    const chatId = pausedChatIds[i];
+    const pauseInfo = cs.pausedChats[chatId];
+
+    if (!pauseInfo) {
+      delete updatedPausedChats[chatId];
+      hasChanges = true;
+      continue;
+    }
+
     const chat = selectChat(global, chatId);
     if (!chat) {
-      return;
+      continue;
     }
 
     const lastTrackedMessageId = pauseInfo.lastMessageId;
     if (!lastTrackedMessageId) {
       delete updatedPausedChats[chatId];
       hasChanges = true;
-      return;
+      continue;
     }
 
     const isRead = Boolean(chat.lastReadInboxMessageId && chat.lastReadInboxMessageId >= lastTrackedMessageId);
@@ -691,7 +707,7 @@ addActionHandler('checkPausedChatsStatusV2', (global, actions, payload): ActionR
       delete updatedPausedChats[chatId];
       hasChanges = true;
     }
-  });
+  }
 
   if (!hasChanges) {
     return global;

@@ -92,9 +92,11 @@ export default function createConfig(
         },
         {
           directory: path.resolve(__dirname, 'node_modules/emoji-data-ios'),
+          watch: false,
         },
         {
           directory: path.resolve(__dirname, 'node_modules/opus-recorder/dist'),
+          watch: false,
         },
         {
           directory: path.resolve(__dirname, 'src/lib/rlottie'),
