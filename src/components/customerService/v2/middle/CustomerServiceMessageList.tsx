@@ -244,6 +244,11 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
                     event.stopPropagation();
                     handleContextNavigation(message.id);
                   }}
+                  onReplyClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    handleContextNavigation(message.id);
+                  }}
                 />
                 <div className={styles.messageActions}>
                   <Button

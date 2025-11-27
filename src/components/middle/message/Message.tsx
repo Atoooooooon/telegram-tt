@@ -1280,7 +1280,7 @@ const Message = ({
                 requestedChatTranslationTone={requestedTranslationTone}
                 observeIntersectionForLoading={observeIntersectionForLoading}
                 observeIntersectionForPlaying={observeIntersectionForPlaying}
-                onClick={handleReplyClick}
+                onClick={onReplyClick ? (event) => onReplyClick(event) : handleReplyClick}
               />
             )}
             {hasStoryReply && (
