@@ -414,16 +414,6 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
           // 不是监听的群组，不做任何客服相关处理
           console.log("Message from non-monitored chat:", chatId, "message:", message.id, "ignored");
         }
-
-        // Customer Service V2: Dual-write to CS V2 state (reuses same filter logic)
-        if (isMonitored) {
-          const isFiltered = shouldFilterMessage(chatId, message.senderId, messageText, global);
-          if (!isPaused && !isFiltered) {
-            // Add to CS V2 ephemeral state
-            const currentTabId = getCurrentTabId();
-            actions.addToCustomerServiceV2({ message: newMessage, chatId, tabId: currentTabId });
-          }
-        }
       }
 
       setGlobal(global);
