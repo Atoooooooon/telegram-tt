@@ -1,12 +1,14 @@
 import type { FC } from '../../../../lib/teact/teact';
-import { memo } from '../../../../lib/teact/teact';
+import { memo, useMemo } from '../../../../lib/teact/teact';
 import { getActions, withGlobal } from '../../../../global';
 
 import type { GlobalState } from '../../../../global/types';
+import type { CustomPeer } from '../../../../types';
 
 import { CUSTOMER_SERVICE_VIRTUAL_CHAT_ID } from '../../../../global/types/customerServiceV2';
 import buildClassName from '../../../../util/buildClassName';
 import { getCurrentTabId } from '../../../../util/establishMultitabRole';
+import { formatIntegerCompact } from '../../../../util/textFormat';
 
 import {
   selectCustomerServiceV2MessageCount,
@@ -16,10 +18,13 @@ import {
 import useLang from '../../../../hooks/useLang';
 import useLastCallback from '../../../../hooks/useLastCallback';
 
-import Icon from '../../../common/icons/Icon';
+import Avatar from '../../../common/Avatar';
+import FullNameTitle from '../../../common/FullNameTitle';
 import ListItem from '../../../ui/ListItem';
+import Badge from '../../../ui/Badge';
 
 import styles from './CustomerServiceListItem.module.scss';
+import '../../../left/main/Chat.scss';
 
 type OwnProps = {
   className?: string;
@@ -28,6 +33,13 @@ type OwnProps = {
 type StateProps = {
   messageCount: number;
   isActive: boolean;
+};
+
+const CUSTOMER_SERVICE_PEER: CustomPeer = {
+  isCustomPeer: true,
+  titleKey: 'CustomerService',
+  avatarIcon: 'headphone',
+  customPeerAvatarColor: 'var(--color-primary)',
 };
 
 const CustomerServiceListItem: FC<OwnProps & StateProps> = ({
@@ -46,30 +58,56 @@ const CustomerServiceListItem: FC<OwnProps & StateProps> = ({
   });
 
   const fullClassName = buildClassName(
+    'Chat',
+    'chat-item-clickable',
     styles.root,
     className,
-    isActive && styles.active,
+    isActive && 'selected',
+    'customer-service-chat',
   );
+
+  const badgeText = useMemo(() => (messageCount > 0 ? formatIntegerCompact(lang, messageCount) : undefined), [
+    lang,
+    messageCount,
+  ]);
+
+  const subtitle = useMemo(() => (
+    messageCount > 0 ? lang('CustomerServiceOnCallModeDescription') : lang('CustomerServiceEmptyHint')
+  ), [lang, messageCount]);
 
   return (
     <ListItem
       className={fullClassName}
       onClick={handleClick}
       ripple
+      style="top: 0"
     >
-      <div className={styles.wrapper}>
-        <div className={styles.icon}>
-          <Icon name="headphone" />
+      <div className="status status-clickable">
+        <Avatar
+          peer={CUSTOMER_SERVICE_PEER}
+          size="large"
+          withStory={false}
+        />
+      </div>
+      <div className="info">
+        <div className="info-row">
+          <FullNameTitle
+            peer={CUSTOMER_SERVICE_PEER}
+            noFake
+            noVerified
+            withEmojiStatus={false}
+          />
+          {badgeText && (
+            <>
+              <div className="separator" />
+              <Badge className={styles.badge} text={badgeText} />
+            </>
+          )}
         </div>
-        <div className={styles.content}>
-          <div className={styles.title}>
-            {lang('CustomerService')}
-            {messageCount > 0 && (
-              <span className={styles.badge}>
-                {messageCount}
-              </span>
-            )}
-          </div>
+        <div className="subtitle">
+          <span className={styles.subtitle}>
+            {subtitle}
+          </span>
         </div>
       </div>
     </ListItem>

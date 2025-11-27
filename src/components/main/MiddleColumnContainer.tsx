@@ -1,6 +1,6 @@
 import type { RefObject } from 'react';
 import type { FC } from '../../lib/teact/teact';
-import { memo } from '../../lib/teact/teact';
+import { memo, useRef } from '../../lib/teact/teact';
 import { withGlobal } from '../../global';
 
 import { selectCurrentMessageList } from '../../global/selectors';
@@ -21,6 +21,7 @@ type OwnProps = {
 type StateProps = {
   isCustomerServiceV2Open?: boolean;
   isHalfScreen?: boolean;
+  leftColumnWidth?: number;
 };
 
 const MiddleColumnContainer: FC<OwnProps & StateProps> = ({
@@ -28,16 +29,27 @@ const MiddleColumnContainer: FC<OwnProps & StateProps> = ({
   isMobile,
   isCustomerServiceV2Open,
   isHalfScreen,
+  leftColumnWidth,
 }) => {
+  const customerServiceColumnRef = useRef<HTMLDivElement>();
+
   // In customer service mode with context viewing (half-screen)
   if (isCustomerServiceV2Open && isHalfScreen) {
     return (
       <>
-        <CustomerServiceMiddleColumn className={styles.customerServiceColumn} />
+        <CustomerServiceMiddleColumn
+          className={styles.customerServiceColumn}
+          leftColumnRef={leftColumnRef}
+          leftColumnWidth={leftColumnWidth}
+          onColumnRef={(node) => {
+            customerServiceColumnRef.current = node || undefined;
+          }}
+        />
         <MiddleColumn
           leftColumnRef={leftColumnRef}
           isHalfScreen={true}
           isMobile={isMobile}
+          customerServiceColumnRef={customerServiceColumnRef}
         />
       </>
     );
@@ -47,7 +59,13 @@ const MiddleColumnContainer: FC<OwnProps & StateProps> = ({
   if (isCustomerServiceV2Open) {
     return (
       <div className={styles.container}>
-        <CustomerServiceMiddleColumn />
+        <CustomerServiceMiddleColumn
+          leftColumnRef={leftColumnRef}
+          leftColumnWidth={leftColumnWidth}
+          onColumnRef={(node) => {
+            customerServiceColumnRef.current = node || undefined;
+          }}
+        />
       </div>
     );
   }
@@ -75,6 +93,7 @@ export default memo(withGlobal<OwnProps>(
     return {
       isCustomerServiceV2Open,
       isHalfScreen,
+      leftColumnWidth: global.leftColumnWidth,
     };
   },
 )(MiddleColumnContainer));

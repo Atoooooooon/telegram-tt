@@ -190,9 +190,15 @@ const MessageInput = ({
     // Defer to avoid animation/layout conflicts during DOM updates
     fastRaf(() => {
       requestForcedReflow(() => {
-        const scroller = inputRef.current!.closest<HTMLDivElement>(`.${SCROLLER_CLASS}`)!;
+        const inputEl = inputRef.current;
+        const scroller = inputEl?.closest<HTMLDivElement>(`.${SCROLLER_CLASS}`);
+        const clone = scrollerCloneRef.current;
+
+        if (!inputEl || !scroller || !clone) {
+          return undefined;
+        }
+
         const currentHeight = Number(scroller.style.height.replace('px', ''));
-        const clone = scrollerCloneRef.current!;
         const { scrollHeight } = clone;
         const newHeight = Math.min(scrollHeight, maxInputHeight);
 
@@ -307,7 +313,15 @@ const MessageInput = ({
 
     const selectionRange = window.getSelection()!.getRangeAt(0);
     const selectionRect = selectionRange.getBoundingClientRect();
-    const scrollerRect = inputRef.current!.closest<HTMLDivElement>(`.${SCROLLER_CLASS}`)!.getBoundingClientRect();
+    const inputEl = inputRef.current;
+    const scroller = inputEl?.closest<HTMLDivElement>(`.${SCROLLER_CLASS}`);
+
+    if (!inputEl || !scroller) {
+      closeTextFormatter();
+      return;
+    }
+
+    const scrollerRect = scroller.getBoundingClientRect();
 
     let x = (selectionRect.left + selectionRect.width / 2) - scrollerRect.left;
 

@@ -105,6 +105,7 @@ import backgroundStyles from '../../styles/_patternBackground.module.scss';
 
 interface OwnProps {
   leftColumnRef: ElementRef<HTMLDivElement>;
+  customerServiceColumnRef?: ElementRef<HTMLDivElement>;
   isMobile?: boolean;
 }
 
@@ -173,9 +174,12 @@ function isVideo(item: DataTransferItem) {
 }
 
 const LAYER_ANIMATION_DURATION_MS = 450 + ANIMATION_END_DELAY;
+const MIN_CUSTOMER_SERVICE_WIDTH = 14 * 16; // 14rem
+const MAX_CUSTOMER_SERVICE_WIDTH = 30 * 16; // 30rem
 
 function MiddleColumn({
   leftColumnRef,
+  customerServiceColumnRef,
   chatId,
   threadId,
   isComments,
@@ -378,6 +382,65 @@ function MiddleColumn({
     leftColumnWidth: n,
   }), resetLeftColumnWidth, leftColumnWidth, '--left-column-width');
 
+  const handleCustomerServiceResizeMouseDown = useLastCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDesktop || !customerServiceColumnRef?.current) {
+      return;
+    }
+
+    event.preventDefault();
+    document.body.classList.add('cursor-ew-resize');
+    customerServiceInitialMouseXRef.current = event.clientX;
+    customerServiceInitialWidthRef.current = customerServiceColumnRef.current.offsetWidth;
+    setIsCustomerServiceResizing(true);
+  });
+
+  const handleCustomerServiceResizeDoubleClick = useLastCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const mainElement = document.getElementById('Main');
+    mainElement?.style.removeProperty('--customer-service-column-width');
+    document.body.classList.remove('cursor-ew-resize');
+    setIsCustomerServiceResizing(false);
+  });
+
+  useEffect(() => {
+    if (!isCustomerServiceResizing) {
+      return undefined;
+    }
+
+    const mainElement = document.getElementById('Main');
+    const columnElement = customerServiceColumnRef?.current;
+
+    if (!mainElement || !columnElement) {
+      document.body.classList.remove('cursor-ew-resize');
+      setIsCustomerServiceResizing(false);
+      return undefined;
+    }
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const delta = event.clientX - customerServiceInitialMouseXRef.current;
+      const newWidth = Math.min(
+        MAX_CUSTOMER_SERVICE_WIDTH,
+        Math.max(MIN_CUSTOMER_SERVICE_WIDTH, customerServiceInitialWidthRef.current + delta),
+      );
+
+      mainElement.style.setProperty('--customer-service-column-width', `${newWidth}px`);
+    };
+
+    const stopResize = () => {
+      document.body.classList.remove('cursor-ew-resize');
+      setIsCustomerServiceResizing(false);
+      document.removeEventListener('mousemove', handleMouseMove, false);
+      document.removeEventListener('mouseup', stopResize, false);
+      document.removeEventListener('blur', stopResize, false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove, false);
+    document.addEventListener('mouseup', stopResize, false);
+    document.addEventListener('blur', stopResize, false);
+
+    return stopResize;
+  }, [customerServiceColumnRef, isCustomerServiceResizing]);
+
   const handleDragEnter = useLastCallback((e: React.DragEvent<HTMLDivElement>) => {
     const { items } = e.dataTransfer || {};
     // In Safari, the e.dataTransfer.items list may be empty during dragenter/dragover events,
@@ -506,6 +569,8 @@ function MiddleColumn({
     || (isPinnedMessageList && canUnpin) || canShowOpenChatButton || renderingCanUnblock,
   );
   const withExtraShift = Boolean(isMessagingDisabled || isSelectModeActive);
+  const shouldRenderLeftResizeHandle = isDesktop && !isHalfScreen;
+  const shouldRenderCustomerServiceResizeHandle = isDesktop && isHalfScreen;
 
   return (
     <div
@@ -524,12 +589,19 @@ function MiddleColumn({
       )}
       onClick={(isTablet && isLeftColumnShown) ? handleTabletFocus : undefined}
     >
-      {isDesktop && (
+      {shouldRenderLeftResizeHandle && (
         <div
           className="resize-handle"
           onMouseDown={initResize}
           onMouseUp={handleMouseUp}
           onDoubleClick={resetResize}
+        />
+      )}
+      {shouldRenderCustomerServiceResizeHandle && (
+        <div
+          className="resize-handle"
+          onMouseDown={handleCustomerServiceResizeMouseDown}
+          onDoubleClick={handleCustomerServiceResizeDoubleClick}
         />
       )}
       <div

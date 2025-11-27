@@ -5,9 +5,4 @@
 .customerServiceColumn {
   height: 100%;
   min-width: 0;
-
-  @media (min-width: 926px) {
-    border-left: 1px solid var(--color-borders);
-    border-right: 1px solid var(--color-borders);
-  }
 }

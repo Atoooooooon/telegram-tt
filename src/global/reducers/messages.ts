@@ -78,18 +78,24 @@ export function updateCurrentMessageList<T extends GlobalState>(
   const { messageLists } = selectTabState(global, tabId);
   let newMessageLists: MessageList[];
   if (shouldReplaceHistory || (IS_TEST && !IS_MOCKED_CLIENT)) {
-    newMessageLists = chatId ? [{ chatId, threadId, type, isHalfScreen }] : [];
+    newMessageLists = chatId
+      ? [{
+        chatId,
+        threadId,
+        type,
+        ...(resolvedIsHalfScreen !== undefined ? { isHalfScreen: resolvedIsHalfScreen } : {}),
+      }]
+      : [];
   } else if (chatId) {
-    const current = messageLists[messageLists.length - 1];
     const nextMessageList: MessageList = {
       chatId,
       threadId,
       type,
-      ...(isHalfScreen !== undefined ? { isHalfScreen } : {}),
+      ...(resolvedIsHalfScreen !== undefined ? { isHalfScreen: resolvedIsHalfScreen } : {}),
     };
 
     if (current?.chatId === chatId && current.threadId === threadId && current.type === type) {
-      if (Boolean(current.isHalfScreen) === Boolean(isHalfScreen)) {
+      if (Boolean(current.isHalfScreen) === Boolean(resolvedIsHalfScreen)) {
         return global;
       }
 
