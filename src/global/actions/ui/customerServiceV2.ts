@@ -595,6 +595,14 @@ addActionHandler('applyCustomerServiceQuickReply', (global, actions, payload): A
       text: trimmedText,
       tabId,
     });
+
+    // Direct-send quick replies should behave like normal send:
+    // clear current draft (text + reply) after sending.
+    actions.clearDraft({
+      chatId: messageListDescriptor.chatId,
+      threadId: messageListDescriptor.threadId,
+      isLocalOnly: true,
+    });
   }
 
   return global;

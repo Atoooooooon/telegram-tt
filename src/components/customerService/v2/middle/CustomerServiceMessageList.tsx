@@ -52,7 +52,7 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
     openChat,
     focusMessage,
     setCustomerServiceV2Context,
-    sendMessage,
+    updateDraftReplyInfo,
   } = getActions();
   const lang = useLang();
 
@@ -73,12 +73,17 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
       tabId: getCurrentTabId(),
     });
 
-    // Focus on specific message after chat loads
+    // Focus on specific message after chat loads and mark it as reply target
     setTimeout(() => {
       focusMessage({
         chatId,
         messageId,
         isHalfScreen: true,
+        tabId: getCurrentTabId(),
+      });
+
+      updateDraftReplyInfo({
+        replyToMsgId: messageId,
         tabId: getCurrentTabId(),
       });
     }, 300);
