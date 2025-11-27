@@ -225,10 +225,12 @@ addActionHandler('clearCustomerServiceMessages', (global, actions, payload): Act
 
   return updateTabState(global, {
     customerService: {
+      ...currentCustomerService,
       messages: [],
       messagesByChatId: {},
       lastUpdated: Date.now(),
       repliedMessageIds: [],
+      // 保留重要状态：settings、pausedChats等
     },
   }, tabId);
 });
