@@ -23,6 +23,7 @@ import GroupFiltersTab from './tabs/GroupFiltersTab';
 import MessageFiltersTab from './tabs/MessageFiltersTab';
 import QuickRepliesTab from './tabs/QuickRepliesTab';
 import UserFiltersTab from './tabs/UserFiltersTab';
+import CustomerServiceCloudSyncModal from './CustomerServiceCloudSyncModal';
 
 import styles from './CustomerServiceSettingsModal.module.scss';
 
@@ -94,13 +95,20 @@ const CustomerServiceSettingsModal = ({
 
   const lang = useLang();
 
+  const hasCloudSync = Boolean(
+    CUSTOMER_SERVICE_CONFIG.CLOUD_SYNC_REDIS_URL
+    && CUSTOMER_SERVICE_CONFIG.CLOUD_SYNC_REDIS_TOKEN,
+  );
+
   const [activeTab, setActiveTab] = useState(0);
-  const [settings, setSettings] = useState<FilterSettings>(() => buildFilterSettings(savedSettings));
+  const [settings, setSettings] = useState<FilterSettings>(buildFilterSettings(savedSettings));
   const [hasInitialized, setHasInitialized] = useState(false);
+  const [isCloudSyncOpen, setIsCloudSyncOpen] = useState(false);
 
   useEffect(() => {
     if (!isOpen) {
       setHasInitialized(false);
+      setIsCloudSyncOpen(false);
       return;
     }
 
@@ -238,23 +246,24 @@ const CustomerServiceSettingsModal = ({
   }
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={handleClose}
-      className={styles.modal}
-      headerClassName={styles.header}
-      header={(
-        <div className={styles.titleRow}>
-          <Icon name="settings" className={styles.titleIcon} />
-          <TabList
-            tabs={tabs}
-            activeTab={activeTab}
-            onSwitchTab={setActiveTab}
-            className={styles.tabs}
-          />
-        </div>
-      )}
-    >
+    <>
+      <Modal
+        isOpen={isOpen}
+        onClose={handleClose}
+        className={styles.modal}
+        headerClassName={styles.header}
+        header={(
+          <div className={styles.titleRow}>
+            <Icon name="settings" className={styles.titleIcon} />
+            <TabList
+              tabs={tabs}
+              activeTab={activeTab}
+              onSwitchTab={setActiveTab}
+              className={styles.tabs}
+            />
+          </div>
+        )}
+      >
       <div className={styles.settingsModal}>
         <div className={styles.content}>
           {activeTab === 0 && (
@@ -322,6 +331,18 @@ const CustomerServiceSettingsModal = ({
               <Icon name="open-in-new-tab" />
               导入
             </Button>
+            {hasCloudSync && (
+              <Button
+                size="smaller"
+                color="translucent"
+                style="width: 5rem !important;"
+                onClick={() => setIsCloudSyncOpen(true)}
+                ariaLabel="云端同步"
+              >
+                <Icon name="cloud-download" />
+                云端
+              </Button>
+            )}
             <Button
               size="smaller"
               color="translucent"
@@ -353,7 +374,20 @@ const CustomerServiceSettingsModal = ({
           </div>
         </div>
       </div>
-    </Modal>
+      </Modal>
+      {hasCloudSync && (
+        <CustomerServiceCloudSyncModal
+          isOpen={isCloudSyncOpen}
+          onClose={() => setIsCloudSyncOpen(false)}
+          onDownloaded={() => {
+            setHasInitialized(false);
+          }}
+          onUploaded={() => {
+            setHasInitialized(false);
+          }}
+        />
+      )}
+    </>
   );
 };
 

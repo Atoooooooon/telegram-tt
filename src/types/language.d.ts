@@ -335,7 +335,6 @@ export interface LangPair {
   'CustomerServiceGroupsSelected': undefined;
   'CustomerServiceNoFilteredUsers': undefined;
   'CustomerServiceNoFilteredMessages': undefined;
-  'i18n_dragToSort': undefined;
   'CustomerServiceRegexExamples': undefined;
   'CustomerServiceSaveSettings': undefined;
   'CustomerServiceResetSettings': undefined;

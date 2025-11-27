@@ -9,6 +9,9 @@ import { normalizeCustomerServiceQuickReplies } from '../global/helpers/customer
 import { selectCustomerServiceSettings } from '../global/selectors/customerService';
 import { selectCustomerServiceV2Settings } from '../global/selectors/customerServiceV2';
 
+const envRedisUrl = process.env.UPSTASH_REDIS_REST_URL as string | undefined;
+const envRedisToken = process.env.UPSTASH_REDIS_REST_TOKEN as string | undefined;
+
 // Customer Service Configuration
 export const CUSTOMER_SERVICE_CONFIG = {
   // 监听的群组ID列表 - 这里填写实际的群组ID
@@ -59,6 +62,10 @@ export const CUSTOMER_SERVICE_CONFIG = {
 
   // 消息过期时间（24小时，单位：毫秒）
   MESSAGE_EXPIRE_TIME: 24 * 60 * 60 * 1000,
+
+  // 云端同步接口（可选）
+  CLOUD_SYNC_REDIS_URL: envRedisUrl,
+  CLOUD_SYNC_REDIS_TOKEN: envRedisToken,
 } as const;
 
 // 检查是否为监听的客服群组

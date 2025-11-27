@@ -36,6 +36,8 @@ process.env.BASE_URL = process.env.BASE_URL || PRODUCTION_URL;
 const {
   BASE_URL,
   APP_TITLE = DEFAULT_APP_TITLE,
+  UPSTASH_REDIS_REST_URL,
+  UPSTASH_REDIS_REST_TOKEN,
 } = process.env;
 
 const CSP = `
@@ -225,6 +227,8 @@ export default function createConfig(
         // eslint-disable-next-line no-null/no-null
         TEST_SESSION: null,
         BASE_URL,
+        UPSTASH_REDIS_REST_URL,
+        UPSTASH_REDIS_REST_TOKEN,
       }),
       // Updates each dev re-build to provide current git branch or commit hash
       new DefinePlugin({

@@ -7,6 +7,7 @@ import { CUSTOMER_SERVICE_CONFIG } from '../../../config/customerService';
 import { EDITABLE_INPUT_ID } from '../../../config';
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
 import { callApi } from '../../../api/gramjs';
+import { fetchCustomerServiceCloudConfig, uploadCustomerServiceCloudConfig } from '../../../api/customerServiceSync';
 import {
   loadCustomerServiceV2SettingsFromStorage,
   normalizeCustomerServiceQuickReplies,
@@ -20,6 +21,20 @@ import {
   selectCustomerServiceV2State,
 } from '../../selectors/customerServiceV2';
 import useLang from '../../../hooks/useLang';
+
+function ownersMatch(left?: string, right?: string): boolean {
+  if (!left || !right) {
+    return false;
+  }
+  if (left === right) {
+    return true;
+  }
+
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+
+  return Number.isFinite(leftNumber) && Number.isFinite(rightNumber) && leftNumber === rightNumber;
+}
 
 function ensureCustomerServiceV2State(state?: CustomerServiceV2State): CustomerServiceV2State {
   if (state) {
@@ -673,6 +688,151 @@ addActionHandler('checkPausedChatsStatusV2', (global, actions, payload): ActionR
     },
     tabId,
   );
+});
+
+addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload): Promise<void> => {
+  const {
+    token,
+    tabId = getCurrentTabId(),
+    operation = 'auto',
+    existingData,
+    onExisting,
+    onDownload,
+    onUpload,
+    onError,
+  } = payload || {};
+
+  const trimmedToken = token?.trim();
+  if (!trimmedToken) {
+    onError?.(new Error('Sync token is required'));
+    return;
+  }
+
+  let currentGlobal = global;
+  const baseState = ensureCustomerServiceV2State(selectCustomerServiceV2State(currentGlobal, tabId));
+  const currentUserId = currentGlobal.currentUserId ? String(currentGlobal.currentUserId) : undefined;
+
+  const getLocalSettings = () => (
+    baseState.settings
+    || loadCustomerServiceV2SettingsFromStorage()
+    || getDefaultCustomerServiceV2Settings()
+  );
+
+  const persistSettings = (nextSettings: CustomerServiceSettings, meta?: {
+    ownerId?: string;
+    version?: number;
+    updatedAt?: number;
+    canUpdate?: boolean;
+  }) => {
+    const normalized = normalizeSettingsForSave(nextSettings);
+    saveCustomerServiceV2SettingsToStorage(normalized);
+
+    const nextState: CustomerServiceV2State = {
+      ...baseState,
+      settings: normalized,
+    };
+
+    currentGlobal = updateTabState(
+      currentGlobal,
+      { customerServiceV2: nextState },
+      tabId,
+    );
+
+    setGlobal(currentGlobal);
+    onDownload?.({
+      ownerId: meta?.ownerId,
+      version: meta?.version,
+      updatedAt: meta?.updatedAt,
+      canUpdate: meta?.canUpdate,
+    });
+  };
+
+  try {
+    if (operation === 'upload') {
+      if (!currentUserId) {
+        throw new Error('当前用户未登录，无法上传配置');
+      }
+
+      const response = await uploadCustomerServiceCloudConfig(trimmedToken, {
+        ownerId: currentUserId,
+        settings: normalizeSettingsForSave(getLocalSettings()),
+      });
+
+      onUpload?.({
+        version: response.version,
+        updatedAt: response.updatedAt,
+      });
+      return;
+    }
+
+    if (operation === 'download') {
+      let cloud = existingData;
+      if (!cloud) {
+        const fetched = await fetchCustomerServiceCloudConfig(trimmedToken, currentUserId);
+        if (!fetched?.settings) {
+          throw new Error('云端未找到配置');
+        }
+
+        cloud = {
+          settings: normalizeSettingsForSave(fetched.settings as CustomerServiceSettings),
+          ownerId: fetched.ownerId,
+          version: fetched.version,
+          updatedAt: fetched.updatedAt,
+          canUpdate: fetched.canUpdate,
+        };
+      }
+
+      persistSettings(cloud.settings, {
+        ownerId: cloud.ownerId,
+        version: cloud.version,
+        updatedAt: cloud.updatedAt,
+        canUpdate: cloud.canUpdate,
+      });
+      return;
+    }
+
+    const existing = await fetchCustomerServiceCloudConfig(trimmedToken, currentUserId);
+    if (existing?.settings) {
+      const ownerId = existing.ownerId ? String(existing.ownerId) : undefined;
+      const normalizedIncoming = normalizeSettingsForSave(existing.settings as CustomerServiceSettings);
+      const canUpdate = existing.canUpdate ?? ownersMatch(ownerId, currentUserId);
+
+      if (canUpdate) {
+        onExisting?.({
+          ownerId,
+          version: existing.version,
+          updatedAt: existing.updatedAt,
+          settings: normalizedIncoming,
+          canUpdate,
+        });
+        return;
+      }
+
+      persistSettings(normalizedIncoming, {
+        ownerId,
+        version: existing.version,
+        updatedAt: existing.updatedAt,
+        canUpdate,
+      });
+      return;
+    }
+
+    if (!currentUserId) {
+      throw new Error('当前用户未登录，无法创建云端配置');
+    }
+
+    const response = await uploadCustomerServiceCloudConfig(trimmedToken, {
+      ownerId: currentUserId,
+      settings: normalizeSettingsForSave(getLocalSettings()),
+    });
+
+    onUpload?.({
+      version: response.version,
+      updatedAt: response.updatedAt,
+    });
+  } catch (error) {
+    onError?.(error instanceof Error ? error : new Error('Cloud sync failed'));
+  }
 });
 
 function normalizeSettingsForSave(settings: CustomerServiceSettings): CustomerServiceSettings {
