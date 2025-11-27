@@ -1,5 +1,5 @@
 import type { ApiMessage } from '../../api/types';
-import type { GlobalState, TabArgs } from '../types';
+import type { GlobalState } from '../types';
 import { CUSTOMER_SERVICE_VIRTUAL_CHAT_ID, type CustomerServiceV2State } from '../types/customerServiceV2';
 
 import { selectTabState } from './tabs';
@@ -7,9 +7,9 @@ import { selectTabState } from './tabs';
 /**
  * Select full Customer Service V2 state
  */
-export function selectCustomerServiceV2State<T extends GlobalState>(
-  global: T,
-  ...[tabId]: TabArgs<T>
+export function selectCustomerServiceV2State(
+  global: GlobalState,
+  tabId?: number,
 ): CustomerServiceV2State | undefined {
   const tabState = selectTabState(global, tabId);
   return tabState.customerServiceV2;
@@ -19,9 +19,9 @@ export function selectCustomerServiceV2State<T extends GlobalState>(
  * Select all Customer Service V2 messages
  * Returns flat array of messages (max 5000)
  */
-export function selectCustomerServiceV2Messages<T extends GlobalState>(
-  global: T,
-  ...[tabId]: TabArgs<T>
+export function selectCustomerServiceV2Messages(
+  global: GlobalState,
+  tabId?: number,
 ): ApiMessage[] {
   const cs = selectCustomerServiceV2State(global, tabId);
   return cs?.messages || [];
@@ -31,9 +31,9 @@ export function selectCustomerServiceV2Messages<T extends GlobalState>(
  * Select Customer Service V2 message IDs as flat array
  * Used for MessageList component
  */
-export function selectCustomerServiceV2MessageIds<T extends GlobalState>(
-  global: T,
-  ...[tabId]: TabArgs<T>
+export function selectCustomerServiceV2MessageIds(
+  global: GlobalState,
+  tabId?: number,
 ): number[] {
   const messages = selectCustomerServiceV2Messages(global, tabId);
   return messages.map((msg) => msg.id);
@@ -43,9 +43,9 @@ export function selectCustomerServiceV2MessageIds<T extends GlobalState>(
  * Select Customer Service V2 message count
  * Optimized with cached value from state
  */
-export function selectCustomerServiceV2MessageCount<T extends GlobalState>(
-  global: T,
-  ...[tabId]: TabArgs<T>
+export function selectCustomerServiceV2MessageCount(
+  global: GlobalState,
+  tabId?: number,
 ): number {
   const cs = selectCustomerServiceV2State(global, tabId);
   return cs?.messageCount || 0;
@@ -55,9 +55,9 @@ export function selectCustomerServiceV2MessageCount<T extends GlobalState>(
  * Check if Customer Service V2 view is currently open
  * Returns true when current message list chatId matches virtual chatId
  */
-export function selectIsCustomerServiceV2Open<T extends GlobalState>(
-  global: T,
-  ...[tabId]: TabArgs<T>
+export function selectIsCustomerServiceV2Open(
+  global: GlobalState,
+  tabId?: number,
 ): boolean {
   const tabState = selectTabState(global, tabId);
   const { messageLists } = tabState;
@@ -83,10 +83,10 @@ export function selectIsCustomerServiceV2Open<T extends GlobalState>(
  * Select messages by chat ID
  * Used for source badge and multi-chat display
  */
-export function selectCustomerServiceV2MessagesByChatId<T extends GlobalState>(
-  global: T,
+export function selectCustomerServiceV2MessagesByChatId(
+  global: GlobalState,
   chatId: string,
-  ...[tabId]: TabArgs<T>
+  tabId?: number,
 ): ApiMessage[] {
   const cs = selectCustomerServiceV2State(global, tabId);
   return cs?.messagesByChatId[chatId] || [];
@@ -96,9 +96,9 @@ export function selectCustomerServiceV2MessagesByChatId<T extends GlobalState>(
  * Select Customer Service V2 settings
  * Shared with V1 for compatibility
  */
-export function selectCustomerServiceV2Settings<T extends GlobalState>(
-  global: T,
-  ...[tabId]: TabArgs<T>
+export function selectCustomerServiceV2Settings(
+  global: GlobalState,
+  tabId?: number,
 ) {
   const cs = selectCustomerServiceV2State(global, tabId);
   return cs?.settings;
@@ -107,9 +107,9 @@ export function selectCustomerServiceV2Settings<T extends GlobalState>(
 /**
  * Select current context chat ID (Phase 2)
  */
-export function selectCustomerServiceV2ContextChatId<T extends GlobalState>(
-  global: T,
-  ...[tabId]: TabArgs<T>
+export function selectCustomerServiceV2ContextChatId(
+  global: GlobalState,
+  tabId?: number,
 ): string | undefined {
   const cs = selectCustomerServiceV2State(global, tabId);
   return cs?.currentContextChatId;
@@ -118,9 +118,9 @@ export function selectCustomerServiceV2ContextChatId<T extends GlobalState>(
 /**
  * Select current context message ID (Phase 2)
  */
-export function selectCustomerServiceV2ContextMessageId<T extends GlobalState>(
-  global: T,
-  ...[tabId]: TabArgs<T>
+export function selectCustomerServiceV2ContextMessageId(
+  global: GlobalState,
+  tabId?: number,
 ): number | undefined {
   const cs = selectCustomerServiceV2State(global, tabId);
   return cs?.currentContextMessageId;
@@ -129,10 +129,10 @@ export function selectCustomerServiceV2ContextMessageId<T extends GlobalState>(
 /**
  * Check if a specific chat is paused in assist mode
  */
-export function selectIsCustomerServiceV2ChatPaused<T extends GlobalState>(
-  global: T,
+export function selectIsCustomerServiceV2ChatPaused(
+  global: GlobalState,
   chatId: string,
-  ...[tabId]: TabArgs<T>
+  tabId?: number,
 ): boolean {
   const cs = selectCustomerServiceV2State(global, tabId);
   return Boolean(cs?.pausedChats?.[chatId]);
@@ -142,9 +142,9 @@ export function selectIsCustomerServiceV2ChatPaused<T extends GlobalState>(
  * Select all active chat IDs with CS messages
  * Used for overview and statistics
  */
-export function selectCustomerServiceV2ActiveChatIds<T extends GlobalState>(
-  global: T,
-  ...[tabId]: TabArgs<T>
+export function selectCustomerServiceV2ActiveChatIds(
+  global: GlobalState,
+  tabId?: number,
 ): string[] {
   const cs = selectCustomerServiceV2State(global, tabId);
   if (!cs?.messagesByChatId) return [];

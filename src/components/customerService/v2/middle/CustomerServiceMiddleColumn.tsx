@@ -1,15 +1,17 @@
-import type { FC, ElementRef } from '../../../../lib/teact/teact';
+import type { ElementRef, FC } from '../../../../lib/teact/teact';
 import { memo } from '../../../../lib/teact/teact';
 import { getActions } from '../../../../global';
 
 import buildClassName from '../../../../util/buildClassName';
 
-import CustomerServiceMiddleHeader from './CustomerServiceMiddleHeader';
-import CustomerServiceMessageList from './CustomerServiceMessageList';
-
-import styles from './CustomerServiceMiddleColumn.module.scss';
 import useAppLayout from '../../../../hooks/useAppLayout';
 import { useResize } from '../../../../hooks/useResize';
+
+import CustomerServiceSettingsModal from '../CustomerServiceSettingsModal';
+import CustomerServiceMessageList from './CustomerServiceMessageList';
+import CustomerServiceMiddleHeader from './CustomerServiceMiddleHeader';
+
+import styles from './CustomerServiceMiddleColumn.module.scss';
 
 type OwnProps = {
   className?: string;
@@ -31,7 +33,13 @@ const CustomerServiceMiddleColumn: FC<OwnProps> = ({
     initResize,
     resetResize,
     handleMouseUp,
-  } = useResize(leftColumnRef, (width) => setLeftColumnWidth({ leftColumnWidth: width }), resetLeftColumnWidth, leftColumnWidth, '--left-column-width');
+  } = useResize(
+    leftColumnRef,
+    (width) => setLeftColumnWidth({ leftColumnWidth: width }),
+    resetLeftColumnWidth,
+    leftColumnWidth,
+    '--left-column-width',
+  );
 
   return (
     <div
@@ -48,6 +56,7 @@ const CustomerServiceMiddleColumn: FC<OwnProps> = ({
       )}
       <CustomerServiceMiddleHeader />
       <CustomerServiceMessageList />
+      <CustomerServiceSettingsModal />
     </div>
   );
 };

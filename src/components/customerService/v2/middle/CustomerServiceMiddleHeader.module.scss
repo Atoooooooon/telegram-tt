@@ -40,7 +40,6 @@
 .modeIndicator {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
   padding: 0.375rem 0.75rem;
   border-radius: 1.125rem;
   background-color: var(--color-background-secondary);
@@ -48,15 +47,41 @@
   font-size: 0.8125rem;
   font-weight: var(--font-weight-medium);
   user-select: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
 
   :global(.icon) {
     font-size: 1rem;
   }
 }
 
+.modeIndicator:hover,
+.modeIndicator:focus-visible {
+  outline: none;
+  filter: brightness(1.05);
+}
+
 .modeText {
   margin-inline-start: 0.25rem;
   font-size: 0.8125rem;
+}
+
+.modeOnCall {
+  background-color: var(--color-success);
+  color: var(--color-white);
+
+  :global(.icon) {
+    color: var(--color-white);
+  }
+}
+
+.modeAssist {
+  background-color: var(--color-warning);
+  color: var(--color-white);
+
+  :global(.icon) {
+    color: var(--color-white);
+  }
 }
 
 // Responsive adjustments

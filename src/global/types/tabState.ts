@@ -227,6 +227,7 @@ export type TabState = {
   };
 
   isCustomerServiceModalOpen?: boolean;
+  isCustomerServiceV2SettingsOpen?: boolean;
 
   customerService?: {
     messages: ApiMessage[];

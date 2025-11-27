@@ -2546,7 +2546,7 @@
 "DescriptionFutureRating_one" = "This will be your rating in {time}, after {points} point is added. {link}";
 "DescriptionFutureRating_other" = "This will be your rating in {time}, after {points} points are added. {link}";
 "CustomerServiceSelectGroupsDescription" = "选择您要监控客服消息的群组";
-"CustomerServiceFilterByTag" = "按标签筛选";
+"CustomerServiceFilterByTag" = "标签";
 "CustomerServiceNoGroups" = "暂无可用群组";
 "CustomerServiceFilteredUserIdsDescription" = "添加需要从客服模块中过滤掉的用户ID";
 "CustomerServiceRegexFiltersDescription" = "添加正则规则来过滤特定的消息内容";

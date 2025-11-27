@@ -1,22 +1,22 @@
+import type React from '../../../../lib/teact/teact';
 import type { FC } from '../../../../lib/teact/teact';
 import { memo } from '../../../../lib/teact/teact';
 import { getActions, withGlobal } from '../../../../global';
 
 import type { CustomerServiceSettings } from '../../../../global/types/customerServiceV2';
 
-import buildClassName from '../../../../util/buildClassName';
-import { getCurrentTabId } from '../../../../util/establishMultitabRole';
-
 import {
   selectCustomerServiceV2MessageCount,
   selectCustomerServiceV2Settings,
 } from '../../../../global/selectors/customerServiceV2';
+import buildClassName from '../../../../util/buildClassName';
+import { getCurrentTabId } from '../../../../util/establishMultitabRole';
 
 import useLang from '../../../../hooks/useLang';
 import useLastCallback from '../../../../hooks/useLastCallback';
 
-import Button from '../../../ui/Button';
 import Icon from '../../../common/icons/Icon';
+import Button from '../../../ui/Button';
 
 import styles from './CustomerServiceMiddleHeader.module.scss';
 
@@ -34,17 +34,33 @@ const CustomerServiceMiddleHeader: FC<OwnProps & StateProps> = ({
   messageCount,
   settings,
 }) => {
-  const { clearCustomerServiceMessages, openSettingsScreen } = getActions();
+  const {
+    clearCustomerServiceV2Messages,
+    openCustomerServiceV2Settings,
+    toggleCustomerServiceV2Mode,
+  } = getActions();
   const lang = useLang();
 
   const currentMode = settings?.mode || 'oncall';
+  const modeClassName = currentMode === 'oncall' ? styles.modeOnCall : styles.modeAssist;
 
   const handleClearAll = useLastCallback(() => {
-    clearCustomerServiceMessages({ tabId: getCurrentTabId() });
+    clearCustomerServiceV2Messages({ tabId: getCurrentTabId() });
   });
 
   const handleOpenSettings = useLastCallback(() => {
-    openSettingsScreen({ tabId: getCurrentTabId() });
+    openCustomerServiceV2Settings({ tabId: getCurrentTabId() });
+  });
+
+  const handleToggleMode = useLastCallback(() => {
+    toggleCustomerServiceV2Mode({ tabId: getCurrentTabId() });
+  });
+
+  const handleToggleModeKey = useLastCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      handleToggleMode();
+    }
   });
 
   return (
@@ -62,7 +78,16 @@ const CustomerServiceMiddleHeader: FC<OwnProps & StateProps> = ({
 
       <div className={styles.actions}>
         {/* Mode indicator (read-only for now) */}
-        <div className={styles.modeIndicator}>
+        <div
+          className={buildClassName(styles.modeIndicator, modeClassName)}
+          role="button"
+          tabIndex={0}
+          onClick={handleToggleMode}
+          onKeyDown={handleToggleModeKey}
+          aria-label={currentMode === 'oncall'
+            ? lang('CustomerServiceOnCallMode')
+            : lang('CustomerServiceAssistMode')}
+        >
           <Icon name={currentMode === 'oncall' ? 'phone' : 'recent'} />
           <span className={styles.modeText}>
             {currentMode === 'oncall'

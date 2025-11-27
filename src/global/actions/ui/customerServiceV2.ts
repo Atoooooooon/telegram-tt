@@ -1,15 +1,62 @@
-import type { ActionReturnType, TabArgs } from '../../types';
 import type { ApiMessage } from '../../../api/types';
+import type { ActionReturnType } from '../../types';
+import type { CustomerServiceSettings, CustomerServiceV2State } from '../../types/customerServiceV2';
+import { MAIN_THREAD_ID } from '../../../api/types';
 
+import { CUSTOMER_SERVICE_CONFIG } from '../../../config/customerService';
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
+import { callApi } from '../../../api/gramjs';
+import {
+  loadCustomerServiceV2SettingsFromStorage,
+  saveCustomerServiceV2SettingsToStorage,
+} from '../../helpers/customerServiceV2Settings';
 import { addActionHandler, getGlobal, setGlobal } from '../../index';
 import { updateTabState } from '../../reducers/tabs';
-import { selectTabState, selectChat } from '../../selectors';
+import { selectChat, selectTabState } from '../../selectors';
 import {
+  selectCustomerServiceV2Settings,
   selectCustomerServiceV2State,
-  selectCustomerServiceV2Messages,
 } from '../../selectors/customerServiceV2';
-import { callApi } from '../../../api/gramjs';
+
+function ensureCustomerServiceV2State(state?: CustomerServiceV2State): CustomerServiceV2State {
+  if (state) {
+    return state;
+  }
+
+  return {
+    messages: [],
+    messagesByChatId: {},
+    lastSyncTimestamp: Date.now(),
+    messageCount: 0,
+  };
+}
+
+function getDefaultCustomerServiceV2Settings(): CustomerServiceSettings {
+  return {
+    monitoredChatIds: [...CUSTOMER_SERVICE_CONFIG.MONITORED_CHAT_IDS],
+    filteredUserIds: [...CUSTOMER_SERVICE_CONFIG.FILTERED_USER_IDS],
+    regexFilters: (CUSTOMER_SERVICE_CONFIG.REGEX_FILTERS || []).map((filter) => {
+      if (filter instanceof RegExp) {
+        return { source: filter.source, flags: filter.flags };
+      }
+
+      if (filter && typeof (filter as { source?: string; flags?: string }).source === 'string') {
+        return {
+          source: (filter as { source: string }).source,
+          flags: typeof (filter as { flags?: string }).flags === 'string' ? (filter as { flags: string }).flags : '',
+        };
+      }
+
+      if (typeof filter === 'string') {
+        return { source: filter, flags: '' };
+      }
+
+      return { source: String(filter), flags: '' };
+    }),
+    mode: 'oncall',
+    autoRead: false,
+  };
+}
 
 /**
  * Add message to Customer Service V2
@@ -20,25 +67,24 @@ addActionHandler('addToCustomerServiceV2', (global, actions, payload): ActionRet
 
   try {
     const cs = selectCustomerServiceV2State(global, tabId);
+    const baseState = ensureCustomerServiceV2State(cs);
 
-    let messages = cs?.messages || [];
+    let messages = baseState.messages;
 
     // Check for duplicate before adding
     const isDuplicate = messages.some((msg) => msg.id === message.id && msg.chatId === chatId);
     if (isDuplicate) {
-      console.warn('[CS V2] Duplicate message detected, skipping:', message.id, 'in chat:', chatId);
       return global;
     }
 
     // FIFO cleanup: Enforce 5000 message limit
     if (messages.length >= 5000) {
-      console.warn('[CS V2] Memory limit reached (5000 messages), removing oldest 100 messages');
       messages = messages.slice(-4900); // Keep 4900, add 1 = 4901 (buffer)
     }
 
     // Performance warning for large message counts
     if (messages.length > 1000 && messages.length % 500 === 0) {
-      console.info(`[CS V2 Performance] ${messages.length} messages in memory`);
+      // noop: can add telemetry hook here if needed
     }
 
     // Add new message
@@ -46,26 +92,26 @@ addActionHandler('addToCustomerServiceV2', (global, actions, payload): ActionRet
 
     // Update lookup map by chat ID
     const messagesByChatId = {
-      ...(cs?.messagesByChatId || {}),
-      [chatId]: [...(cs?.messagesByChatId?.[chatId] || []), message],
+      ...baseState.messagesByChatId,
+      [chatId]: [...(baseState.messagesByChatId[chatId] || []), message],
+    };
+
+    const nextState: CustomerServiceV2State = {
+      ...baseState,
+      messages,
+      messagesByChatId,
+      messageCount: messages.length,
+      lastSyncTimestamp: Date.now(),
     };
 
     return updateTabState(
       global,
       {
-        customerServiceV2: {
-          ...cs,
-          messages,
-          messagesByChatId,
-          messageCount: messages.length,
-          lastSyncTimestamp: Date.now(),
-        },
+        customerServiceV2: nextState,
       },
       tabId,
     );
   } catch (error) {
-    console.error('[CS V2] Failed to add message:', error);
-
     actions.showNotification({
       message: 'CustomerServiceSyncError',
       tabId,
@@ -79,7 +125,7 @@ addActionHandler('addToCustomerServiceV2', (global, actions, payload): ActionRet
  * Remove message from Customer Service V2
  * Marks message as read in original chat
  */
-addActionHandler('removeFromCustomerServiceV2', async (global, actions, payload) => {
+addActionHandler('removeFromCustomerServiceV2', async (global, actions, payload): Promise<void> => {
   const { chatId, messageId, tabId = getCurrentTabId() } = payload;
 
   try {
@@ -88,7 +134,7 @@ addActionHandler('removeFromCustomerServiceV2', async (global, actions, payload)
     if (chat) {
       await callApi('markMessageListRead', {
         chat,
-        threadId: undefined,
+        threadId: MAIN_THREAD_ID,
         maxId: messageId,
       });
     }
@@ -96,26 +142,29 @@ addActionHandler('removeFromCustomerServiceV2', async (global, actions, payload)
     // Remove from CS state
     global = getGlobal();
     const cs = selectCustomerServiceV2State(global, tabId);
+    const baseState = ensureCustomerServiceV2State(cs);
 
-    const messages = (cs?.messages || []).filter(
+    const messages = baseState.messages.filter(
       (msg) => !(msg.chatId === chatId && msg.id === messageId),
     );
 
     const messagesByChatId = {
-      ...(cs?.messagesByChatId || {}),
-      [chatId]: (cs?.messagesByChatId?.[chatId] || []).filter((msg) => msg.id !== messageId),
+      ...baseState.messagesByChatId,
+      [chatId]: (baseState.messagesByChatId[chatId] || []).filter((msg) => msg.id !== messageId),
+    };
+
+    const nextState: CustomerServiceV2State = {
+      ...baseState,
+      messages,
+      messagesByChatId,
+      messageCount: messages.length,
+      lastSyncTimestamp: Date.now(),
     };
 
     global = updateTabState(
       global,
       {
-        customerServiceV2: {
-          ...cs,
-          messages,
-          messagesByChatId,
-          messageCount: messages.length,
-          lastSyncTimestamp: Date.now(),
-        },
+        customerServiceV2: nextState,
       },
       tabId,
     );
@@ -128,8 +177,6 @@ addActionHandler('removeFromCustomerServiceV2', async (global, actions, payload)
       tabId,
     });
   } catch (error) {
-    console.error('[CS V2] Failed to remove message:', error);
-
     actions.showNotification({
       message: 'CustomerServiceSyncError',
       tabId,
@@ -146,9 +193,10 @@ addActionHandler('removeCustomerServiceV2Messages', (global, actions, payload): 
 
   try {
     const cs = selectCustomerServiceV2State(global, tabId);
+    const baseState = ensureCustomerServiceV2State(cs);
 
     // Filter out deleted messages
-    const messages = (cs?.messages || []).filter((msg) => !messageIds.includes(msg.id));
+    const messages = baseState.messages.filter((msg) => !messageIds.includes(msg.id));
 
     // Rebuild lookup map
     const messagesByChatId: Record<string, ApiMessage[]> = {};
@@ -159,21 +207,22 @@ addActionHandler('removeCustomerServiceV2Messages', (global, actions, payload): 
       messagesByChatId[msg.chatId].push(msg);
     });
 
+    const nextState: CustomerServiceV2State = {
+      ...baseState,
+      messages,
+      messagesByChatId,
+      messageCount: messages.length,
+      lastSyncTimestamp: Date.now(),
+    };
+
     return updateTabState(
       global,
       {
-        customerServiceV2: {
-          ...cs,
-          messages,
-          messagesByChatId,
-          messageCount: messages.length,
-          lastSyncTimestamp: Date.now(),
-        },
+        customerServiceV2: nextState,
       },
       tabId,
     );
   } catch (error) {
-    console.error('[CS V2] Failed to remove messages:', error);
     return global;
   }
 });
@@ -187,30 +236,36 @@ addActionHandler('syncCustomerServiceV2Message', (global, actions, payload): Act
 
   try {
     const cs = selectCustomerServiceV2State(global, tabId);
+    const baseState = ensureCustomerServiceV2State(cs);
 
     // Find and update message
-    const messages = (cs?.messages || []).map((msg) => (msg.id === message.id && msg.chatId === message.chatId ? message : msg));
+    const messages = baseState.messages.map((msg) => (
+      msg.id === message.id && msg.chatId === message.chatId ? message : msg
+    ));
 
     // Update in lookup map
     const messagesByChatId = {
-      ...(cs?.messagesByChatId || {}),
-      [message.chatId]: (cs?.messagesByChatId?.[message.chatId] || []).map((msg) => (msg.id === message.id ? message : msg)),
+      ...baseState.messagesByChatId,
+      [message.chatId]: (baseState.messagesByChatId[message.chatId] || []).map((msg) => (
+        msg.id === message.id ? message : msg
+      )),
+    };
+
+    const nextState: CustomerServiceV2State = {
+      ...baseState,
+      messages,
+      messagesByChatId,
+      lastSyncTimestamp: Date.now(),
     };
 
     return updateTabState(
       global,
       {
-        customerServiceV2: {
-          ...cs,
-          messages,
-          messagesByChatId,
-          lastSyncTimestamp: Date.now(),
-        },
+        customerServiceV2: nextState,
       },
       tabId,
     );
   } catch (error) {
-    console.error('[CS V2] Failed to sync message:', error);
     return global;
   }
 });
@@ -222,17 +277,20 @@ addActionHandler('clearCustomerServiceV2Messages', (global, actions, payload): A
   const { tabId = getCurrentTabId() } = payload || {};
 
   const cs = selectCustomerServiceV2State(global, tabId);
+  const baseState = ensureCustomerServiceV2State(cs);
+
+  const nextState: CustomerServiceV2State = {
+    ...baseState,
+    messages: [],
+    messagesByChatId: {},
+    messageCount: 0,
+    lastSyncTimestamp: Date.now(),
+  };
 
   return updateTabState(
     global,
     {
-      customerServiceV2: {
-        ...cs,
-        messages: [],
-        messagesByChatId: {},
-        messageCount: 0,
-        lastSyncTimestamp: Date.now(),
-      },
+      customerServiceV2: nextState,
     },
     tabId,
   );
@@ -246,15 +304,18 @@ addActionHandler('setCustomerServiceV2Context', (global, actions, payload): Acti
   const { chatId, messageId, tabId = getCurrentTabId() } = payload;
 
   const cs = selectCustomerServiceV2State(global, tabId);
+  const baseState = ensureCustomerServiceV2State(cs);
+
+  const nextState: CustomerServiceV2State = {
+    ...baseState,
+    currentContextChatId: chatId,
+    currentContextMessageId: messageId,
+  };
 
   return updateTabState(
     global,
     {
-      customerServiceV2: {
-        ...cs,
-        currentContextChatId: chatId,
-        currentContextMessageId: messageId,
-      },
+      customerServiceV2: nextState,
     },
     tabId,
   );
@@ -267,20 +328,23 @@ addActionHandler('pauseCustomerServiceV2Chat', (global, actions, payload): Actio
   const { chatId, messageId, tabId = getCurrentTabId() } = payload;
 
   const cs = selectCustomerServiceV2State(global, tabId);
+  const baseState = ensureCustomerServiceV2State(cs);
+
+  const nextState: CustomerServiceV2State = {
+    ...baseState,
+    pausedChats: {
+      ...(baseState.pausedChats || {}),
+      [chatId]: {
+        pausedAt: Date.now(),
+        lastMessageId: messageId,
+      },
+    },
+  };
 
   return updateTabState(
     global,
     {
-      customerServiceV2: {
-        ...cs,
-        pausedChats: {
-          ...(cs?.pausedChats || {}),
-          [chatId]: {
-            pausedAt: Date.now(),
-            lastMessageId: messageId,
-          },
-        },
-      },
+      customerServiceV2: nextState,
     },
     tabId,
   );
@@ -293,17 +357,20 @@ addActionHandler('resumeCustomerServiceV2Chat', (global, actions, payload): Acti
   const { chatId, tabId = getCurrentTabId() } = payload;
 
   const cs = selectCustomerServiceV2State(global, tabId);
+  const baseState = ensureCustomerServiceV2State(cs);
 
-  const pausedChats = { ...(cs?.pausedChats || {}) };
+  const pausedChats = { ...(baseState.pausedChats || {}) };
   delete pausedChats[chatId];
+
+  const nextState: CustomerServiceV2State = {
+    ...baseState,
+    pausedChats,
+  };
 
   return updateTabState(
     global,
     {
-      customerServiceV2: {
-        ...cs,
-        pausedChats,
-      },
+      customerServiceV2: nextState,
     },
     tabId,
   );
@@ -320,18 +387,197 @@ addActionHandler('initCustomerServiceV2', (global, actions, payload): ActionRetu
 
   // Only initialize if not already present
   if (!tabState.customerServiceV2) {
+    const settings = loadCustomerServiceV2SettingsFromStorage() || undefined;
+    const initialState: CustomerServiceV2State = {
+      messages: [],
+      messagesByChatId: {},
+      lastSyncTimestamp: Date.now(),
+      messageCount: 0,
+      ...(settings ? { settings } : {}),
+    };
+
     return updateTabState(
       global,
       {
-        customerServiceV2: {
-          messages: [],
-          messagesByChatId: {},
-          lastSyncTimestamp: Date.now(),
-          messageCount: 0,
-        },
+        customerServiceV2: initialState,
       },
       tabId,
     );
+  }
+
+  return global;
+});
+
+addActionHandler('initializeCustomerServiceV2Settings', (global, actions, payload): ActionReturnType => {
+  const { tabId = getCurrentTabId() } = payload || {};
+  const cs = selectCustomerServiceV2State(global, tabId);
+
+  if (cs?.settings) {
+    return global;
+  }
+
+  const storedSettings = loadCustomerServiceV2SettingsFromStorage();
+  if (!storedSettings) {
+    return global;
+  }
+
+  const baseState = ensureCustomerServiceV2State(cs);
+  const nextState: CustomerServiceV2State = {
+    ...baseState,
+    settings: storedSettings,
+  };
+
+  return updateTabState(
+    global,
+    {
+      customerServiceV2: nextState,
+    },
+    tabId,
+  );
+});
+
+addActionHandler('openCustomerServiceV2Settings', (global, actions, payload): ActionReturnType => {
+  const { tabId = getCurrentTabId() } = payload || {};
+
+  actions.initializeCustomerServiceV2Settings({ tabId });
+
+  return updateTabState(
+    global,
+    {
+      isCustomerServiceV2SettingsOpen: true,
+    },
+    tabId,
+  );
+});
+
+addActionHandler('closeCustomerServiceV2Settings', (global, actions, payload): ActionReturnType => {
+  const { tabId = getCurrentTabId() } = payload || {};
+
+  return updateTabState(
+    global,
+    {
+      isCustomerServiceV2SettingsOpen: false,
+    },
+    tabId,
+  );
+});
+
+addActionHandler('toggleCustomerServiceV2Mode', (global, actions, payload): ActionReturnType => {
+  const { tabId = getCurrentTabId() } = payload || {};
+
+  const cs = selectCustomerServiceV2State(global, tabId);
+  const baseState = ensureCustomerServiceV2State(cs);
+
+  const existingSettings = baseState.settings
+    || loadCustomerServiceV2SettingsFromStorage()
+    || getDefaultCustomerServiceV2Settings();
+
+  const nextMode: CustomerServiceSettings['mode'] = existingSettings.mode === 'assist' ? 'oncall' : 'assist';
+
+  const updatedSettings: CustomerServiceSettings = {
+    monitoredChatIds: existingSettings.monitoredChatIds || [],
+    filteredUserIds: existingSettings.filteredUserIds || [],
+    regexFilters: existingSettings.regexFilters || [],
+    autoRead: Boolean(existingSettings.autoRead),
+    mode: nextMode,
+  };
+
+  const normalized = normalizeSettingsForSave(updatedSettings);
+  saveCustomerServiceV2SettingsToStorage(normalized);
+
+  const nextState: CustomerServiceV2State = {
+    ...baseState,
+    settings: normalized,
+  };
+
+  return updateTabState(
+    global,
+    {
+      customerServiceV2: nextState,
+    },
+    tabId,
+  );
+});
+
+function normalizeSettingsForSave(settings: CustomerServiceSettings): CustomerServiceSettings {
+  return {
+    monitoredChatIds: settings.monitoredChatIds || [],
+    filteredUserIds: settings.filteredUserIds || [],
+    regexFilters: (settings.regexFilters || []).map((filter) => ({
+      source: filter.source,
+      flags: filter.flags,
+    })),
+    mode: settings.mode === 'assist' ? 'assist' : 'oncall',
+    autoRead: Boolean(settings.autoRead),
+  };
+}
+
+addActionHandler('saveCustomerServiceV2Settings', (global, actions, payload): ActionReturnType => {
+  const { settings, tabId = getCurrentTabId() } = payload;
+
+  const cs = selectCustomerServiceV2State(global, tabId);
+  const normalized = normalizeSettingsForSave(settings);
+
+  saveCustomerServiceV2SettingsToStorage(normalized);
+
+  const baseState = ensureCustomerServiceV2State(cs);
+  const nextState: CustomerServiceV2State = {
+    ...baseState,
+    settings: normalized,
+  };
+
+  return updateTabState(
+    global,
+    {
+      customerServiceV2: nextState,
+    },
+    tabId,
+  );
+});
+
+addActionHandler('exportCustomerServiceV2Settings', (global, actions, payload): ActionReturnType => {
+  const { tabId = getCurrentTabId() } = payload || {};
+  const settings = selectCustomerServiceV2Settings(global, tabId);
+
+  if (!settings) {
+    return global;
+  }
+
+  const exportData = {
+    version: '2.0',
+    timestamp: new Date().toISOString(),
+    settings,
+  };
+
+  const blob = new Blob([JSON.stringify(exportData, undefined, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `customer-service-v2-settings-${new Date().toISOString().split('T')[0]}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+
+  return global;
+});
+
+addActionHandler('importCustomerServiceV2Settings', (global, actions, payload): ActionReturnType => {
+  const { fileContent, tabId = getCurrentTabId() } = payload;
+
+  try {
+    const parsed = JSON.parse(fileContent);
+    const candidate = parsed?.settings ?? parsed;
+
+    if (!candidate) {
+      throw new Error('Missing settings');
+    }
+
+    const normalized = normalizeSettingsForSave(candidate);
+
+    actions.saveCustomerServiceV2Settings({ settings: normalized, tabId });
+  } catch (error) {
+    // Ignore malformed input
   }
 
   return global;
