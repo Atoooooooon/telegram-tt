@@ -99,6 +99,10 @@ const CustomerServiceSettings = ({
   
   // 标签筛选状态
   const [selectedTagId, setSelectedTagId] = useState<string>('-1'); // '-1'表示所有标签
+
+  // 群组搜索状态
+  const [groupSearchQuery, setGroupSearchQuery] = useState('');
+  const [searchError, setSearchError] = useState('');
   
   // 设置状态
   const [settings, setSettings] = useState<FilterSettings>(() => {
@@ -219,20 +223,43 @@ const CustomerServiceSettings = ({
     );
   }, [chats]);
 
-  // 过滤后的群组列表（根据选中的标签）
+  // 过滤后的群组列表（根据选中的标签和搜索）
   const groupChats = useMemo(() => {
-    if (selectedTagId === '-1') {
-      // 显示所有群组
-      return allGroupChats;
-    } else {
-      // 显示有特定标签的群组
+    let filteredChats = allGroupChats;
+
+    // 按标签过滤
+    if (selectedTagId !== '-1') {
       const selectedFolderId = parseInt(selectedTagId, 10);
-      return allGroupChats.filter(chat => {
+      filteredChats = filteredChats.filter(chat => {
         const folderIds = getChatFolderIds(chat.id);
         return folderIds && folderIds.includes(selectedFolderId);
       });
     }
-  }, [selectedTagId, allGroupChats]);
+
+    // 按搜索查询过滤
+    if (groupSearchQuery.trim()) {
+      const query = groupSearchQuery.trim();
+
+      // 尝试作为正则表达式解析
+      try {
+        const regex = new RegExp(query, 'i');
+        filteredChats = filteredChats.filter(chat => regex.test(chat.title || ''));
+        setSearchError('');
+      } catch (error) {
+        // 如果不是有效的正则表达式，则作为普通文本搜索
+        const lowerQuery = query.toLowerCase();
+        filteredChats = filteredChats.filter(chat =>
+          chat.title?.toLowerCase().includes(lowerQuery) ||
+          chat.id.includes(query)
+        );
+        setSearchError('');
+      }
+    } else {
+      setSearchError('');
+    }
+
+    return filteredChats;
+  }, [selectedTagId, allGroupChats, groupSearchQuery]);
 
   // 检查全选状态
   useEffect(() => {
@@ -449,6 +476,17 @@ const CustomerServiceSettings = ({
     }));
   });
 
+  // 处理群组搜索输入变化
+  const handleGroupSearchChange = useLastCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setGroupSearchQuery(e.target.value);
+  });
+
+  // 清除搜索
+  const handleClearGroupSearch = useLastCallback(() => {
+    setGroupSearchQuery('');
+    setSearchError('');
+  });
+
   // 获取群组的标签信息
   const getChatTagsName = (chat: ApiChat) => {
     const folderIds = getChatFolderIds(chat.id);
@@ -515,6 +553,31 @@ const CustomerServiceSettings = ({
             ))}
           </select>
         </div>
+
+        {/* 群组搜索区域 */}
+        <div className={styles.groupSearchSection}>
+          <div className={styles.searchInputWrapper}>
+            <Icon name="search" className={styles.fieldIcon} />
+            <InputText
+              value={groupSearchQuery}
+              onChange={handleGroupSearchChange}
+              placeholder={lang('CustomerServiceSearchGroups')}
+              className={buildClassName(styles.searchInput, searchError && styles.error)}
+            />
+            {groupSearchQuery && (
+              <Button
+                size="tiny"
+                color="translucent"
+                onClick={handleClearGroupSearch}
+                className={styles.clearSearchButton}
+                ariaLabel={lang('Clear')}
+              >
+                <Icon name="close" />
+              </Button>
+            )}
+          </div>
+        </div>
+
         <div className={styles.selectAllWrapper}>
           <Button
             size="smaller"
@@ -527,6 +590,14 @@ const CustomerServiceSettings = ({
           </Button>
         </div>
       </div>
+
+      {/* 搜索错误提示 */}
+      {searchError && (
+        <div className={styles.searchError}>
+          <Icon name="warning" className={styles.errorIcon} />
+          {searchError}
+        </div>
+      )}
       
       <div className={styles.groupList}>
         {groupChats.length > 0 ? (
