@@ -6,6 +6,7 @@ import { getCurrentTabId } from '../../../util/establishMultitabRole';
 import { addActionHandler, getGlobal } from '../../index';
 import { updateTabState } from '../../reducers/tabs';
 import { selectTabState, selectChat, selectCurrentChat } from '../../selectors';
+import { selectCustomerServiceSettings } from '../../selectors/customerService';
 import { CUSTOMER_SERVICE_CONFIG } from '../../../config/customerService';
 import { callApi } from '../../../api/gramjs';
 
@@ -553,4 +554,104 @@ addActionHandler('saveCustomerServiceSettings', (global, actions, payload): Acti
       settings: settingsToSave,
     },
   }, tabId);
+});
+
+// 导出客服配置
+addActionHandler('exportCustomerServiceSettings', (global, actions, payload): ActionReturnType => {
+  const { tabId = getCurrentTabId() } = payload || {};
+  const settings = selectCustomerServiceSettings(global);
+
+  if (!settings) {
+    console.error('No customer service settings to export');
+    return global;
+  }
+
+  // 创建导出数据
+  const exportData = {
+    version: '1.0',
+    timestamp: new Date().toISOString(),
+    settings: {
+      monitoredChatIds: settings.monitoredChatIds || [],
+      filteredUserIds: settings.filteredUserIds || [],
+      regexFilters: settings.regexFilters || [],
+      mode: settings.mode || 'oncall',
+      autoRead: settings.autoRead || false,
+    },
+  };
+
+  // 创建并下载文件
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `customer-service-settings-${new Date().toISOString().split('T')[0]}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+
+  console.log('Customer service settings exported successfully');
+  return global;
+});
+
+// 导入客服配置
+addActionHandler('importCustomerServiceSettings', (global, actions, payload): ActionReturnType => {
+  const { fileContent, tabId = getCurrentTabId() } = payload as {
+    fileContent: string;
+    tabId?: number;
+  };
+
+  try {
+    const importData = JSON.parse(fileContent);
+
+    // 验证导入数据格式
+    if (!importData.settings) {
+      throw new Error('Invalid settings file format: missing settings object');
+    }
+
+    const { settings } = importData;
+
+    // 验证必要字段
+    if (!Array.isArray(settings.monitoredChatIds)) {
+      throw new Error('Invalid settings file format: monitoredChatIds must be an array');
+    }
+    if (!Array.isArray(settings.filteredUserIds)) {
+      throw new Error('Invalid settings file format: filteredUserIds must be an array');
+    }
+    if (!Array.isArray(settings.regexFilters)) {
+      throw new Error('Invalid settings file format: regexFilters must be an array');
+    }
+
+    // 转换正则表达式
+    const regexFilters = settings.regexFilters.map((filter: any) => {
+      if (typeof filter === 'object' && filter.source && filter.flags !== undefined) {
+        return new RegExp(filter.source, filter.flags);
+      } else if (typeof filter === 'string') {
+        return new RegExp(filter);
+      } else {
+        throw new Error(`Invalid regex filter format: ${JSON.stringify(filter)}`);
+      }
+    });
+
+    // 构建有效的设置对象
+    const validSettings = {
+      monitoredChatIds: settings.monitoredChatIds,
+      filteredUserIds: settings.filteredUserIds,
+      regexFilters,
+      mode: ['oncall', 'assist'].includes(settings.mode) ? settings.mode : 'oncall',
+      autoRead: Boolean(settings.autoRead),
+    };
+
+    // 保存导入的设置
+    actions.saveCustomerServiceSettings({ settings: validSettings, tabId });
+
+    console.log('Customer service settings imported successfully:', validSettings);
+    return global;
+
+  } catch (error) {
+    console.error('Failed to import customer service settings:', error);
+    // 这里可以显示错误通知
+    // actions.showNotification({ message: `导入失败: ${error.message}` });
+    return global;
+  }
 });
