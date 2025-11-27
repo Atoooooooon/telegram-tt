@@ -712,17 +712,10 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
               key={`quick-reply-${index}`}
               type="button"
               className={styles.item}
+              data-mode={reply.mode}
               onClick={() => handleSelectQuickReply(reply)}
             >
               <span className={styles.itemText}>{reply.text}</span>
-              <div className={styles.itemMeta}>
-                <span
-                  className={styles.modeBadge}
-                  data-mode={reply.mode}
-                >
-                  {lang(reply.mode === 'insert' ? 'CustomerServiceQuickReplyModeInsert' : 'CustomerServiceQuickReplyModeSend')}
-                </span>
-              </div>
             </button>
           ))}
         </div>
