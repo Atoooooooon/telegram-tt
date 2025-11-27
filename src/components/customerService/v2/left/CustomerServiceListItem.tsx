@@ -38,6 +38,7 @@ type StateProps = {
 const CUSTOMER_SERVICE_PEER: CustomPeer = {
   isCustomPeer: true,
   titleKey: '客户服务',
+  avatarIcon: 'animals',
   customPeerAvatarColor: 'var(--color-primary)',
 };
 

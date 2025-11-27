@@ -21,6 +21,7 @@ import { useMemo } from '../../../../lib/teact/teact';
 import CustomerServiceSourceBadge from '../shared/CustomerServiceSourceBadge';
 import Message from '../../../middle/message/Message';
 import Button from '../../../ui/Button';
+import Icon from '../../../common/icons/Icon';
 import Loading from '../../../ui/Loading';
 
 import styles from './CustomerServiceMessageList.module.scss';
@@ -75,7 +76,7 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
     return (
       <div className={buildClassName(styles.emptyState, className)}>
         <div className={styles.emptyIcon}>
-          <i className="icon icon-headphone" />
+          <Icon name='animals' />
         </div>
         <h3 className={styles.emptyTitle}>
           {lang('CustomerServiceEmpty')}
