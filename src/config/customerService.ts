@@ -6,7 +6,6 @@ import type {
 } from '../global/types/customerServiceV2';
 
 import { normalizeCustomerServiceQuickReplies } from '../global/helpers/customerServiceV2Settings';
-import { selectCustomerServiceSettings } from '../global/selectors/customerService';
 import { selectCustomerServiceV2Settings } from '../global/selectors/customerServiceV2';
 
 const envRedisUrl = process.env.UPSTASH_REDIS_REST_URL as string | undefined;
@@ -18,14 +17,14 @@ export const CUSTOMER_SERVICE_CONFIG = {
   MONITORED_CHAT_IDS: [
     // 示例群组ID，实际使用时请替换为真实的群组ID
     '-000000001', // 初始化
-  ],
+  ] as string[],
 
   // 过滤的用户ID列表 - 过滤机器人和不需要客服回复的用户
   FILTERED_USER_IDS: [
     // 示例用户ID，请填写实际需要过滤的用户ID
     // '123456789', // 某个机器人ID
     // '987654321', // 另一个需要过滤的用户ID
-  ],
+  ] as string[],
 
   // 正则表达式过滤规则 - 过滤特定内容的消息（无需回复）
   REGEX_FILTERS: [
@@ -33,7 +32,7 @@ export const CUSTOMER_SERVICE_CONFIG = {
     // /^\/\w+/, // 过滤所有以 / 开头的命令
     // /^@\w+/, // 过滤所有 @ 提及
     // /^\[系统\]/, // 过滤系统消息
-  ],
+  ] as RegExp[],
 
   // 默认快捷回复模板
   QUICK_REPLIES: [
@@ -75,56 +74,20 @@ const getEffectiveSettings = (global?: GlobalState): CustomerServiceSettings | u
   }
 
   const v2Settings = selectCustomerServiceV2Settings(global);
-  if (v2Settings) {
-    const quickReplies = normalizeCustomerServiceQuickReplies(
-      v2Settings.quickReplies && v2Settings.quickReplies.length
-        ? v2Settings.quickReplies
-        : CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES,
-    );
-
-    return {
-      ...v2Settings,
-      quickReplies,
-      quickReplyPanelGlobal: Boolean(v2Settings.quickReplyPanelGlobal),
-    };
-  }
-
-  const legacySettings = selectCustomerServiceSettings(global);
-  if (!legacySettings) {
+  if (!v2Settings) {
     return undefined;
   }
 
+  const quickReplies = normalizeCustomerServiceQuickReplies(
+    v2Settings.quickReplies && v2Settings.quickReplies.length
+      ? v2Settings.quickReplies
+      : CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES,
+  );
+
   return {
-    monitoredChatIds: legacySettings.monitoredChatIds || [],
-    filteredUserIds: legacySettings.filteredUserIds || [],
-    regexFilters: (legacySettings.regexFilters || []).map((filter: any) => {
-      if (!filter) {
-        return { source: '', flags: '' };
-      }
-
-      if (filter instanceof RegExp) {
-        return { source: filter.source, flags: filter.flags };
-      }
-
-      if (typeof filter.source === 'string') {
-        return {
-          source: filter.source,
-          flags: typeof filter.flags === 'string' ? filter.flags : '',
-        };
-      }
-
-      if (typeof filter === 'string') {
-        return { source: filter, flags: '' };
-      }
-
-      return { source: '', flags: '' };
-    }).filter((filter) => Boolean(filter.source)) as Array<{ source: string; flags: string }>,
-    mode: legacySettings.mode === 'assist' ? 'assist' : 'oncall',
-    autoRead: Boolean(legacySettings.autoRead),
-    quickReplies: normalizeCustomerServiceQuickReplies(
-      (legacySettings as { quickReplies?: unknown }).quickReplies ?? CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES,
-    ),
-    quickReplyPanelGlobal: false,
+    ...v2Settings,
+    quickReplies,
+    quickReplyPanelGlobal: Boolean(v2Settings.quickReplyPanelGlobal),
   };
 };
 

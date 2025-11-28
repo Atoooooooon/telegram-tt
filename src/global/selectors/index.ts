@@ -13,5 +13,4 @@ export * from './stories';
 export * from './tabs';
 export * from './peers';
 export * from './topics';
-export * from './customerService';
 export * from './customerServiceV2';

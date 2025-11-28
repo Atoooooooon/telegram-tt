@@ -80,7 +80,7 @@ import { isApiPeerChat, isApiPeerUser } from '../../helpers/peers';
 import {
   addActionHandler, getActions, getGlobal, getPromiseActions, setGlobal,
 } from '../../index';
-import { selectCustomerServiceReplyingMessage } from '../../selectors/customerService';
+import { selectCustomerServiceV2ReplyingMessage } from '../../selectors/customerServiceV2';
 import {
   addChatMessagesById,
   clearMessageSummary,
@@ -628,7 +628,7 @@ addActionHandler('sendMessage', async (global, actions, payload): Promise<void> 
   if (localMessages?.length) sendMessagesWithNotification(global, localMessages);
   
   // 检查是否为客服回复，如果是则记录已回复状态
-  const replyingMessage = selectCustomerServiceReplyingMessage(global, tabId);
+  const replyingMessage = selectCustomerServiceV2ReplyingMessage(global, tabId);
   if (replyingMessage) {
     const messageKey = `${replyingMessage.chatId}-${replyingMessage.id}`;
     console.log('Detected customer service reply to message:', messageKey);
@@ -1307,31 +1307,21 @@ function scheduleAssistModePausedChatCheck(tabId: number, actions: RequiredGloba
       return;
     }
 
-    const customerService = tabState.customerService;
     const customerServiceV2 = selectCustomerServiceV2State(currentGlobal, tabId);
-    const isAssistMode = (customerService?.settings?.mode === 'assist')
-      || (customerServiceV2?.settings?.mode === 'assist');
+    const isAssistMode = customerServiceV2?.settings?.mode === 'assist';
     if (!isAssistMode) {
       return;
     }
 
-    const hasLegacyPausedChats = Boolean(
-      customerService?.pausedChats && Object.keys(customerService.pausedChats).length > 0,
-    );
     const hasV2PausedChats = Boolean(
       customerServiceV2?.pausedChats && Object.keys(customerServiceV2.pausedChats).length > 0,
     );
 
-    if (!hasLegacyPausedChats && !hasV2PausedChats) {
+    if (!hasV2PausedChats) {
       return;
     }
 
-    if (hasLegacyPausedChats) {
-      actions.checkPausedChatsStatus({ tabId });
-    }
-    if (hasV2PausedChats) {
-      actions.checkPausedChatsStatusV2({ tabId });
-    }
+    actions.checkPausedChatsStatusV2({ tabId });
   });
 }
 

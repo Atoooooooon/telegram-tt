@@ -63,6 +63,9 @@ export type CustomerServiceV2State = {
   /** Messages that have been replied to */
   repliedMessageIds?: string[];
 
+  /** Message currently being replied to (for composition tracking) */
+  replyingToMessage?: ApiMessage;
+
   /** Shared settings with V1 */
   settings?: CustomerServiceSettings;
 
