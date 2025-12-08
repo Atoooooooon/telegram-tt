@@ -2,7 +2,7 @@ import type { CustomerServiceSettings } from '../types/customerServiceV2';
 
 const STORAGE_KEY = 'customerServiceCloudSyncPreference';
 
-function maskToken(token?: string) {
+export function maskCloudSyncToken(token?: string) {
   if (!token) {
     return undefined;
   }
@@ -83,7 +83,7 @@ function writePreference(preference?: CustomerServiceCloudSyncPreference) {
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     logCloudSyncPreferenceDebug('writePreference', {
-      token: maskToken(payload.token),
+      token: maskCloudSyncToken(payload.token),
       ownerId: payload.ownerId,
       lastVersion: payload.lastVersion,
       lastUpdatedAt: payload.lastUpdatedAt,
@@ -146,7 +146,7 @@ export function updateCustomerServiceCloudSyncPreferenceForToken(
 
     const next = updater(base);
     logCloudSyncPreferenceDebug('updatePreferenceForToken', {
-      token: maskToken(token),
+      token: maskCloudSyncToken(token),
       prevLastVersion: base.lastVersion,
       nextLastVersion: next.lastVersion,
       prevHash: base.lastSettingsHash,

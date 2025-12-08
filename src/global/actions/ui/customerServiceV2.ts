@@ -16,6 +16,7 @@ import {
 import {
   computeCustomerServiceSettingsHash,
   loadCustomerServiceCloudSyncPreference,
+  maskCloudSyncToken,
   updateCustomerServiceCloudSyncPreferenceForToken,
 } from '../../helpers/customerServiceCloudSyncPreference';
 import { addActionHandler, getGlobal, setGlobal } from '../../index';
@@ -25,7 +26,6 @@ import {
   selectCustomerServiceV2Settings,
   selectCustomerServiceV2State,
 } from '../../selectors/customerServiceV2';
-import useLang from '../../../hooks/useLang';
 import { getTranslationFn } from '../../../util/localization';
 
 function ownersMatch(left?: string, right?: string): boolean {
@@ -50,7 +50,6 @@ function ensureCustomerServiceV2State(state?: CustomerServiceV2State): CustomerS
   return {
     messages: [],
     messagesByChatId: {},
-    repliedMessageIds: [],
     lastSyncTimestamp: Date.now(),
     messageCount: 0,
   };
@@ -65,18 +64,6 @@ function logCustomerServiceCloudSyncDebug(...args: unknown[]) {
 
   // eslint-disable-next-line no-console
   console.log('[CustomerServiceCloudSync]', ...args);
-}
-
-function maskCloudSyncToken(token?: string) {
-  if (!token) {
-    return undefined;
-  }
-
-  if (token.length <= 6) {
-    return `${token[0] ?? ''}***${token[token.length - 1] ?? ''}`;
-  }
-
-  return `${token.slice(0, 3)}***${token.slice(-2)}`;
 }
 
 function getDefaultCustomerServiceV2Settings(): CustomerServiceSettings {
@@ -228,7 +215,6 @@ addActionHandler('removeFromCustomerServiceV2', async (global, actions, payload)
     global = getGlobal();
     const cs = selectCustomerServiceV2State(global, tabId);
     const baseState = ensureCustomerServiceV2State(cs);
-    const lang = useLang();
     const messages = baseState.messages.filter(
       (msg) => !(msg.chatId === chatId && msg.id === messageId),
     );
@@ -411,8 +397,8 @@ addActionHandler('clearCustomerServiceV2Messages', async (global, actions, paylo
 });
 
 /**
- * Set context chat (Phase 2)
- * NOTE: This is kept for backward compatibility but not used in isHalfScreen approach
+ * Set current context for customer service message
+ * Used to highlight the currently focused message in the message list
  */
 addActionHandler('setCustomerServiceV2Context', (global, actions, payload): ActionReturnType => {
   const { chatId, messageId, tabId = getCurrentTabId() } = payload;
@@ -702,10 +688,8 @@ addActionHandler('checkPausedChatsStatusV2', (global, actions, payload): ActionR
 
     const isRead = Boolean(chat.lastReadInboxMessageId && chat.lastReadInboxMessageId >= lastTrackedMessageId);
     const hasUnread = chat.unreadCount && chat.unreadCount > 0;
-    const replyKey = `${chatId}-${lastTrackedMessageId}`;
-    const isReplied = Boolean(cs.repliedMessageIds && cs.repliedMessageIds.includes(replyKey));
 
-    if (isRead || isReplied || !hasUnread) {
+    if (isRead || !hasUnread) {
       delete updatedPausedChats[chatId];
       hasChanges = true;
     }
@@ -720,7 +704,9 @@ addActionHandler('checkPausedChatsStatusV2', (global, actions, payload): ActionR
     pausedChats: Object.keys(updatedPausedChats).length ? updatedPausedChats : undefined,
   };
 
-  return syncCustomerServiceV2StateAcrossTabs(global, nextState);
+  // Use updateTabState directly to avoid triggering cross-tab sync
+  // which would cause infinite recursion through apiUpdaters
+  return updateTabState(global, { customerServiceV2: nextState }, tabId);
 });
 
 addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload): Promise<void> => {

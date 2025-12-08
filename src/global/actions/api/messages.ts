@@ -80,7 +80,6 @@ import { isApiPeerChat, isApiPeerUser } from '../../helpers/peers';
 import {
   addActionHandler, getActions, getGlobal, getPromiseActions, setGlobal,
 } from '../../index';
-import { selectCustomerServiceV2ReplyingMessage } from '../../selectors/customerServiceV2';
 import {
   addChatMessagesById,
   clearMessageSummary,
@@ -626,20 +625,6 @@ addActionHandler('sendMessage', async (global, actions, payload): Promise<void> 
     }
   }
   if (localMessages?.length) sendMessagesWithNotification(global, localMessages);
-  
-  // 检查是否为客服回复，如果是则记录已回复状态
-  const replyingMessage = selectCustomerServiceV2ReplyingMessage(global, tabId);
-  if (replyingMessage) {
-    const messageKey = `${replyingMessage.chatId}-${replyingMessage.id}`;
-    console.log('Detected customer service reply to message:', messageKey);
-    
-    // 调用客服回复action来记录状态
-    actions.markCustomerServiceMessageReplied({ 
-      chatId: replyingMessage.chatId, 
-      messageId: replyingMessage.id,
-      tabId 
-    });
-  }
 });
 
 addActionHandler('sendInviteMessages', async (global, actions, payload): Promise<void> => {

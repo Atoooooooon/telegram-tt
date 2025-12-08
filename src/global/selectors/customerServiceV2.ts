@@ -155,14 +155,3 @@ export function selectCustomerServiceV2ActiveChatIds(
   );
 }
 
-/**
- * Select the message currently being replied to
- * Used for tracking reply state in message composition
- */
-export function selectCustomerServiceV2ReplyingMessage(
-  global: GlobalState,
-  tabId?: number,
-): ApiMessage | undefined {
-  const cs = selectCustomerServiceV2State(global, tabId);
-  return cs?.replyingToMessage;
-}
