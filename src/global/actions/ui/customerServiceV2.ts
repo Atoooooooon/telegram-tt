@@ -1,400 +1,54 @@
-import type { ApiMessage } from '../../../api/types';
-import type { ActionReturnType, GlobalState } from '../../types';
+/**
+ * Customer Service V2 - Settings and UI Control
+ *
+ * This file handles:
+ * - Settings initialization, save, import/export
+ * - UI control (open/close settings panel)
+ * - Quick reply functionality
+ * - Mode toggle and context management
+ * - Paused chats management (assist mode)
+ *
+ * Related modules:
+ * - customerServiceV2Messages.ts - Message CRUD operations
+ * - customerServiceV2Cloud.ts - Cloud sync functionality
+ * - customerServiceV2Helpers.ts - Shared utilities
+ */
+
+import type { ActionReturnType } from '../../types';
 import type { CustomerServiceSettings, CustomerServiceV2State } from '../../types/customerServiceV2';
-import { MAIN_THREAD_ID } from '../../../api/types';
 
 import { CUSTOMER_SERVICE_CONFIG } from '../../../config/customerService';
 import { EDITABLE_INPUT_ID } from '../../../config';
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
-import { callApi } from '../../../api/gramjs';
-import { fetchCustomerServiceCloudConfig, uploadCustomerServiceCloudConfig } from '../../../api/customerServiceSync';
+import { getTranslationFn } from '../../../util/localization';
 import {
   loadCustomerServiceV2SettingsFromStorage,
   normalizeCustomerServiceQuickReplies,
   saveCustomerServiceV2SettingsToStorage,
 } from '../../helpers/customerServiceV2Settings';
-import {
-  computeCustomerServiceSettingsHash,
-  loadCustomerServiceCloudSyncPreference,
-  maskCloudSyncToken,
-  updateCustomerServiceCloudSyncPreferenceForToken,
-} from '../../helpers/customerServiceCloudSyncPreference';
-import { addActionHandler, getGlobal, setGlobal } from '../../index';
+import { loadCustomerServiceCloudSyncPreference } from '../../helpers/customerServiceCloudSyncPreference';
+import { addActionHandler } from '../../index';
 import { updateTabState } from '../../reducers/tabs';
 import { selectChat, selectCurrentMessageList, selectTabState } from '../../selectors';
 import {
   selectCustomerServiceV2Settings,
   selectCustomerServiceV2State,
 } from '../../selectors/customerServiceV2';
-import { getTranslationFn } from '../../../util/localization';
 
-function ownersMatch(left?: string, right?: string): boolean {
-  if (!left || !right) {
-    return false;
-  }
-  if (left === right) {
-    return true;
-  }
+import {
+  ensureCustomerServiceV2State,
+  getDefaultCustomerServiceV2Settings,
+  normalizeSettingsForSave,
+  ownersMatch,
+  syncCustomerServiceV2StateAcrossTabs,
+} from './customerServiceV2Helpers';
 
-  const leftNumber = Number(left);
-  const rightNumber = Number(right);
-
-  return Number.isFinite(leftNumber) && Number.isFinite(rightNumber) && leftNumber === rightNumber;
-}
-
-function ensureCustomerServiceV2State(state?: CustomerServiceV2State): CustomerServiceV2State {
-  if (state) {
-    return state;
-  }
-
-  return {
-    messages: [],
-    messagesByChatId: {},
-    lastSyncTimestamp: Date.now(),
-    messageCount: 0,
-  };
-}
+// Import side-effect modules to register their action handlers
+import './customerServiceV2Messages';
+import './customerServiceV2Cloud';
 
 let hasScheduledCustomerServiceAutoCloudSync = false;
-
-function logCustomerServiceCloudSyncDebug(...args: unknown[]) {
-  if (typeof console === 'undefined') {
-    return;
-  }
-
-  // eslint-disable-next-line no-console
-  console.log('[CustomerServiceCloudSync]', ...args);
-}
-
-function getDefaultCustomerServiceV2Settings(): CustomerServiceSettings {
-  return {
-    monitoredChatIds: [...CUSTOMER_SERVICE_CONFIG.MONITORED_CHAT_IDS],
-    filteredUserIds: [...CUSTOMER_SERVICE_CONFIG.FILTERED_USER_IDS],
-    regexFilters: (CUSTOMER_SERVICE_CONFIG.REGEX_FILTERS || []).map((filter) => {
-      if (filter instanceof RegExp) {
-        return { source: filter.source, flags: filter.flags };
-      }
-
-      if (filter && typeof (filter as { source?: string; flags?: string }).source === 'string') {
-        return {
-          source: (filter as { source: string }).source,
-          flags: typeof (filter as { flags?: string }).flags === 'string' ? (filter as { flags: string }).flags : '',
-        };
-      }
-
-      if (typeof filter === 'string') {
-        return { source: filter, flags: '' };
-      }
-
-      return { source: String(filter), flags: '' };
-    }),
-    mode: 'oncall',
-    autoRead: false,
-    quickReplies: normalizeCustomerServiceQuickReplies(CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES),
-    quickReplyPanelGlobal: false,
-    enableMessageGrouping: CUSTOMER_SERVICE_CONFIG.ENABLE_MESSAGE_GROUPING,
-    messageGroupingWindow: CUSTOMER_SERVICE_CONFIG.MESSAGE_GROUPING_WINDOW,
-  };
-}
-
-function syncCustomerServiceV2StateAcrossTabs(
-  global: GlobalState,
-  nextState: CustomerServiceV2State,
-): GlobalState {
-  const nextByTabId = { ...global.byTabId };
-
-  Object.values(global.byTabId).forEach((tabState) => {
-    nextByTabId[tabState.id] = {
-      ...tabState,
-      customerServiceV2: {
-        ...nextState,
-        currentContextChatId: tabState.customerServiceV2?.currentContextChatId,
-        currentContextMessageId: tabState.customerServiceV2?.currentContextMessageId,
-      },
-    };
-  });
-
-  return {
-    ...global,
-    byTabId: nextByTabId,
-  };
-}
-
-/**
- * Add message to Customer Service V2
- * Implements FIFO cleanup at 5000 messages
- */
-addActionHandler('addToCustomerServiceV2', (global, actions, payload): ActionReturnType => {
-  const { message, chatId, tabId = getCurrentTabId() } = payload;
-
-  try {
-    const cs = selectCustomerServiceV2State(global, tabId);
-    const baseState = ensureCustomerServiceV2State(cs);
-
-    let messages = baseState.messages;
-
-    // Check for duplicate before adding
-    const isDuplicate = messages.some((msg) => msg.id === message.id && msg.chatId === chatId);
-    if (isDuplicate) {
-      return global;
-    }
-
-    // FIFO cleanup: Enforce 5000 message limit
-    if (messages.length >= 5000) {
-      messages = messages.slice(-4900); // Keep 4900, add 1 = 4901 (buffer)
-    }
-
-    // Performance warning for large message counts
-    if (messages.length > 1000 && messages.length % 500 === 0) {
-      // noop: can add telemetry hook here if needed
-    }
-
-    // Add new message
-    messages = [...messages, message];
-
-    // Update lookup map by chat ID
-    const messagesByChatId = {
-      ...baseState.messagesByChatId,
-      [chatId]: [...(baseState.messagesByChatId[chatId] || []), message],
-    };
-
-    const settings = baseState.settings
-      || loadCustomerServiceV2SettingsFromStorage()
-      || getDefaultCustomerServiceV2Settings();
-
-    const nextState: CustomerServiceV2State = {
-      ...baseState,
-      messages,
-      messagesByChatId,
-      messageCount: messages.length,
-      lastSyncTimestamp: Date.now(),
-      pausedChats: baseState.pausedChats,
-      settings,
-    };
-
-    if (settings.mode === 'assist') {
-      nextState.pausedChats = {
-        ...(nextState.pausedChats || {}),
-        [chatId]: {
-          pausedAt: Date.now(),
-          lastMessageId: message.id,
-        },
-      };
-    };
-
-    return syncCustomerServiceV2StateAcrossTabs(global, nextState);
-  } catch (error) {
-    actions.showNotification({
-      message: 'CustomerServiceSyncError',
-      tabId,
-    });
-
-    return global;
-  }
-});
-
-/**
- * Remove message from Customer Service V2
- * Marks message as read in original chat
- */
-addActionHandler('removeFromCustomerServiceV2', async (global, actions, payload): Promise<void> => {
-  const { chatId, messageId, tabId = getCurrentTabId() } = payload;
-
-  try {
-    // Mark as read in original chat
-    const chat = selectChat(global, chatId);
-    if (chat) {
-      await callApi('markMessageListRead', {
-        chat,
-        threadId: MAIN_THREAD_ID,
-        maxId: messageId,
-      });
-    }
-
-    // Remove from CS state
-    global = getGlobal();
-    const cs = selectCustomerServiceV2State(global, tabId);
-    const baseState = ensureCustomerServiceV2State(cs);
-    const messages = baseState.messages.filter(
-      (msg) => !(msg.chatId === chatId && msg.id === messageId),
-    );
-
-    const messagesByChatId = {
-      ...baseState.messagesByChatId,
-      [chatId]: (baseState.messagesByChatId[chatId] || []).filter((msg) => msg.id !== messageId),
-    };
-
-    const nextState: CustomerServiceV2State = {
-      ...baseState,
-      messages,
-      messagesByChatId,
-      messageCount: messages.length,
-      lastSyncTimestamp: Date.now(),
-    };
-
-    let pausedChats = nextState.pausedChats;
-    if (nextState.settings?.mode === 'assist' && (!messagesByChatId[chatId] || messagesByChatId[chatId].length === 0)) {
-      if (pausedChats && pausedChats[chatId]) {
-        const { [chatId]: _removed, ...rest } = pausedChats;
-        pausedChats = rest;
-      }
-      nextState.pausedChats = pausedChats;
-    }
-
-    global = syncCustomerServiceV2StateAcrossTabs(global, nextState);
-
-    setGlobal(global);
-
-    // Show confirmation
-    actions.showNotification({
-      message: lang('CustomerServiceMessageRemoved'),
-      tabId,
-    });
-  } catch (error) {
-    actions.showNotification({
-      message: 'CustomerServiceSyncError',
-      tabId,
-    });
-  }
-});
-
-/**
- * Remove multiple messages from Customer Service V2
- * Used for bulk delete sync
- */
-addActionHandler('removeCustomerServiceV2Messages', (global, actions, payload): ActionReturnType => {
-  const { messageIds, tabId = getCurrentTabId() } = payload;
-
-  try {
-    const cs = selectCustomerServiceV2State(global, tabId);
-    const baseState = ensureCustomerServiceV2State(cs);
-
-    // Filter out deleted messages
-    const messages = baseState.messages.filter((msg) => !messageIds.includes(msg.id));
-
-    // Rebuild lookup map
-    const messagesByChatId: Record<string, ApiMessage[]> = {};
-    messages.forEach((msg) => {
-      if (!messagesByChatId[msg.chatId]) {
-        messagesByChatId[msg.chatId] = [];
-      }
-      messagesByChatId[msg.chatId].push(msg);
-    });
-
-    const nextState: CustomerServiceV2State = {
-      ...baseState,
-      messages,
-      messagesByChatId,
-      messageCount: messages.length,
-      lastSyncTimestamp: Date.now(),
-    };
-
-    if (nextState.settings?.mode === 'assist' && nextState.pausedChats) {
-      const updatedPaused: typeof nextState.pausedChats = {};
-      const pausedChatIds = Object.keys(nextState.pausedChats);
-      for (let i = 0; i < pausedChatIds.length; i += 1) {
-        const pausedChatId = pausedChatIds[i];
-        const value = nextState.pausedChats[pausedChatId];
-        if (!value) {
-          continue;
-        }
-        if ((messagesByChatId[pausedChatId] || []).length > 0) {
-          updatedPaused[pausedChatId] = value;
-        }
-      }
-      nextState.pausedChats = updatedPaused;
-    }
-
-    return syncCustomerServiceV2StateAcrossTabs(global, nextState);
-  } catch (error) {
-    return global;
-  }
-});
-
-/**
- * Sync message update from original chat
- * Handles edits
- */
-addActionHandler('syncCustomerServiceV2Message', (global, actions, payload): ActionReturnType => {
-  const { message, tabId = getCurrentTabId() } = payload;
-
-  try {
-    const cs = selectCustomerServiceV2State(global, tabId);
-    const baseState = ensureCustomerServiceV2State(cs);
-
-    // Find and update message
-    const messages = baseState.messages.map((msg) => (
-      msg.id === message.id && msg.chatId === message.chatId ? message : msg
-    ));
-
-    // Update in lookup map
-    const messagesByChatId = {
-      ...baseState.messagesByChatId,
-      [message.chatId]: (baseState.messagesByChatId[message.chatId] || []).map((msg) => (
-        msg.id === message.id ? message : msg
-      )),
-    };
-
-    const nextState: CustomerServiceV2State = {
-      ...baseState,
-      messages,
-      messagesByChatId,
-      lastSyncTimestamp: Date.now(),
-    };
-
-    return syncCustomerServiceV2StateAcrossTabs(global, nextState);
-  } catch (error) {
-    return global;
-  }
-});
-
-/**
- * Clear all Customer Service V2 messages
- */
-addActionHandler('clearCustomerServiceV2Messages', async (global, actions, payload): Promise<void> => {
-  const { tabId = getCurrentTabId() } = payload || {};
-
-  const cs = selectCustomerServiceV2State(global, tabId);
-  const baseState = ensureCustomerServiceV2State(cs);
-
-  const markReadPromises = Object.entries(baseState.messagesByChatId || {}).map(([chatId, chatMessages]) => {
-    if (!chatMessages || chatMessages.length === 0) {
-      return undefined;
-    }
-
-    const chat = selectChat(global, chatId);
-    if (!chat) {
-      return undefined;
-    }
-
-    const maxMessageId = chatMessages.reduce((max, { id }) => (id > max ? id : max), 0);
-    if (!maxMessageId) {
-      return undefined;
-    }
-
-    return callApi('markMessageListRead', {
-      chat,
-      threadId: MAIN_THREAD_ID,
-      maxId: maxMessageId,
-    }).catch(() => undefined);
-  }).filter(Boolean) as Promise<unknown>[];
-
-  const nextState: CustomerServiceV2State = {
-    ...baseState,
-    messages: [],
-    messagesByChatId: {},
-    messageCount: 0,
-    lastSyncTimestamp: Date.now(),
-  };
-
-  global = syncCustomerServiceV2StateAcrossTabs(global, nextState);
-
-  setGlobal(global);
-
-  if (markReadPromises.length > 0) {
-    await Promise.allSettled(markReadPromises);
-  }
-});
+let isCheckingPausedChatsStatus = false;
 
 /**
  * Set current context for customer service message
@@ -653,6 +307,11 @@ addActionHandler('toggleCustomerServiceV2Mode', (global, actions, payload): Acti
 });
 
 addActionHandler('checkPausedChatsStatusV2', (global, actions, payload): ActionReturnType => {
+  // Prevent re-entry to avoid infinite recursion
+  if (isCheckingPausedChatsStatus) {
+    return global;
+  }
+
   const { tabId = getCurrentTabId() } = payload || {};
   const cs = selectCustomerServiceV2State(global, tabId);
 
@@ -660,406 +319,60 @@ addActionHandler('checkPausedChatsStatusV2', (global, actions, payload): ActionR
     return global;
   }
 
-  const updatedPausedChats = { ...cs.pausedChats };
-  let hasChanges = false;
-  const pausedChatIds = Object.keys(cs.pausedChats);
-
-  for (let i = 0; i < pausedChatIds.length; i += 1) {
-    const chatId = pausedChatIds[i];
-    const pauseInfo = cs.pausedChats[chatId];
-
-    if (!pauseInfo) {
-      delete updatedPausedChats[chatId];
-      hasChanges = true;
-      continue;
-    }
-
-    const chat = selectChat(global, chatId);
-    if (!chat) {
-      continue;
-    }
-
-    const lastTrackedMessageId = pauseInfo.lastMessageId;
-    if (!lastTrackedMessageId) {
-      delete updatedPausedChats[chatId];
-      hasChanges = true;
-      continue;
-    }
-
-    const isRead = Boolean(chat.lastReadInboxMessageId && chat.lastReadInboxMessageId >= lastTrackedMessageId);
-    const hasUnread = chat.unreadCount && chat.unreadCount > 0;
-
-    if (isRead || !hasUnread) {
-      delete updatedPausedChats[chatId];
-      hasChanges = true;
-    }
-  }
-
-  if (!hasChanges) {
-    return global;
-  }
-
-  const nextState: CustomerServiceV2State = {
-    ...cs,
-    pausedChats: Object.keys(updatedPausedChats).length ? updatedPausedChats : undefined,
-  };
-
-  // Use updateTabState directly to avoid triggering cross-tab sync
-  // which would cause infinite recursion through apiUpdaters
-  return updateTabState(global, { customerServiceV2: nextState }, tabId);
-});
-
-addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload): Promise<void> => {
-  const {
-    token,
-    tabId = getCurrentTabId(),
-    operation = 'auto',
-    existingData,
-    localSettings,
-    onExisting,
-    onDownload,
-    onUpload,
-    onError,
-  } = payload || {};
-
-  const trimmedToken = token?.trim();
-  if (!trimmedToken) {
-    onError?.(new Error('Sync token is required'));
-    return;
-  }
-
-  let currentGlobal = global;
-  const baseState = ensureCustomerServiceV2State(selectCustomerServiceV2State(currentGlobal, tabId));
-  const currentUserId = currentGlobal.currentUserId ? String(currentGlobal.currentUserId) : undefined;
-
-  const getLocalSettings = () => (
-    localSettings
-    || baseState.settings
-    || loadCustomerServiceV2SettingsFromStorage()
-    || getDefaultCustomerServiceV2Settings()
-  );
-
-  const updatePreferenceMetadata = (normalizedSettings: CustomerServiceSettings, meta?: {
-    ownerId?: string;
-    version?: number;
-    updatedAt?: number;
-  }) => {
-    updateCustomerServiceCloudSyncPreferenceForToken(trimmedToken, (prev) => ({
-      ...prev,
-      ownerId: meta?.ownerId ?? prev.ownerId,
-      lastVersion: meta?.version ?? prev.lastVersion,
-      lastUpdatedAt: meta?.updatedAt ?? prev.lastUpdatedAt,
-      lastSettingsHash: computeCustomerServiceSettingsHash(normalizedSettings),
-    }));
-  };
-
-  const persistSettings = (nextSettings: CustomerServiceSettings, meta?: {
-    ownerId?: string;
-    version?: number;
-    updatedAt?: number;
-    canUpdate?: boolean;
-  }) => {
-    const normalized = normalizeSettingsForSave(nextSettings);
-    saveCustomerServiceV2SettingsToStorage(normalized);
-
-    const nextState: CustomerServiceV2State = {
-      ...baseState,
-      settings: normalized,
-    };
-
-    currentGlobal = syncCustomerServiceV2StateAcrossTabs(currentGlobal, nextState);
-
-    setGlobal(currentGlobal);
-    updatePreferenceMetadata(normalized, meta);
-    onDownload?.({
-      ownerId: meta?.ownerId,
-      version: meta?.version,
-      updatedAt: meta?.updatedAt,
-      canUpdate: meta?.canUpdate,
-    });
-  };
+  isCheckingPausedChatsStatus = true;
 
   try {
-    if (operation === 'upload') {
-      if (!currentUserId) {
-        throw new Error('当前用户未登录，无法上传配置');
+    const updatedPausedChats = { ...cs.pausedChats };
+    let hasChanges = false;
+    const pausedChatIds = Object.keys(cs.pausedChats);
+
+    for (let i = 0; i < pausedChatIds.length; i += 1) {
+      const chatId = pausedChatIds[i];
+      const pauseInfo = cs.pausedChats[chatId];
+
+      if (!pauseInfo) {
+        delete updatedPausedChats[chatId];
+        hasChanges = true;
+        continue;
       }
 
-      const normalizedLocal = normalizeSettingsForSave(getLocalSettings());
-      const response = await uploadCustomerServiceCloudConfig(trimmedToken, {
-        ownerId: currentUserId,
-        settings: normalizedLocal,
-      });
-
-      updatePreferenceMetadata(normalizedLocal, {
-        ownerId: currentUserId,
-        version: response.version,
-        updatedAt: response.updatedAt,
-      });
-
-      onUpload?.({
-        version: response.version,
-        updatedAt: response.updatedAt,
-      });
-      return;
-    }
-
-    if (operation === 'download') {
-      let cloud = existingData;
-      if (!cloud) {
-        const fetched = await fetchCustomerServiceCloudConfig(trimmedToken, currentUserId);
-        if (!fetched?.settings) {
-          throw new Error('云端未找到配置');
-        }
-
-        cloud = {
-          settings: normalizeSettingsForSave(fetched.settings as CustomerServiceSettings),
-          ownerId: fetched.ownerId,
-          version: fetched.version,
-          updatedAt: fetched.updatedAt,
-          canUpdate: fetched.canUpdate,
-        };
+      const chat = selectChat(global, chatId);
+      if (!chat) {
+        continue;
       }
 
-      persistSettings(cloud.settings, {
-        ownerId: cloud.ownerId,
-        version: cloud.version,
-        updatedAt: cloud.updatedAt,
-        canUpdate: cloud.canUpdate,
-      });
-      return;
-    }
-
-    const existing = await fetchCustomerServiceCloudConfig(trimmedToken, currentUserId);
-    if (existing?.settings) {
-      const ownerId = existing.ownerId ? String(existing.ownerId) : undefined;
-      const normalizedIncoming = normalizeSettingsForSave(existing.settings as CustomerServiceSettings);
-      const canUpdate = existing.canUpdate ?? ownersMatch(ownerId, currentUserId);
-
-      if (canUpdate) {
-        onExisting?.({
-          ownerId,
-          version: existing.version,
-          updatedAt: existing.updatedAt,
-          settings: normalizedIncoming,
-          canUpdate,
-        });
-        return;
+      const lastTrackedMessageId = pauseInfo.lastMessageId;
+      if (!lastTrackedMessageId) {
+        delete updatedPausedChats[chatId];
+        hasChanges = true;
+        continue;
       }
 
-      persistSettings(normalizedIncoming, {
-        ownerId,
-        version: existing.version,
-        updatedAt: existing.updatedAt,
-        canUpdate,
-      });
-      return;
+      const isRead = Boolean(chat.lastReadInboxMessageId && chat.lastReadInboxMessageId >= lastTrackedMessageId);
+      const hasUnread = chat.unreadCount && chat.unreadCount > 0;
+
+      if (isRead || !hasUnread) {
+        delete updatedPausedChats[chatId];
+        hasChanges = true;
+      }
     }
 
-    if (!currentUserId) {
-      throw new Error('当前用户未登录，无法创建云端配置');
+    if (!hasChanges) {
+      return global;
     }
-
-    const normalizedLocal = normalizeSettingsForSave(getLocalSettings());
-    const response = await uploadCustomerServiceCloudConfig(trimmedToken, {
-      ownerId: currentUserId,
-      settings: normalizedLocal,
-    });
-
-    updatePreferenceMetadata(normalizedLocal, {
-      ownerId: currentUserId,
-      version: response.version,
-      updatedAt: response.updatedAt,
-    });
-
-    onUpload?.({
-      version: response.version,
-      updatedAt: response.updatedAt,
-    });
-  } catch (error) {
-    onError?.(error instanceof Error ? error : new Error('Cloud sync failed'));
-  }
-});
-
-addActionHandler('autoSyncCustomerServiceV2Cloud', async (global, actions, payload): Promise<void> => {
-  const { tabId = getCurrentTabId() } = payload || {};
-  const preference = loadCustomerServiceCloudSyncPreference();
-  if (!preference?.token) {
-    return;
-  }
-
-  const trimmedToken = preference.token.trim();
-  if (!trimmedToken) {
-    return;
-  }
-
-  let currentGlobal = global;
-  const baseState = ensureCustomerServiceV2State(selectCustomerServiceV2State(currentGlobal, tabId));
-  const currentUserId = currentGlobal.currentUserId ? String(currentGlobal.currentUserId) : undefined;
-  const translate = getTranslationFn();
-
-  logCustomerServiceCloudSyncDebug('autoSync:start', {
-    tabId,
-    token: maskCloudSyncToken(trimmedToken),
-    preferenceVersion: preference.lastVersion,
-    preferenceHash: preference.lastSettingsHash,
-    preferenceOwnerId: preference.ownerId,
-    currentUserId,
-  });
-
-  const persistDownloadedSettings = (settings: CustomerServiceSettings, meta?: {
-    ownerId?: string;
-    version?: number;
-    updatedAt?: number;
-  }) => {
-    const normalized = normalizeSettingsForSave(settings);
-    saveCustomerServiceV2SettingsToStorage(normalized);
-
-    currentGlobal = getGlobal();
-    const refreshedState = ensureCustomerServiceV2State(selectCustomerServiceV2State(currentGlobal, tabId));
 
     const nextState: CustomerServiceV2State = {
-      ...refreshedState,
-      settings: normalized,
+      ...cs,
+      pausedChats: Object.keys(updatedPausedChats).length ? updatedPausedChats : undefined,
     };
 
-    currentGlobal = syncCustomerServiceV2StateAcrossTabs(currentGlobal, nextState);
-    setGlobal(currentGlobal);
-
-    updateCustomerServiceCloudSyncPreferenceForToken(trimmedToken, (prev) => ({
-      ...prev,
-      ownerId: meta?.ownerId ?? prev.ownerId,
-      lastVersion: meta?.version ?? prev.lastVersion,
-      lastUpdatedAt: meta?.updatedAt ?? prev.lastUpdatedAt,
-      lastSettingsHash: computeCustomerServiceSettingsHash(normalized),
-    }));
-
-    logCustomerServiceCloudSyncDebug('autoSync:applyCloudSettings', {
-      token: maskCloudSyncToken(trimmedToken),
-      version: meta?.version,
-      ownerId: meta?.ownerId,
-      updatedAt: meta?.updatedAt,
-    });
-
-    actions.showNotification({
-      message: translate('CustomerServiceCloudSyncUpdated'),
-      tabId,
-    });
-  };
-
-  try {
-    const cloud = await fetchCustomerServiceCloudConfig(trimmedToken, currentUserId);
-    if (!cloud?.settings) {
-      logCustomerServiceCloudSyncDebug('autoSync:noCloudSettings', {
-        token: maskCloudSyncToken(trimmedToken),
-      });
-      return;
-    }
-
-    // Lightweight bubble to indicate that an automatic cloud sync is in progress.
-    // actions.showNotification({
-    //   message: translate('CustomerServiceCloudSyncChecking'),
-    //   tabId,
-    // });
-
-    const ownerId = cloud.ownerId ? String(cloud.ownerId) : undefined;
-    const normalizedIncoming = normalizeSettingsForSave(cloud.settings as CustomerServiceSettings);
-    const incomingHash = computeCustomerServiceSettingsHash(normalizedIncoming);
-    const remoteVersion = typeof cloud.version === 'number' ? cloud.version : 0;
-    const lastVersion = preference.lastVersion || 0;
-    const hasRemoteChanged = preference.lastVersion !== remoteVersion
-      || preference.lastSettingsHash !== incomingHash;
-
-    const canUpdate = cloud.canUpdate ?? ownersMatch(ownerId, currentUserId);
-
-    logCustomerServiceCloudSyncDebug('autoSync:fetched', {
-      token: maskCloudSyncToken(trimmedToken),
-      ownerId,
-      remoteVersion,
-      lastVersion,
-      canUpdate,
-      hasRemoteChanged,
-      incomingHash,
-      storedHash: preference.lastSettingsHash,
-    });
-
-    if (!canUpdate) {
-      if (hasRemoteChanged) {
-        persistDownloadedSettings(normalizedIncoming, {
-          ownerId,
-          version: remoteVersion,
-          updatedAt: cloud.updatedAt,
-        });
-      } else {
-        updateCustomerServiceCloudSyncPreferenceForToken(trimmedToken, (prev) => ({
-          ...prev,
-          ownerId: ownerId ?? prev.ownerId,
-          lastVersion: remoteVersion,
-          lastUpdatedAt: cloud.updatedAt ?? prev.lastUpdatedAt,
-          lastSettingsHash: incomingHash,
-        }));
-        logCustomerServiceCloudSyncDebug('autoSync:noChangeNonOwner', {
-          token: maskCloudSyncToken(trimmedToken),
-          remoteVersion,
-        });
-        actions.showNotification({
-          message: translate('CustomerServiceCloudSyncNoChange'),
-          tabId,
-        });
-      }
-      return;
-    }
-
-    if (hasRemoteChanged && remoteVersion > lastVersion) {
-      persistDownloadedSettings(normalizedIncoming, {
-        ownerId: ownerId || currentUserId,
-        version: remoteVersion,
-        updatedAt: cloud.updatedAt,
-      });
-      return;
-    }
-
-    updateCustomerServiceCloudSyncPreferenceForToken(trimmedToken, (prev) => ({
-      ...prev,
-      ownerId: ownerId ?? prev.ownerId ?? currentUserId,
-      lastVersion: remoteVersion,
-      lastUpdatedAt: cloud.updatedAt ?? prev.lastUpdatedAt,
-      lastSettingsHash: incomingHash,
-    }));
-    logCustomerServiceCloudSyncDebug('autoSync:noChangeOwner', {
-      token: maskCloudSyncToken(trimmedToken),
-      remoteVersion,
-    });
-    actions.showNotification({
-      message: translate('CustomerServiceCloudSyncNoChange'),
-      tabId,
-    });
-  } catch (error) {
-    logCustomerServiceCloudSyncDebug('autoSync:error', {
-      token: maskCloudSyncToken(preference.token),
-      error,
-    });
-    actions.showNotification({
-      message: translate('CustomerServiceCloudSyncFailed'),
-      tabId,
-    });
+    // Use updateTabState directly to avoid triggering cross-tab sync
+    // which would cause infinite recursion through apiUpdaters
+    return updateTabState(global, { customerServiceV2: nextState }, tabId);
+  } finally {
+    isCheckingPausedChatsStatus = false;
   }
 });
-
-function normalizeSettingsForSave(settings: CustomerServiceSettings): CustomerServiceSettings {
-  return {
-    monitoredChatIds: settings.monitoredChatIds || [],
-    filteredUserIds: settings.filteredUserIds || [],
-    regexFilters: (settings.regexFilters || []).map((filter) => ({
-      source: filter.source,
-      flags: filter.flags,
-    })),
-    mode: settings.mode === 'assist' ? 'assist' : 'oncall',
-    autoRead: Boolean(settings.autoRead),
-    quickReplies: normalizeCustomerServiceQuickReplies(settings.quickReplies || []),
-    quickReplyPanelGlobal: Boolean(settings.quickReplyPanelGlobal),
-  };
-}
 
 addActionHandler('saveCustomerServiceV2Settings', (global, actions, payload): ActionReturnType => {
   const { settings, tabId = getCurrentTabId() } = payload;
