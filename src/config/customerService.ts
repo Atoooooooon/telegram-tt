@@ -65,6 +65,10 @@ export const CUSTOMER_SERVICE_CONFIG = {
   // 云端同步接口（可选）
   CLOUD_SYNC_REDIS_URL: envRedisUrl,
   CLOUD_SYNC_REDIS_TOKEN: envRedisToken,
+
+  // 消息分组设置
+  ENABLE_MESSAGE_GROUPING: true,
+  MESSAGE_GROUPING_WINDOW: 60, // 1 minute in seconds
 } as const;
 
 // 检查是否为监听的客服群组

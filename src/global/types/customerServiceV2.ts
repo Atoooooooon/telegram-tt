@@ -36,6 +36,10 @@ export type CustomerServiceSettings = {
   quickReplies?: CustomerServiceQuickReply[];
   /** Allow quick reply panel outside customer service context */
   quickReplyPanelGlobal?: boolean;
+  /** Enable message grouping */
+  enableMessageGrouping?: boolean;
+  /** Message grouping time window in seconds (default: 60 = 1 minute) */
+  messageGroupingWindow?: number;
 };
 
 /**
@@ -93,4 +97,25 @@ export type CustomerServiceMessage = ApiMessage & {
   csAddedAt: number;
   /** Original chat ID (for multi-chat reference) */
   sourceChatId: string;
+};
+
+/**
+ * Customer Service message group
+ * Groups consecutive messages from the same sender in the same chat
+ */
+export type CustomerServiceMessageGroup = {
+  /** Unique group identifier */
+  id: string;
+  /** Source chat ID */
+  chatId: string;
+  /** Sender user ID */
+  senderId: string;
+  /** Messages in this group */
+  messages: ApiMessage[];
+  /** First message timestamp */
+  firstMessageDate: number;
+  /** Last message timestamp */
+  lastMessageDate: number;
+  /** Total message count in group */
+  messageCount: number;
 };

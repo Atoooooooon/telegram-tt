@@ -105,6 +105,8 @@ function getDefaultCustomerServiceV2Settings(): CustomerServiceSettings {
     autoRead: false,
     quickReplies: normalizeCustomerServiceQuickReplies(CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES),
     quickReplyPanelGlobal: false,
+    enableMessageGrouping: CUSTOMER_SERVICE_CONFIG.ENABLE_MESSAGE_GROUPING,
+    messageGroupingWindow: CUSTOMER_SERVICE_CONFIG.MESSAGE_GROUPING_WINDOW,
   };
 }
 
@@ -1097,11 +1099,26 @@ addActionHandler('saveCustomerServiceV2Settings', (global, actions, payload): Ac
   const ownerId = preference?.ownerId;
 
   if (token && currentUserId && ownerId && ownersMatch(ownerId, currentUserId)) {
+    const lang = getTranslationFn();
     void actions.syncCustomerServiceV2Cloud({
       tabId,
       token,
       operation: 'upload',
       localSettings: normalized,
+      onUpload: (result) => {
+        actions.showNotification({
+          message: lang('CustomerServiceCloudSyncUploadSuccessVersion', {
+            version: String(result?.version ?? 1),
+          }),
+          tabId,
+        });
+      },
+      onError: () => {
+        actions.showNotification({
+          message: lang('CustomerServiceCloudSyncFailed'),
+          tabId,
+        });
+      },
     });
   }
 

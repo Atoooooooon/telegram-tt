@@ -8,16 +8,23 @@ import type { ApiMessage } from '../../../../api/types';
 import { MAIN_THREAD_ID } from '../../../../api/types';
 import type { ObserveFn } from '../../../../hooks/useIntersectionObserver';
 import type { IAlbum } from '../../../../types';
+import type { CustomerServiceMessageGroup, CustomerServiceSettings } from '../../../../global/types/customerServiceV2';
 
 import {
   selectCustomerServiceV2ContextChatId,
   selectCustomerServiceV2ContextMessageId,
   selectCustomerServiceV2MessageCount,
   selectCustomerServiceV2Messages,
+  selectCustomerServiceV2Settings,
 } from '../../../../global/selectors/customerServiceV2';
 import buildClassName from '../../../../util/buildClassName';
 import { getCurrentTabId } from '../../../../util/establishMultitabRole';
 import { groupMessages, isAlbum as isAlbumEntry } from '../../../middle/helpers/groupMessages';
+import {
+  groupCustomerServiceMessages,
+  getMessageGroupingWindow,
+  isMessageGroupingEnabled,
+} from '../helpers/groupCustomerServiceMessages';
 
 import useLang from '../../../../hooks/useLang';
 import useLastCallback from '../../../../hooks/useLastCallback';
@@ -38,6 +45,7 @@ type StateProps = {
   messageCount: number;
   activeContextChatId?: string;
   activeContextMessageId?: number;
+  settings?: CustomerServiceSettings;
 };
 
 const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
@@ -46,6 +54,7 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
   messageCount,
   activeContextChatId,
   activeContextMessageId,
+  settings,
 }) => {
   const {
     removeFromCustomerServiceV2,
@@ -101,24 +110,43 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
     return () => undefined;
   }, []);
 
+  // Check if grouping is enabled
+  const groupingEnabled = isMessageGroupingEnabled(settings?.enableMessageGrouping);
+  const groupingWindow = getMessageGroupingWindow(settings?.messageGroupingWindow);
+
+  // Group messages if enabled
+  const messageGroups = useMemo<CustomerServiceMessageGroup[]>(() => {
+    if (!groupingEnabled || !messages.length) {
+      return [];
+    }
+
+    return groupCustomerServiceMessages(messages, groupingWindow);
+  }, [messages, groupingEnabled, groupingWindow]);
+
   const messageEntries = useMemo<(ApiMessage | IAlbum)[]>(() => {
     if (!messages.length) {
       return [];
     }
 
-    const groupedMessages = groupMessages(messages);
-    const flattened: (ApiMessage | IAlbum)[] = [];
+    // If grouping is disabled, use original logic
+    if (!groupingEnabled) {
+      const groupedMessages = groupMessages(messages);
+      const flattened: (ApiMessage | IAlbum)[] = [];
 
-    groupedMessages.forEach((dateGroup) => {
-      dateGroup.senderGroups.forEach((senderGroup) => {
-        senderGroup.forEach((item) => {
-          flattened.push(item);
+      groupedMessages.forEach((dateGroup) => {
+        dateGroup.senderGroups.forEach((senderGroup) => {
+          senderGroup.forEach((item) => {
+            flattened.push(item);
+          });
         });
       });
-    });
 
-    return flattened;
-  }, [messages]);
+      return flattened;
+    }
+
+    // Otherwise, return empty (we'll render groups directly)
+    return [];
+  }, [messages, groupingEnabled]);
 
   // Performance optimization: Memoize message rendering threshold
   const hasLargeMessageCount = useMemo(() => messageCount > 1000, [messageCount]);
@@ -139,6 +167,92 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
     );
   }
 
+  // Render message group
+  const renderMessageGroup = useCallback((group: CustomerServiceMessageGroup) => {
+    const handleRemoveGroup = () => {
+      group.messages.forEach((msg) => {
+        handleRemoveMessage(msg.chatId, msg.id);
+      });
+    };
+
+    const handleViewGroupContext = () => {
+      const firstMessage = group.messages[0];
+      handleViewContext(firstMessage.chatId, firstMessage.id);
+    };
+
+    const isActiveGroup = activeContextChatId === group.chatId
+      && group.messages.some((msg) => msg.id === activeContextMessageId);
+
+    return (
+      <div
+        key={group.id}
+        className={buildClassName(
+          styles.messageGroup,
+          isActiveGroup && styles.activeContext,
+        )}
+      >
+        <div className={styles.groupHeader}>
+          <CustomerServiceSourceBadge
+            message={group.messages[0]}
+            className={buildClassName(styles.sourceBadge, styles.sourceBadgeInteractive)}
+            onClick={handleViewGroupContext}
+          />
+          <span className={styles.groupMessageCount}>
+            {lang('CustomerServiceGroupMessageCount', { count: group.messageCount })}
+          </span>
+          <Button
+            className={styles.groupRemoveButton}
+            round
+            size="tiny"
+            color="translucent"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleRemoveGroup();
+            }}
+            ariaLabel={lang('RemoveFromCustomerService')}
+          >
+            <i className="icon icon-close" />
+          </Button>
+        </div>
+        <div className={styles.groupMessages}>
+          {group.messages.map((message, msgIndex) => (
+            <div
+              key={`${message.chatId}-${message.id}`}
+              className={styles.groupedMessage}
+              onClick={(e) => {
+                if (e.defaultPrevented) return;
+                if (e.button !== 0) return;
+                const target = e.target as HTMLElement;
+                if (target.closest('button') || target.closest('a')) return;
+                const selection = window.getSelection && window.getSelection();
+                if (selection && selection.toString()) return;
+                e.preventDefault();
+                e.stopPropagation();
+                handleViewContext(message.chatId, message.id);
+              }}
+            >
+              <Message
+                message={message}
+                threadId={message.chatId}
+                messageListType="thread"
+                noComments
+                noReplies
+                observeIntersectionForLoading={observeIntersectionForLoading}
+                appearanceOrder={msgIndex}
+                isJustAdded={false}
+                isFirstInGroup={msgIndex === 0}
+                isLastInGroup={msgIndex === group.messages.length - 1}
+                isFirstInDocumentGroup={false}
+                isLastInDocumentGroup={false}
+                isLastInList={false}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }, [activeContextChatId, activeContextMessageId, handleRemoveMessage, handleViewContext, lang, observeIntersectionForLoading]);
+
   return (
     <div className={buildClassName(styles.root, className)}>
       {hasLargeMessageCount && (
@@ -148,7 +262,10 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
         </div>
       )}
       <div className={styles.messageList}>
-        {messageEntries.map((messageOrAlbum, index) => {
+        {groupingEnabled ? (
+          messageGroups.map((group) => renderMessageGroup(group))
+        ) : (
+          messageEntries.map((messageOrAlbum, index) => {
           const album = isAlbumEntry(messageOrAlbum) ? messageOrAlbum : undefined;
           const message = album ? album.mainMessage : messageOrAlbum as ApiMessage;
           const containsContextMessage = activeContextMessageId !== undefined
@@ -278,7 +395,8 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
               </div>
             </div>
           );
-        })}
+        })
+        )}
       </div>
     </div>
   );
@@ -291,12 +409,14 @@ export default memo(
     const messageCount = selectCustomerServiceV2MessageCount(global, tabId);
     const activeContextChatId = selectCustomerServiceV2ContextChatId(global, tabId);
     const activeContextMessageId = selectCustomerServiceV2ContextMessageId(global, tabId);
+    const settings = selectCustomerServiceV2Settings(global, tabId);
 
     return {
       messages,
       messageCount,
       activeContextChatId,
       activeContextMessageId,
+      settings,
     };
   })(CustomerServiceMessageList),
 );
