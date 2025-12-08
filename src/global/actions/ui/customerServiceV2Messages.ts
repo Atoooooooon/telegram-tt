@@ -35,18 +35,69 @@ addActionHandler('addToCustomerServiceV2', (global, actions, payload): ActionRet
       return global;
     }
 
-    // FIFO cleanup: Enforce 5000 message limit
-    if (messages.length >= 5000) {
-      messages = messages.slice(-4900); // Keep 4900, add 1 = 4901 (buffer)
+    // In assist mode, remove previous messages from this chat if they were read
+    const chat = selectChat(global, chatId);
+    const existingChatMessages = baseState.messagesByChatId[chatId] || [];
+
+    // eslint-disable-next-line no-console
+    console.log('[CS-Debug] addToCustomerServiceV2:', {
+      chatId,
+      newMessageId: message.id,
+      mode: baseState.settings?.mode,
+      existingChatMessages: existingChatMessages.map((m) => m.id),
+      chatLastReadInboxMessageId: chat?.lastReadInboxMessageId,
+      chatUnreadCount: chat?.unreadCount,
+    });
+
+    // In assist mode, remove read messages from customer service window when new message arrives
+    if (baseState.settings?.mode === 'assist' && chat?.lastReadInboxMessageId) {
+      const readMessageIds = existingChatMessages
+        .filter((msg) => msg.id <= chat.lastReadInboxMessageId!)
+        .map((msg) => msg.id);
+
+      if (readMessageIds.length > 0) {
+        // eslint-disable-next-line no-console
+        console.log('[CS-Debug] Removing read messages:', readMessageIds);
+
+        messages = messages.filter(
+          (msg) => !(msg.chatId === chatId && readMessageIds.includes(msg.id)),
+        );
+      }
+    }
+
+    // FIFO cleanup: Different limits based on mode
+    // Assist mode: Keep fewer messages since each chat only needs latest unread message
+    // On-call mode: Keep more messages for history
+    const maxMessages = baseState.settings?.mode === 'assist' ? 500 : 5000;
+    const keepMessages = baseState.settings?.mode === 'assist' ? 450 : 4900;
+
+    if (messages.length >= maxMessages) {
+      messages = messages.slice(-keepMessages);
+
+      // eslint-disable-next-line no-console
+      console.log('[CS-Debug] FIFO cleanup triggered:', {
+        mode: baseState.settings?.mode,
+        before: messages.length + (maxMessages - keepMessages),
+        after: messages.length,
+      });
     }
 
     // Add new message
     messages = [...messages, message];
 
     // Update lookup map by chat ID
+    // Filter out read messages from existing chat messages
+    let chatMessages = existingChatMessages;
+    if (baseState.settings?.mode === 'assist' && chat?.lastReadInboxMessageId) {
+      chatMessages = chatMessages.filter((msg) => msg.id > chat.lastReadInboxMessageId!);
+    }
+
+    // Add new message to chat messages
+    chatMessages = [...chatMessages, message];
+
     const messagesByChatId = {
       ...baseState.messagesByChatId,
-      [chatId]: [...(baseState.messagesByChatId[chatId] || []), message],
+      [chatId]: chatMessages,
     };
 
     const settings = baseState.settings

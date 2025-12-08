@@ -1284,32 +1284,6 @@ addActionHandler('reportChannelSpam', (global, actions, payload): ActionReturnTy
   void callApi('reportChannelSpam', { peer, chat, messageIds });
 });
 
-function scheduleAssistModePausedChatCheck(tabId: number, actions: RequiredGlobalActions) {
-  execAfterActions(() => {
-    const currentGlobal = getGlobal();
-    const tabState = selectTabState(currentGlobal, tabId);
-    if (!tabState) {
-      return;
-    }
-
-    const customerServiceV2 = selectCustomerServiceV2State(currentGlobal, tabId);
-    const isAssistMode = customerServiceV2?.settings?.mode === 'assist';
-    if (!isAssistMode) {
-      return;
-    }
-
-    const hasV2PausedChats = Boolean(
-      customerServiceV2?.pausedChats && Object.keys(customerServiceV2.pausedChats).length > 0,
-    );
-
-    if (!hasV2PausedChats) {
-      return;
-    }
-
-    actions.checkPausedChatsStatusV2({ tabId });
-  });
-}
-
 addActionHandler('markMessageListRead', (global, actions, payload): ActionReturnType => {
   if (selectIsCurrentUserFrozen(global)) return undefined;
   const { maxId, tabId = getCurrentTabId() } = payload;
