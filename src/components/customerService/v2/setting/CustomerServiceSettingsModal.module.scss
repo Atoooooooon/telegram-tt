@@ -21,6 +21,20 @@
   :global(.modal-footer) {
     margin-bottom: 0.1rem;
   }
+
+  @media (max-width: 480px) {
+    :global(.modal-dialog) {
+      width: 100vw;
+      max-width: 100vw;
+      margin: 0;
+      border-radius: 0;
+    }
+
+    :global(.modal-content) {
+      border-radius: 0;
+      max-height: 100vh;
+    }
+  }
 }
 
 .header {
@@ -29,6 +43,10 @@
   :global(.modal-title) {
     margin: 0;
   }
+
+  @media (max-width: 480px) {
+    padding: 0.5rem 1rem 0 !important;
+  }
 }
 
 .titleRow {
@@ -36,12 +54,21 @@
   align-items: center;
   gap: 1rem;
   margin-left: 1rem;
+
+  @media (max-width: 480px) {
+    gap: 0.5rem;
+    margin-left: 0;
+  }
 }
 
 .titleIcon {
   font-size: 1.5rem;
   color: var(--color-primary);
   flex-shrink: 0;
+
+  @media (max-width: 480px) {
+    font-size: 1.25rem;
+  }
 }
 
 .settingsModal {
@@ -66,6 +93,21 @@
       gap: 0.5rem;
     }
   }
+
+  @media (max-width: 480px) {
+    flex: 1;
+    :global(.TabList) {
+      gap: 0.35rem;
+      width: 100%;
+    }
+
+    :global(.Tab) {
+      flex: 1 1 auto;
+      min-width: 0;
+      padding: 0.5rem 0.25rem !important;
+      font-size: 0.75rem;
+    }
+  }
 }
 
 .content {
@@ -76,6 +118,10 @@
 
   @media (max-width: 600px) {
     padding: 1.25rem;
+  }
+
+  @media (max-width: 480px) {
+    padding: 1rem;
   }
 }
 
@@ -402,7 +448,9 @@
 .filterControls {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap; /* allow wrap only when necessary */
 }
 
 .tagFilter,
@@ -413,40 +461,80 @@
   gap: 0.5rem;
 }
 
+.tagFilter {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  flex-shrink: 0;
+
+  label {
+    font-size: 0.85rem;
+    padding-top: 0.5rem;
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text);
+    white-space: nowrap;
+    margin: 0;
+  }
+
+  select {
+    width: auto;
+    max-width: 20rem;
+    height: 2.25rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--color-borders);
+    background: var(--color-background);
+    color: var(--color-text);
+    padding: 0 0.75rem;
+    box-sizing: border-box;
+  }
+
+  @media (max-width: 480px) {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+
+    label {
+      font-size: 0.8rem;
+      padding-top: 0.25rem;
+    }
+
+    select {
+      width: 100%;
+      max-width: 100%;
+      font-size: 0.85rem;
+    }
+  }
+}
+
 .groupSearchSection {
-  justify-content: flex-start;
-  margin-right: 5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 auto; /* grow to take available space */
+  min-width: 0; /* allow shrinking */
+  margin-right: 0; /* remove fixed margins */
 }
-
-.tagFilter label {
-  font-size: 0.85rem;
-  padding-top: 0.5rem;
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text);
-  white-space: nowrap;
-}
-
-.tagFilter select {
-  width: 8rem;
-  height: 2.25rem;
-  border-radius: 0.5rem;
-  border: 1px solid var(--color-borders);
-  background: var(--color-background);
-  color: var(--color-text);
-  padding: 0 0.75rem;
-}
-
-.fieldIcon {
-  color: var(--color-primary);
-}
-
 
 .searchInput {
   margin-bottom: 0 !important;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+
   :global(.form-control) {
     padding-left: 0.5rem;
     height: 2.5rem;
-  };
+    width: 100%;
+    font-size: 0.9rem;
+  }
+
+  @media (max-width: 480px) {
+    :global(.form-control) {
+      font-size: 0.85rem;
+      height: 2.25rem;
+      padding: 0.5rem;
+    }
+  }
 }
 
 .clearSearchButton {
@@ -467,7 +555,11 @@
 }
 
 .selectAllWrapper {
-  margin-right: 1.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto; /* keep intrinsic width so it stays on same row */
+  margin-right: 0;
 }
 
 .selectAllButton {
@@ -475,6 +567,50 @@
   align-items: center;
   gap: 0.35rem;
   min-width: auto;
+  white-space: nowrap;
+}
+
+.autoReadCheckbox {
+  /* remove offset that caused overlap and use normal flow */
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: auto;
+
+  :global(.Checkbox-main) {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+  }
+
+  @media (max-width: 480px) {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .filterControls {
+    /* keep search + 全选 on same line where possible */
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .groupSearchSection {
+    flex: 1 1 auto;
+    width: auto;
+  }
+
+  .selectAllWrapper {
+    flex: 0 0 auto;
+  }
+
+  .autoReadCheckbox {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 
 .error :global(.form-control) {
@@ -631,6 +767,21 @@
     margin-bottom: 0rem;
     width: 35rem;
   }
+
+  @media (max-width: 768px) {
+    margin-right: 10rem;
+    :global(.form-control) {
+      width: 25rem;
+    }
+  }
+
+  @media (max-width: 480px) {
+    margin-right: 0;
+    width: 100%;
+    :global(.form-control) {
+      width: 100%;
+    }
+  }
 }
 .regexAddInput {
   margin-bottom: 0rem !important;
@@ -638,6 +789,19 @@
     padding-left: 0.5rem;
     margin-bottom: 0rem;
     width: 35rem;
+  }
+
+  @media (max-width: 768px) {
+    :global(.form-control) {
+      width: 25rem;
+    }
+  }
+
+  @media (max-width: 480px) {
+    width: 100%;
+    :global(.form-control) {
+      width: 100%;
+    }
   }
 }
 
@@ -929,12 +1093,29 @@
   justify-content: space-between;
   align-items: center;
   background: var(--color-background);
+
+  @media (max-width: 768px) {
+    padding: 0.75rem 1rem;
+    gap: 0.75rem;
+  }
+
+  @media (max-width: 480px) {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0.75rem;
+    gap: 0.5rem;
+  }
 }
 
 .leftSection {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+
+  @media (max-width: 480px) {
+    gap: 0.5rem;
+    width: 100%;
+  }
 }
 
 .modeSection {
@@ -971,6 +1152,15 @@
 
 .autoReadCheckbox {
   padding: 5px 0 0 42px;
+
+  @media (max-width: 480px) {
+    padding: 5px 0 0 0;
+    width: 100%;
+
+    :global(.Checkbox-main) {
+      width: 100%;
+    }
+  }
 }
 
 .rightSection {
@@ -978,6 +1168,27 @@
   flex-wrap: wrap;
   gap: 0.5rem;
   justify-content: flex-end;
+
+  @media (max-width: 768px) {
+    gap: 0.35rem;
+  }
+
+  @media (max-width: 480px) {
+    width: 100%;
+    justify-content: stretch;
+    gap: 0.4rem;
+
+    :global(.Button) {
+      flex: 1;
+      min-width: 0;
+      padding: 0.5rem 0.35rem !important;
+      font-size: 0.75rem;
+    }
+
+    :global(.icon) {
+      font-size: 0.9rem;
+    }
+  }
 }
 
 .autoReadSection {
