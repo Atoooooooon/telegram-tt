@@ -15,7 +15,8 @@ import Button from '../../../../ui/Button';
 import Checkbox from '../../../../ui/Checkbox';
 import InputText from '../../../../ui/InputText';
 
-import styles from '../CustomerServiceSettingsModal.module.scss';
+import layoutStyles from '../CustomerServiceSettingsModal.module.scss';
+import styles from './GroupFiltersTab.module.scss';
 
 type Props = {
   chats: Record<string, ApiChat>;
@@ -229,13 +230,13 @@ const handleClearGroupSearch = () => {
   const searchError = hasRegexError ? lang('CustomerServiceInvalidRegex') : '';
 
   return (
-    <div className={styles.tabContent}>
-      <div className={styles.sectionHeader}>
+    <div className={layoutStyles.tabContent}>
+      <div className={layoutStyles.sectionHeader}>
         <h3>
-          <Icon name="folder" className={styles.sectionIcon} />
+          <Icon name="folder" className={layoutStyles.sectionIcon} />
           {lang('CustomerServiceSelectGroups')}
         </h3>
-        <p className={styles.sectionDescription}>
+        <p className={layoutStyles.sectionDescription}>
           {lang('CustomerServiceSelectGroupsDescription')}
         </p>
       </div>

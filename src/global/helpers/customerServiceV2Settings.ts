@@ -1,9 +1,46 @@
 import type {
   CustomerServiceQuickReply,
   CustomerServiceSettings,
+  RuleEngineConfig,
+  UserRule,
 } from '../types/customerServiceV2';
 
 const CUSTOMER_SERVICE_V2_SETTINGS_KEY = 'customerServiceV2Settings';
+
+export const DEFAULT_RULE_ENGINE_CONFIG: RuleEngineConfig = {
+  enabled: true,
+  fallbackToLegacy: true,
+  maxExecutionTime: 5000,
+};
+
+export const DEFAULT_DEBUG_RULE: UserRule = {
+  id: 'debug_auto_reply_foo_bar',
+  name: '[调试] 检测foo自动回复bar',
+  enabled: true,
+  trigger: {
+    eventType: 'customer_message',
+  },
+  pipeline: [
+    {
+      id: 'check_foo',
+      capabilityId: 'check_text_match',
+      config: {
+        pattern: 'foo',
+        mode: '包含',
+      },
+      onSuccess: { continueNext: true },
+      onFailure: { stopPipeline: true },
+    },
+    {
+      id: 'reply_bar',
+      capabilityId: 'action_auto_reply',
+      config: {
+        template: 'bar',
+        replyToOriginal: true,
+      },
+    },
+  ],
+};
 
 type NormalizableSettings = {
   monitoredChatIds?: unknown;
@@ -86,6 +123,21 @@ function normalizeSettings(raw: unknown): CustomerServiceSettings | undefined {
     ruleEngineConfig,
   } = raw as NormalizableSettings;
 
+  let normalizedRuleEngineConfig: RuleEngineConfig | undefined;
+  if (isRecord(ruleEngineConfig)) {
+    normalizedRuleEngineConfig = {
+      enabled: typeof ruleEngineConfig.enabled === 'boolean'
+        ? ruleEngineConfig.enabled
+        : DEFAULT_RULE_ENGINE_CONFIG.enabled,
+      fallbackToLegacy: ruleEngineConfig.fallbackToLegacy !== undefined
+        ? Boolean(ruleEngineConfig.fallbackToLegacy)
+        : DEFAULT_RULE_ENGINE_CONFIG.fallbackToLegacy,
+      maxExecutionTime: typeof ruleEngineConfig.maxExecutionTime === 'number'
+        ? ruleEngineConfig.maxExecutionTime
+        : DEFAULT_RULE_ENGINE_CONFIG.maxExecutionTime,
+    };
+  }
+
   const normalized: CustomerServiceSettings = {
     monitoredChatIds: Array.isArray(monitoredChatIds)
       ? monitoredChatIds.map(String)
@@ -98,8 +150,8 @@ function normalizeSettings(raw: unknown): CustomerServiceSettings | undefined {
     autoRead: Boolean(autoRead),
     quickReplies: normalizeCustomerServiceQuickReplies(quickReplies),
     quickReplyPanelGlobal: Boolean(quickReplyPanelGlobal),
-    rules: Array.isArray(rules) ? rules : undefined,
-    ruleEngineConfig: isRecord(ruleEngineConfig) ? ruleEngineConfig as any : undefined,
+    rules: Array.isArray(rules) ? rules as UserRule[] : undefined,
+    ruleEngineConfig: normalizedRuleEngineConfig || { ...DEFAULT_RULE_ENGINE_CONFIG },
   };
 
   if (Array.isArray(regexFilters)) {
@@ -157,46 +209,11 @@ export function loadCustomerServiceV2SettingsFromStorage(): CustomerServiceSetti
 
   // Add default debug rules if no rules exist
   if (!settings.rules || settings.rules.length === 0) {
-    settings.rules = [
-      // Debug rule 1: Auto reply "bar" when message contains "foo"
-      {
-        id: 'debug_auto_reply_foo_bar',
-        name: '[调试] 检测foo自动回复bar',
-        enabled: true,
-        priority: 5,
-        trigger: {
-          eventType: 'customer_message',
-        },
-        pipeline: [
-          {
-            id: 'check_foo',
-            capabilityId: 'check_text_match',
-            config: {
-              pattern: 'foo',
-              mode: '包含',
-            },
-            onSuccess: { continueNext: true },
-            onFailure: { stopPipeline: true },
-          },
-          {
-            id: 'reply_bar',
-            capabilityId: 'action_auto_reply',
-            config: {
-              template: 'bar',
-              replyToOriginal: true,
-            },
-          },
-        ],
-      },
-    ];
+    settings.rules = [JSON.parse(JSON.stringify(DEFAULT_DEBUG_RULE))];
 
     // Enable rule engine by default for debug
     if (!settings.ruleEngineConfig) {
-      settings.ruleEngineConfig = {
-        enabled: true,
-        fallbackToLegacy: true,
-        maxExecutionTime: 5000,
-      };
+      settings.ruleEngineConfig = { ...DEFAULT_RULE_ENGINE_CONFIG };
     }
 
     console.log('[RuleEngine] Added default debug rules');

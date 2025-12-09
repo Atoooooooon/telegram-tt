@@ -13,7 +13,8 @@ import Icon from '../../../../common/icons/Icon';
 import Button from '../../../../ui/Button';
 import InputText from '../../../../ui/InputText';
 
-import styles from '../CustomerServiceSettingsModal.module.scss';
+import layoutStyles from '../CustomerServiceSettingsModal.module.scss';
+import styles from './UserFiltersTab.module.scss';
 
 type SearchResult = {
   id: string;
@@ -148,13 +149,13 @@ const UserFiltersTab: FC<Props> = ({
   };
 
   return (
-    <div className={styles.tabContent}>
-      <div className={styles.sectionHeader}>
+    <div className={layoutStyles.tabContent}>
+      <div className={layoutStyles.sectionHeader}>
         <h3>
-          <Icon name="user" className={styles.sectionIcon} />
+          <Icon name="user" className={layoutStyles.sectionIcon} />
           {lang('CustomerServiceFilteredUserIds')}
         </h3>
-        <p className={styles.sectionDescription}>
+        <p className={layoutStyles.sectionDescription}>
           {lang('CustomerServiceFilteredUserIdsDescription')}
         </p>
       </div>

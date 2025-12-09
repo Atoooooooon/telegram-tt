@@ -1,0 +1,192 @@
+.addSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.searchContainer {
+  position: relative;
+}
+
+.userAddInputWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.inputIcon {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-secondary);
+}
+
+.userAddInput {
+  margin-bottom: 0 !important;
+  margin-right: 15rem;
+
+  :global(.form-control) {
+    padding-left: 2.2rem;
+    margin-bottom: 0;
+    width: 35rem;
+  }
+}
+
+.searchDropdown {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--color-background);
+  border: 1px solid var(--color-borders);
+  border-radius: 0.75rem;
+  box-shadow: 0 12px 32px rgba(15, 15, 20, 0.16);
+  z-index: 2;
+}
+
+.searchResultItem {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.searchResultItem:hover {
+  background: var(--color-background-secondary);
+}
+
+.resultAvatar,
+.userAvatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--color-background-secondary);
+}
+
+.resultInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.resultName {
+  font-weight: var(--font-weight-medium);
+}
+
+.resultDetails {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.resultId,
+.resultUsername,
+.userId,
+.userUsername {
+  color: var(--color-text-secondary);
+}
+
+.searchOverlay {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  z-index: 1;
+}
+
+.filterList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 21rem;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.filterItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-borders);
+  background: var(--color-background);
+}
+
+.filterContent {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.filterIcon {
+  color: var(--color-primary);
+}
+
+.userInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.userName {
+  font-weight: var(--font-weight-medium);
+}
+
+.userDetails {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.removeButton {
+  min-width: auto;
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 1.5rem;
+  color: var(--color-text-secondary);
+  border: 1px dashed var(--color-borders);
+  border-radius: 0.75rem;
+}
+
+.emptyIcon {
+  font-size: 1.5rem;
+  color: var(--color-primary);
+}
+
+@media (max-width: 768px) {
+  .userAddInput {
+    margin-right: 10rem;
+
+    :global(.form-control) {
+      width: 25rem;
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .userAddInput {
+    margin-right: 0;
+    width: 100%;
+
+    :global(.form-control) {
+      width: 100%;
+    }
+  }
+}

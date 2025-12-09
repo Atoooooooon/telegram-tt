@@ -7,7 +7,8 @@ import Icon from '../../../../common/icons/Icon';
 import Button from '../../../../ui/Button';
 import InputText from '../../../../ui/InputText';
 
-import styles from '../CustomerServiceSettingsModal.module.scss';
+import layoutStyles from '../CustomerServiceSettingsModal.module.scss';
+import styles from './MessageFiltersTab.module.scss';
 
 type Props = {
   regexFilters: RegExp[];
@@ -88,13 +89,13 @@ const MessageFiltersTab: FC<Props> = ({
   };
 
   return (
-    <div className={styles.tabContent}>
-      <div className={styles.sectionHeader}>
+    <div className={layoutStyles.tabContent}>
+      <div className={layoutStyles.sectionHeader}>
         <h3>
-          <Icon name="tag-filter" className={styles.sectionIcon} />
+          <Icon name="tag-filter" className={layoutStyles.sectionIcon} />
           {lang('CustomerServiceRegexFilters')}
         </h3>
-        <p className={styles.sectionDescription}>
+        <p className={layoutStyles.sectionDescription}>
           {lang('CustomerServiceRegexFiltersDescription')}
         </p>
       </div>

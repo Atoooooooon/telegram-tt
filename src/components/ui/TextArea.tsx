@@ -38,6 +38,7 @@ type OwnProps = {
   onBlur?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
   onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
   noReplaceNewlines?: boolean;
+  autoResize?: boolean;
 };
 
 const TextArea: FC<OwnProps> = ({
@@ -64,6 +65,7 @@ const TextArea: FC<OwnProps> = ({
   onBlur,
   onPaste,
   noReplaceNewlines,
+  autoResize = true,
 }) => {
   let textareaRef = useRef<HTMLTextAreaElement>();
   if (ref) {
@@ -95,10 +97,14 @@ const TextArea: FC<OwnProps> = ({
   });
 
   useLayoutEffect(() => {
+    if (!autoResize) {
+      return undefined;
+    }
     const textarea = textareaRef.current;
-    if (!textarea) return;
+    if (!textarea) return undefined;
     resizeHeight(textarea);
-  }, []);
+    return undefined;
+  }, [autoResize, resizeHeight]);
 
   const handleChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => {
     const target = e.currentTarget;
@@ -108,9 +114,11 @@ const TextArea: FC<OwnProps> = ({
       target.value = target.value.replace(/\n/g, ' ');
       target.selectionEnd = previousSelectionEnd;
     }
-    resizeHeight(target);
+    if (autoResize) {
+      resizeHeight(target);
+    }
     onChange?.(e);
-  }, [noReplaceNewlines, onChange]);
+  }, [autoResize, noReplaceNewlines, onChange, resizeHeight]);
 
   return (
     <div className={fullClassName} dir={lang.isRtl ? 'rtl' : undefined}>

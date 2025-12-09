@@ -3,10 +3,18 @@ import { memo, useEffect, useMemo, useState } from '../../../../lib/teact/teact'
 import { getActions, withGlobal } from '../../../../global';
 
 import type { ApiChat, ApiChatFullInfo } from '../../../../api/types';
-import type { CustomerServiceQuickReply } from '../../../../global/types/customerServiceV2';
+import type {
+  CustomerServiceQuickReply,
+  RuleEngineConfig,
+  UserRule,
+} from '../../../../global/types/customerServiceV2';
 
 import { CUSTOMER_SERVICE_CONFIG } from '../../../../config/customerService';
-import { normalizeCustomerServiceQuickReplies } from '../../../../global/helpers/customerServiceV2Settings';
+import {
+  DEFAULT_DEBUG_RULE,
+  DEFAULT_RULE_ENGINE_CONFIG,
+  normalizeCustomerServiceQuickReplies,
+} from '../../../../global/helpers/customerServiceV2Settings';
 import { selectCustomerServiceV2Settings } from '../../../../global/selectors/customerServiceV2';
 import { selectTabState } from '../../../../global/selectors/tabs';
 
@@ -23,6 +31,7 @@ import GroupFiltersTab from './tabs/GroupFiltersTab';
 import MessageFiltersTab from './tabs/MessageFiltersTab';
 import QuickRepliesTab from './tabs/QuickRepliesTab';
 import UserFiltersTab from './tabs/UserFiltersTab';
+import RuleEngineTab from './tabs/RuleEngineTab';
 import CustomerServiceCloudSyncModal from './CustomerServiceCloudSyncModal';
 
 import styles from './CustomerServiceSettingsModal.module.scss';
@@ -43,8 +52,10 @@ type StateProps = {
     }>;
     mode?: 'oncall' | 'assist';
     autoRead?: boolean;
-    quickReplies?: CustomerServiceQuickReply[];
-    quickReplyPanelGlobal?: boolean;
+  quickReplies?: CustomerServiceQuickReply[];
+  quickReplyPanelGlobal?: boolean;
+  rules?: UserRule[];
+  ruleEngineConfig?: RuleEngineConfig;
   };
 };
 
@@ -56,6 +67,8 @@ type FilterSettings = {
   autoRead?: boolean;
   quickReplies: CustomerServiceQuickReply[];
   quickReplyPanelGlobal: boolean;
+  rules: UserRule[];
+  ruleEngineConfig: RuleEngineConfig;
 };
 
 type SavedSettings = StateProps['savedSettings'];
@@ -74,6 +87,16 @@ const buildFilterSettings = (saved?: SavedSettings): FilterSettings => ({
   autoRead: saved?.autoRead || false,
   quickReplies: normalizeCustomerServiceQuickReplies(saved?.quickReplies ?? CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES),
   quickReplyPanelGlobal: Boolean(saved?.quickReplyPanelGlobal),
+  rules: (saved?.rules && saved.rules.length
+    ? saved.rules.map((rule) => JSON.parse(JSON.stringify(rule)))
+    : [JSON.parse(JSON.stringify(DEFAULT_DEBUG_RULE))]) as UserRule[],
+  ruleEngineConfig: saved?.ruleEngineConfig
+    ? {
+      enabled: saved.ruleEngineConfig.enabled ?? DEFAULT_RULE_ENGINE_CONFIG.enabled,
+      fallbackToLegacy: saved.ruleEngineConfig.fallbackToLegacy ?? DEFAULT_RULE_ENGINE_CONFIG.fallbackToLegacy,
+      maxExecutionTime: saved.ruleEngineConfig.maxExecutionTime ?? DEFAULT_RULE_ENGINE_CONFIG.maxExecutionTime,
+    }
+    : { ...DEFAULT_RULE_ENGINE_CONFIG },
 });
 
 const CustomerServiceSettingsModal = ({
@@ -178,6 +201,20 @@ const CustomerServiceSettingsModal = ({
     }));
   });
 
+  const handleRuleEngineConfigChange = useLastCallback((nextConfig: RuleEngineConfig) => {
+    updateSettings((prev) => ({
+      ...prev,
+      ruleEngineConfig: nextConfig,
+    }));
+  });
+
+  const handleRulesChange = useLastCallback((nextRules: UserRule[]) => {
+    updateSettings((prev) => ({
+      ...prev,
+      rules: nextRules,
+    }));
+  });
+
   const handleClose = useLastCallback(() => {
     setActiveTab(0);
     setHasInitialized(false);
@@ -196,6 +233,10 @@ const CustomerServiceSettingsModal = ({
       autoRead: Boolean(settings.autoRead),
       quickReplies: normalizeCustomerServiceQuickReplies(settings.quickReplies),
       quickReplyPanelGlobal: Boolean(settings.quickReplyPanelGlobal),
+      rules: settings.rules?.length ? JSON.parse(JSON.stringify(settings.rules)) : [],
+      ruleEngineConfig: settings.ruleEngineConfig
+        ? { ...settings.ruleEngineConfig }
+        : { ...DEFAULT_RULE_ENGINE_CONFIG },
     };
 
     saveCustomerServiceV2Settings({ settings: normalizedSettings });
@@ -239,6 +280,7 @@ const CustomerServiceSettingsModal = ({
     { title: lang('CustomerServiceUserFilters') },
     { title: lang('CustomerServiceMessageFilters') },
     { title: lang('CustomerServiceQuickReplies') },
+    { title: lang('CustomerServiceRuleEngine') },
   ]), [lang]);
 
   if (!isOpen) {
@@ -296,6 +338,14 @@ const CustomerServiceSettingsModal = ({
               quickReplyPanelGlobal={settings.quickReplyPanelGlobal}
               onQuickRepliesChange={handleQuickRepliesChange}
               onToggleGlobal={handleQuickReplyPanelGlobalChange}
+            />
+          )}
+          {activeTab === 4 && (
+            <RuleEngineTab
+              ruleEngineConfig={settings.ruleEngineConfig}
+              rules={settings.rules}
+              onConfigChange={handleRuleEngineConfigChange}
+              onRulesChange={handleRulesChange}
             />
           )}
         </div>

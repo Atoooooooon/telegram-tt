@@ -318,6 +318,31 @@ export interface LangPair {
   'CustomerServiceQuickReplyEnglishPlaceholder': undefined;
   'CustomerServiceQuickReplyEnglishTag': undefined;
   'CustomerServiceQuickReplyEnglishAriaLabel': undefined;
+  'CustomerServiceRuleEngine': undefined;
+  'CustomerServiceRuleEngineDescription': undefined;
+  'CustomerServiceRuleEngineEnabled': undefined;
+  'CustomerServiceRuleEngineFallback': undefined;
+  'CustomerServiceRuleEngineMaxTime': undefined;
+  'CustomerServiceRuleEngineRules': undefined;
+  'CustomerServiceRuleEngineNoRules': undefined;
+  'CustomerServiceRuleEngineEvent': undefined;
+  'CustomerServiceRuleEnginePipelineSteps': undefined;
+  'CustomerServiceRuleEngineJsonLabel': undefined;
+  'CustomerServiceRuleEngineApplyJson': undefined;
+  'CustomerServiceRuleEngineFormatJson': undefined;
+  'CustomerServiceRuleEngineAddRule': undefined;
+  'CustomerServiceRuleEngineRestoreDefault': undefined;
+  'CustomerServiceRuleEngineOrderHint': undefined;
+  'CustomerServiceRuleEngineEditJson': undefined;
+  'CustomerServiceRuleEngineJsonGuide': undefined;
+  'CustomerServiceDeleteRule': undefined;
+  'CustomerServiceRuleEnabled': undefined;
+  'CustomerServiceRuleName': undefined;
+  'CustomerServiceRuleId': undefined;
+  'CustomerServiceRuleEventCustomer': undefined;
+  'CustomerServiceRuleEventBot': undefined;
+  'CustomerServiceRuleEventAny': undefined;
+  'CustomerServiceRuleEmptyPipeline': undefined;
   'CustomerServiceAllTags': undefined;
   'CustomerServiceRemoveFilteredUser': undefined;
   'CustomerServiceRemoveRegex': undefined;
@@ -2335,6 +2360,9 @@ export interface LangPairWithVariables<V = LangVariable> {
   };
   'ConversationPinMessagesFor': {
     'user': V;
+  };
+  'CustomerServiceRuleEngineJsonError': {
+    'error': V;
   };
   'AutodownloadSizeLimitUpTo': {
     'limit': V;

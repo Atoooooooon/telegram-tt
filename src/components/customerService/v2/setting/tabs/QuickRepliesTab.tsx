@@ -13,7 +13,8 @@ import Button from '../../../../ui/Button';
 import InputText from '../../../../ui/InputText';
 import Switcher from '../../../../ui/Switcher';
 
-import styles from '../CustomerServiceSettingsModal.module.scss';
+import layoutStyles from '../CustomerServiceSettingsModal.module.scss';
+import styles from './QuickRepliesTab.module.scss';
 
 type Props = {
   quickReplies: CustomerServiceQuickReply[];
@@ -148,13 +149,13 @@ const QuickRepliesTab: FC<Props> = ({
   }, []);
 
   return (
-    <div className={styles.tabContent}>
-      <div className={styles.sectionHeader}>
+    <div className={layoutStyles.tabContent}>
+      <div className={layoutStyles.sectionHeader}>
         <h3>
-          <Icon name="send" className={styles.sectionIcon} />
+          <Icon name="send" className={layoutStyles.sectionIcon} />
           {lang('CustomerServiceQuickReplies')}
         </h3>
-        <p className={styles.sectionDescription}>
+        <p className={layoutStyles.sectionDescription}>
           {lang('CustomerServiceQuickRepliesDescription')}
         </p>
       </div>

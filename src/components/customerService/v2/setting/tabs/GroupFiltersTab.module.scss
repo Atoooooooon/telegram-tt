@@ -1,0 +1,260 @@
+.fieldIcon {
+  color: var(--color-text-secondary);
+  font-size: 1rem;
+}
+
+.filterControls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.tagFilter,
+.groupSearchSection,
+.selectAllWrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tagFilter {
+  align-items: flex-end;
+  gap: 0.5rem;
+  flex-shrink: 0;
+
+  label {
+    font-size: 0.85rem;
+    padding-top: 0.5rem;
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text);
+    white-space: nowrap;
+    margin: 0;
+  }
+
+  select {
+    width: auto;
+    max-width: 20rem;
+    height: 2.25rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--color-borders);
+    background: var(--color-background);
+    color: var(--color-text);
+    padding: 0 0.75rem;
+    box-sizing: border-box;
+  }
+}
+
+.groupSearchSection {
+  position: relative;
+  gap: 0.5rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.searchInput {
+  margin-bottom: 0 !important;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+
+  :global(.form-control) {
+    padding-left: 0.5rem;
+    height: 2.5rem;
+    width: 100%;
+    font-size: 0.9rem;
+  }
+}
+
+.clearSearchButton {
+  position: absolute;
+  right: 0.35rem;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+}
+
+.selectAllWrapper {
+  flex: 0 0 auto;
+}
+
+.selectAllButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: auto;
+  white-space: nowrap;
+}
+
+.error :global(.form-control) {
+  border-color: var(--color-error-text, #de4437);
+}
+
+.searchError {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 0.6rem;
+  background: rgba(222, 68, 55, 0.12);
+  color: var(--color-error-text, #de4437);
+  font-size: 0.8rem;
+}
+
+.errorIcon {
+  color: var(--color-error-text, #de4437);
+}
+
+.groupList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.groupItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-borders);
+  background: var(--color-background);
+  transition: border-color 0.2s ease, background 0.2s ease;
+
+  &.selected {
+    border-color: var(--color-primary);
+    background: rgba(var(--color-primary-rgb), 0.08);
+  }
+}
+
+.groupCheckbox {
+  margin-top: 0.2rem;
+}
+
+.groupInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.groupTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: var(--font-weight-medium);
+}
+
+.groupIcon {
+  color: var(--color-primary);
+}
+
+.groupMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.groupId,
+.groupFolder {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.metaIcon {
+  color: var(--color-primary);
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 1.75rem 1.5rem;
+  color: var(--color-text-secondary);
+  border: 1px dashed var(--color-borders);
+  border-radius: 0.75rem;
+  min-height: 21rem;
+}
+
+.emptyIcon {
+  font-size: 1.5rem;
+  color: var(--color-primary);
+}
+
+.selectedCount {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  align-self: flex-end;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  margin-right: 1.5rem;
+}
+
+.countIcon {
+  color: var(--color-primary);
+}
+
+@media (max-width: 768px) {
+  .tagFilter select {
+    max-width: 15rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .tagFilter {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+
+    label {
+      font-size: 0.8rem;
+      padding-top: 0.25rem;
+    }
+
+    select {
+      width: 100%;
+      max-width: 100%;
+      font-size: 0.85rem;
+    }
+  }
+
+  .groupSearchSection {
+    width: 100%;
+  }
+
+  .searchInput :global(.form-control) {
+    font-size: 0.85rem;
+    height: 2.25rem;
+    padding: 0.5rem;
+  }
+
+  .filterControls {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .selectAllWrapper {
+    flex: 0 0 auto;
+  }
+}

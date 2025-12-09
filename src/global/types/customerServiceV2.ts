@@ -190,12 +190,12 @@ export type PipelineStep = {
 
 /**
  * User-configured rule
+ * Priority is determined by array order - first rule has highest priority
  */
 export type UserRule = {
   id: string;
   name: string;
   enabled: boolean;
-  priority?: number;
   trigger: {
     eventType: 'customer_message' | 'bot_reply' | 'any_message';
     chatIds?: string[];

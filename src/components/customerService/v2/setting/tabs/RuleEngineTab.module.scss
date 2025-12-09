@@ -1,0 +1,463 @@
+.ruleEngineControls {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.ruleEngineControl {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+
+  label {
+    font-size: 0.875rem;
+    color: var(--color-text-secondary);
+    font-weight: var(--font-weight-medium);
+  }
+
+  :global(.InputText) {
+    width: 140px;
+  }
+}
+
+.ruleEngineActions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: nowrap;
+
+  :global(.Button) {
+    min-width: auto;
+    white-space: nowrap;
+  }
+}
+
+.ruleEngineConfigPlaceholder {
+  padding: 1.5rem;
+  border: 1px dashed var(--color-borders);
+  border-radius: 0.75rem;
+  background: var(--color-background-secondary);
+  margin-bottom: 1.5rem;
+}
+
+.placeholderText {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+
+  :global(.icon) {
+    font-size: 1rem;
+    opacity: 0.6;
+  }
+}
+
+.ruleList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  max-height: 25rem;
+  min-height: 10rem;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.ruleCard {
+  border: 1px solid var(--color-borders);
+  border-radius: 1rem;
+  padding: 1rem;
+  background: var(--color-background-secondary);
+  cursor: grab;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.ruleCard:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.08);
+}
+
+.ruleCard:active {
+  cursor: grabbing;
+  transform: scale(0.98);
+}
+
+.ruleRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ruleCardDragHandle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  border: none;
+  background: var(--color-background);
+  color: var(--color-text-secondary);
+  cursor: grab;
+}
+
+.ruleCardDragHandle:hover {
+  color: var(--color-primary);
+}
+
+.ruleCardDragHandle:active {
+  cursor: grabbing;
+}
+
+.ruleCardDragHandle:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.ruleCardText {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.ruleCardTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ruleOrderIndex {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary);
+  font-size: 0.9rem;
+  min-width: 2rem;
+  text-align: center;
+}
+
+.ruleCardName {
+  font-size: 1.05rem;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  line-height: 1.3;
+}
+
+.ruleCardMeta {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  word-break: break-all;
+
+  code {
+    font-family: var(--font-monospace);
+    font-size: 0.85rem;
+    color: var(--color-text);
+  }
+}
+
+.ruleRowActions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ruleActionButton {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.ruleActionButton:hover {
+  color: var(--color-primary);
+}
+
+.ruleEmpty {
+  padding: 1rem;
+  border-radius: 0.75rem;
+  background: var(--color-background-secondary);
+  border: 1px dashed var(--color-borders);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.ruleEngineJsonEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+
+  :global(.input-group) {
+    width: 100%;
+  }
+
+  :global(textarea) {
+    min-height: 200px;
+    font-family: var(--font-monospace);
+  }
+}
+
+.ruleEngineJsonActions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.ruleEngineError {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--color-danger, #e04a4a);
+  font-size: 0.9rem;
+}
+
+.ruleEditModal {
+  :global(.modal-dialog) {
+    width: min(75rem, 95vw);
+    max-width: 75rem;
+    height: 90vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  :global(.modal-content) {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+
+.ruleEditSplit {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ruleEditDocs {
+  flex: 0 0 35%;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--color-borders);
+  padding-right: 1rem;
+  overflow: hidden;
+}
+
+.ruleEditDocsTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+
+  :global(.icon) {
+    color: var(--color-primary);
+  }
+}
+
+.ruleEditDocsContent {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+
+  h5 {
+    margin: 1.5rem 0 0.75rem 0;
+    font-size: 0.95rem;
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text);
+
+    &:first-child {
+      margin-top: 0;
+    }
+  }
+
+  p {
+    margin: 0.5rem 0;
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+
+  ul {
+    margin: 0.5rem 0;
+    padding-left: 1.25rem;
+    list-style: disc;
+
+    li {
+      margin: 0.4rem 0;
+      color: var(--color-text-secondary);
+      font-size: 0.85rem;
+      line-height: 1.5;
+
+      code {
+        font-family: var(--font-monospace);
+        font-size: 0.85rem;
+        color: var(--color-primary);
+        background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+        padding: 0.1rem 0.35rem;
+        border-radius: 0.25rem;
+      }
+
+      ul {
+        margin-top: 0.25rem;
+        margin-bottom: 0.25rem;
+        padding-left: 1rem;
+        list-style: circle;
+      }
+    }
+  }
+}
+
+.docSection {
+  margin-bottom: 1.5rem;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.codeExample {
+  margin: 0.75rem 0 0 0;
+  padding: 1rem;
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-borders);
+  border-radius: 0.5rem;
+  font-family: var(--font-monospace);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--color-text);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.ruleEditEditor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ruleEditEditorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.ruleEditEditorTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+
+  :global(.icon) {
+    color: var(--color-primary);
+  }
+}
+
+.ruleEditTextArea {
+  flex: 1;
+  min-height: 0;
+  font-family: var(--font-monospace);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  resize: none;
+  overflow: hidden;
+
+  :global(.input-group) {
+    height: 100%;
+    min-height: 0;
+  }
+
+  :global(textarea) {
+    font-family: var(--font-monospace);
+    font-size: 0.85rem;
+    line-height: 1.6;
+    height: 100%;
+    resize: none;
+    overflow: auto;
+  }
+}
+
+.ruleEditFooter {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ruleEditActionButtons,
+.ruleEditActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+@media (max-width: 520px) {
+  .ruleEngineActions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 0.35rem;
+  }
+
+  .ruleEngineActions :global(.Button) {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .ruleList {
+    max-height: none;
+    min-height: 0;
+  }
+
+  .ruleCard {
+    padding: 0.85rem;
+  }
+
+  .ruleRow {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .ruleCardText {
+    min-width: 60%;
+  }
+
+  .ruleRowActions {
+    width: 100%;
+    justify-content: flex-end;
+    gap: 0.3rem;
+  }
+
+  .ruleCardDragHandle {
+    order: -1;
+  }
+
+  .ruleEditActionButtons {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
