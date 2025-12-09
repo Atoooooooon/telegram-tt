@@ -10,8 +10,10 @@ import type {
 import { MAIN_THREAD_ID } from '../../../api/types';
 
 import { SERVICE_NOTIFICATIONS_USER_ID } from '../../../config';
-import { shouldFilterMessage, isMonitoredChat } from '../../../config/customerService';
+import { shouldFilterMessage, isMonitoredChat, isFilteredUser } from '../../../config/customerService';
 import { callApi } from '../../../api/gramjs';
+import { processMessageWithRules } from '../../helpers/ruleEngine';
+import { registerAllCapabilities } from '../../helpers/capabilities';
 import { areDeepEqual } from '../../../util/areDeepEqual';
 import { isUserId } from '../../../util/entities/ids';
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
@@ -380,34 +382,60 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
         const isMonitored = isMonitoredChat(chatId, global);
 
         if (isMonitored) {
-          // 对于监听的群组，进行过滤检查
+          // 基础过滤检查（优先于规则引擎）
           const isFiltered = shouldFilterMessage(chatId, message.senderId, messageText, global);
 
-          if (!isPaused && !isFiltered) {
-            // 未暂停且通过过滤器，添加到客服模块
-            actions.addToCustomerServiceV2({ message: newMessage, chatId, tabId: currentTabId });
-          } else if (isPaused) {
+          // 如果暂停监听，直接跳过
+          if (isPaused) {
             console.log("Chat monitoring paused for:", chatId, "message:", message.id, "ignored (assist mode)");
+            // 暂停状态下不进入队列，也不执行规则引擎
           } else if (isFiltered) {
-            // 消息被过滤（在监听的群组中），检查是否启用自动已读功能
+            // 消息被基础过滤器过滤掉（用户被屏蔽或内容匹配过滤正则）
+            // 不执行规则引擎，不进入队列
+            console.log("Message filtered by basic filters:", message.id, "in chat:", chatId);
+
+            // 检查是否启用自动已读功能
             const shouldAutoRead = customerServiceV2?.settings?.autoRead || false;
             if (shouldAutoRead) {
-              console.log("Auto-reading filtered message in monitored chat:", message.id, "in chat:", chatId);
+              console.log("Auto-reading filtered message in monitored chat:", message.id);
               const chat = selectChat(global, chatId);
               if (chat) {
                 callApi('markMessageListRead', {
                   chat,
                   threadId: MAIN_THREAD_ID,
-                  maxId: message.id
+                  maxId: message.id,
                 }).then(() => {
                   console.log("Auto-read successful for filtered message:", message.id);
                 }).catch((error) => {
                   console.error("Auto-read failed for filtered message:", message.id, error);
                 });
               }
-            } else {
-              console.log("Message filtered in monitored chat but auto-read disabled:", message.id, "in chat:", chatId);
             }
+          } else {
+            // 消息通过了基础过滤，现在交给规则引擎处理
+            // Determine if this is a customer message or bot reply
+            const isBotMessage = message.senderId && isFilteredUser(message.senderId, global);
+            const eventType = isBotMessage ? 'bot_reply' : 'customer_message';
+
+            // Execute rule engine (non-blocking)
+            processMessageWithRules(
+              newMessage,
+              eventType,
+              global,
+              actions,
+            ).then((handledByRules) => {
+              // If no rules handled the message, add to queue (legacy behavior)
+              if (!handledByRules) {
+                console.log("No rules matched, adding to customer service queue:", message.id);
+                actions.addToCustomerServiceV2({ message: newMessage, chatId, tabId: currentTabId });
+              } else {
+                console.log("Message handled by rule engine:", message.id);
+              }
+            }).catch((error) => {
+              console.error('[RuleEngine] Processing failed:', error);
+              // On error, fallback to adding to queue
+              actions.addToCustomerServiceV2({ message: newMessage, chatId, tabId: currentTabId });
+            });
           }
         } else {
           // 不是监听的群组，不做任何客服相关处理

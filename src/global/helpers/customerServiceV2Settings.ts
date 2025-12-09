@@ -4,7 +4,6 @@ import type {
 } from '../types/customerServiceV2';
 
 const CUSTOMER_SERVICE_V2_SETTINGS_KEY = 'customerServiceV2Settings';
-const LEGACY_CUSTOMER_SERVICE_SETTINGS_KEY = 'customerServiceSettings';
 
 type NormalizableSettings = {
   monitoredChatIds?: unknown;
@@ -14,6 +13,8 @@ type NormalizableSettings = {
   autoRead?: unknown;
   quickReplies?: unknown;
   quickReplyPanelGlobal?: unknown;
+  rules?: unknown;
+  ruleEngineConfig?: unknown;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -81,6 +82,8 @@ function normalizeSettings(raw: unknown): CustomerServiceSettings | undefined {
     autoRead,
     quickReplies,
     quickReplyPanelGlobal,
+    rules,
+    ruleEngineConfig,
   } = raw as NormalizableSettings;
 
   const normalized: CustomerServiceSettings = {
@@ -95,6 +98,8 @@ function normalizeSettings(raw: unknown): CustomerServiceSettings | undefined {
     autoRead: Boolean(autoRead),
     quickReplies: normalizeCustomerServiceQuickReplies(quickReplies),
     quickReplyPanelGlobal: Boolean(quickReplyPanelGlobal),
+    rules: Array.isArray(rules) ? rules : undefined,
+    ruleEngineConfig: isRecord(ruleEngineConfig) ? ruleEngineConfig as any : undefined,
   };
 
   if (Array.isArray(regexFilters)) {
@@ -145,11 +150,59 @@ function readFromStorage(key: string): CustomerServiceSettings | undefined {
 
 export function loadCustomerServiceV2SettingsFromStorage(): CustomerServiceSettings | undefined {
   const settings = readFromStorage(CUSTOMER_SERVICE_V2_SETTINGS_KEY);
-  if (settings) {
-    return settings;
+
+  if (!settings) {
+    return undefined;
   }
 
-  return readFromStorage(LEGACY_CUSTOMER_SERVICE_SETTINGS_KEY);
+  // Add default debug rules if no rules exist
+  if (!settings.rules || settings.rules.length === 0) {
+    settings.rules = [
+      // Debug rule 1: Auto reply "bar" when message contains "foo"
+      {
+        id: 'debug_auto_reply_foo_bar',
+        name: '[调试] 检测foo自动回复bar',
+        enabled: true,
+        priority: 5,
+        trigger: {
+          eventType: 'customer_message',
+        },
+        pipeline: [
+          {
+            id: 'check_foo',
+            capabilityId: 'check_text_match',
+            config: {
+              pattern: 'foo',
+              mode: '包含',
+            },
+            onSuccess: { continueNext: true },
+            onFailure: { stopPipeline: true },
+          },
+          {
+            id: 'reply_bar',
+            capabilityId: 'action_auto_reply',
+            config: {
+              template: 'bar',
+              replyToOriginal: true,
+            },
+          },
+        ],
+      },
+    ];
+
+    // Enable rule engine by default for debug
+    if (!settings.ruleEngineConfig) {
+      settings.ruleEngineConfig = {
+        enabled: true,
+        fallbackToLegacy: true,
+        maxExecutionTime: 5000,
+      };
+    }
+
+    console.log('[RuleEngine] Added default debug rules');
+  }
+
+  return settings;
 }
 
 export function saveCustomerServiceV2SettingsToStorage(settings: CustomerServiceSettings) {

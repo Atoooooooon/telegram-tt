@@ -1,5 +1,4 @@
 import type { FC } from '../../../../lib/teact/teact';
-import type React from '../../../../lib/teact/teact';
 
 import { memo, useCallback, useMemo } from '../../../../lib/teact/teact';
 import { getActions, withGlobal } from '../../../../global';
@@ -7,23 +6,19 @@ import { getActions, withGlobal } from '../../../../global';
 import type { ApiMessage } from '../../../../api/types';
 import { MAIN_THREAD_ID } from '../../../../api/types';
 import type { ObserveFn } from '../../../../hooks/useIntersectionObserver';
-import type { IAlbum } from '../../../../types';
-import type { CustomerServiceMessageGroup, CustomerServiceSettings } from '../../../../global/types/customerServiceV2';
+import type { CustomerServiceMessageGroup } from '../../../../global/types/customerServiceV2';
 
 import {
   selectCustomerServiceV2ContextChatId,
   selectCustomerServiceV2ContextMessageId,
   selectCustomerServiceV2MessageCount,
   selectCustomerServiceV2Messages,
-  selectCustomerServiceV2Settings,
 } from '../../../../global/selectors/customerServiceV2';
 import buildClassName from '../../../../util/buildClassName';
 import { getCurrentTabId } from '../../../../util/establishMultitabRole';
-import { groupMessages, isAlbum as isAlbumEntry } from '../../../middle/helpers/groupMessages';
 import {
+  DEFAULT_GROUPING_WINDOW,
   groupCustomerServiceMessages,
-  getMessageGroupingWindow,
-  isMessageGroupingEnabled,
 } from '../helpers/groupCustomerServiceMessages';
 
 import useLang from '../../../../hooks/useLang';
@@ -45,7 +40,6 @@ type StateProps = {
   messageCount: number;
   activeContextChatId?: string;
   activeContextMessageId?: number;
-  settings?: CustomerServiceSettings;
 };
 
 const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
@@ -54,7 +48,6 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
   messageCount,
   activeContextChatId,
   activeContextMessageId,
-  settings,
 }) => {
   const {
     removeFromCustomerServiceV2,
@@ -110,43 +103,13 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
     return () => undefined;
   }, []);
 
-  // Check if grouping is enabled
-  const groupingEnabled = isMessageGroupingEnabled(settings?.enableMessageGrouping);
-  const groupingWindow = getMessageGroupingWindow(settings?.messageGroupingWindow);
-
-  // Group messages if enabled
   const messageGroups = useMemo<CustomerServiceMessageGroup[]>(() => {
-    if (!groupingEnabled || !messages.length) {
-      return [];
-    }
-
-    return groupCustomerServiceMessages(messages, groupingWindow);
-  }, [messages, groupingEnabled, groupingWindow]);
-
-  const messageEntries = useMemo<(ApiMessage | IAlbum)[]>(() => {
     if (!messages.length) {
       return [];
     }
 
-    // If grouping is disabled, use original logic
-    if (!groupingEnabled) {
-      const groupedMessages = groupMessages(messages);
-      const flattened: (ApiMessage | IAlbum)[] = [];
-
-      groupedMessages.forEach((dateGroup) => {
-        dateGroup.senderGroups.forEach((senderGroup) => {
-          senderGroup.forEach((item) => {
-            flattened.push(item);
-          });
-        });
-      });
-
-      return flattened;
-    }
-
-    // Otherwise, return empty (we'll render groups directly)
-    return [];
-  }, [messages, groupingEnabled]);
+    return groupCustomerServiceMessages(messages, DEFAULT_GROUPING_WINDOW);
+  }, [messages]);
 
   // Performance optimization: Memoize message rendering threshold
   const hasLargeMessageCount = useMemo(() => messageCount > 1000, [messageCount]);
@@ -262,141 +225,7 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
         </div>
       )}
       <div className={styles.messageList}>
-        {groupingEnabled ? (
-          messageGroups.map((group) => renderMessageGroup(group))
-        ) : (
-          messageEntries.map((messageOrAlbum, index) => {
-          const album = isAlbumEntry(messageOrAlbum) ? messageOrAlbum : undefined;
-          const message = album ? album.mainMessage : messageOrAlbum as ApiMessage;
-          const containsContextMessage = activeContextMessageId !== undefined
-            ? album
-              ? album.messages.some((albumMessage) => albumMessage.id === activeContextMessageId)
-              : activeContextMessageId === message.id
-            : false;
-          const isActiveContext = activeContextChatId === message.chatId && containsContextMessage;
-          const key = album
-            ? `cs-msg-${message.chatId}-album-${album.albumId}`
-            : `cs-msg-${message.chatId}-${message.id}-${index}`;
-
-          const messageContentClassName = buildClassName(
-            styles.messageContent,
-            styles.messageContentInteractive,
-          );
-
-          const handleContextNavigation = (targetMessageId: number) => {
-            handleViewContext(message.chatId, targetMessageId);
-          };
-
-          const handleContentClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
-            if (event.defaultPrevented) {
-              return;
-            }
-
-            if (event.button !== 0) {
-              return;
-            }
-
-            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-              return;
-            }
-
-            const target = event.target as HTMLElement;
-            if (
-              target.closest(`.${styles.messageActions}`)
-              || target.closest('button')
-              || target.closest('a')
-              || target.closest('[data-prevent-cs-context]')
-            ) {
-              return;
-            }
-
-            const selection = window.getSelection && window.getSelection();
-            if (selection && selection.toString()) {
-              return;
-            }
-
-            const messageElement = target.closest<HTMLElement>('[data-message-id]');
-            const targetMessageId = messageElement?.dataset.messageId
-              ? Number(messageElement.dataset.messageId)
-              : message.id;
-
-            if (Number.isNaN(targetMessageId)) {
-              return;
-            }
-
-            event.preventDefault();
-            event.stopPropagation();
-            handleContextNavigation(targetMessageId);
-          };
-
-          return (
-            <div
-              key={key}
-              className={buildClassName(
-                styles.messageWrapper,
-                isActiveContext && styles.activeContext,
-              )}
-            >
-              <CustomerServiceSourceBadge
-                message={message}
-                className={buildClassName(styles.sourceBadge, styles.sourceBadgeInteractive)}
-                onClick={() => handleContextNavigation(message.id)}
-              />
-              <div
-                className={messageContentClassName}
-                onClickCapture={handleContentClickCapture}
-              >
-                <Message
-                  message={message}
-                  album={album}
-                  threadId={message.chatId}
-                  messageListType="thread"
-                  noComments
-                  noReplies
-                  observeIntersectionForLoading={observeIntersectionForLoading}
-                  appearanceOrder={index}
-                  isJustAdded={false}
-                  isFirstInGroup={false}
-                  isLastInGroup={false}
-                  isFirstInDocumentGroup={false}
-                  isLastInDocumentGroup={false}
-                  isLastInList={false}
-                  onMetaClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    handleContextNavigation(message.id);
-                  }}
-                  onReplyClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    handleContextNavigation(message.id);
-                  }}
-                />
-                <div className={styles.messageActions}>
-                  <Button
-                    className={styles.actionButton}
-                    round
-                    size="tiny"
-                    color="translucent"
-                    onClick={() => {
-                      if (album) {
-                        album.messages.forEach((albumMessage) => {
-                          handleRemoveMessage(albumMessage.chatId, albumMessage.id);
-                        });
-                      } else {
-                        handleRemoveMessage(message.chatId, message.id);
-                      }
-                    }}
-                    ariaLabel={lang('RemoveFromCustomerService')}
-                  >
-                    <i className="icon icon-close" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          );
-        })
-        )}
+        {messageGroups.map((group) => renderMessageGroup(group))}
       </div>
     </div>
   );
@@ -409,14 +238,12 @@ export default memo(
     const messageCount = selectCustomerServiceV2MessageCount(global, tabId);
     const activeContextChatId = selectCustomerServiceV2ContextChatId(global, tabId);
     const activeContextMessageId = selectCustomerServiceV2ContextMessageId(global, tabId);
-    const settings = selectCustomerServiceV2Settings(global, tabId);
 
     return {
       messages,
       messageCount,
       activeContextChatId,
       activeContextMessageId,
-      settings,
     };
   })(CustomerServiceMessageList),
 );

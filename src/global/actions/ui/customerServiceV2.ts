@@ -39,6 +39,7 @@ import {
   ensureCustomerServiceV2State,
   getDefaultCustomerServiceV2Settings,
   normalizeSettingsForSave,
+  pauseCustomerServiceChat,
   ownersMatch,
   syncCustomerServiceV2StateAcrossTabs,
 } from './customerServiceV2Helpers';
@@ -79,23 +80,9 @@ addActionHandler('setCustomerServiceV2Context', (global, actions, payload): Acti
  * Pause chat in assist mode
  */
 addActionHandler('pauseCustomerServiceV2Chat', (global, actions, payload): ActionReturnType => {
-  const { chatId, messageId, tabId = getCurrentTabId() } = payload;
+  const { chatId, messageId } = payload;
 
-  const cs = selectCustomerServiceV2State(global, tabId);
-  const baseState = ensureCustomerServiceV2State(cs);
-
-  const nextState: CustomerServiceV2State = {
-    ...baseState,
-    pausedChats: {
-      ...(baseState.pausedChats || {}),
-      [chatId]: {
-        pausedAt: Date.now(),
-        lastMessageId: messageId,
-      },
-    },
-  };
-
-  return syncCustomerServiceV2StateAcrossTabs(global, nextState);
+  return pauseCustomerServiceChat(global, chatId, messageId);
 });
 
 /**

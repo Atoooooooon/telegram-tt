@@ -102,7 +102,57 @@ export function selectCustomerServiceV2Settings(
   tabId?: number,
 ) {
   const cs = selectCustomerServiceV2State(global, tabId);
-  return cs?.settings || loadCustomerServiceV2SettingsFromStorage();
+  const baseSettings = cs?.settings || loadCustomerServiceV2SettingsFromStorage();
+
+  if (!baseSettings) {
+    return undefined;
+  }
+
+  // 如果没有任何规则，注入一条默认调试规则（检测 foo 自动回复 bar）
+  if (!baseSettings.rules || baseSettings.rules.length === 0) {
+    return {
+      ...baseSettings,
+      ruleEngineConfig: {
+        enabled: true,
+        fallbackToLegacy: true,
+        maxExecutionTime: 5000,
+        ...baseSettings.ruleEngineConfig,
+      },
+      rules: [
+        {
+          id: 'debug_auto_reply_foo_bar',
+          name: '[调试] 检测foo自动回复bar',
+          enabled: true,
+          priority: 5,
+          trigger: {
+            eventType: 'customer_message',
+          },
+          pipeline: [
+            {
+              id: 'check_foo',
+              capabilityId: 'check_text_match',
+              config: {
+                pattern: 'foo',
+                mode: '包含',
+              },
+              onSuccess: { continueNext: true },
+              onFailure: { stopPipeline: true },
+            },
+            {
+              id: 'reply_bar',
+              capabilityId: 'action_auto_reply',
+              config: {
+                template: 'bar',
+                replyToOriginal: true,
+              },
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  return baseSettings;
 }
 
 /**

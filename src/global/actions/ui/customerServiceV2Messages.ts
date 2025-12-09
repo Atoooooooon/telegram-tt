@@ -13,6 +13,7 @@ import { selectCustomerServiceV2State } from '../../selectors/customerServiceV2'
 import {
   ensureCustomerServiceV2State,
   getDefaultCustomerServiceV2Settings,
+  pauseCustomerServiceChat,
   syncCustomerServiceV2StateAcrossTabs,
 } from './customerServiceV2Helpers';
 
@@ -114,17 +115,13 @@ addActionHandler('addToCustomerServiceV2', (global, actions, payload): ActionRet
       settings,
     };
 
-    if (settings.mode === 'assist') {
-      nextState.pausedChats = {
-        ...(nextState.pausedChats || {}),
-        [chatId]: {
-          pausedAt: Date.now(),
-          lastMessageId: message.id,
-        },
-      };
-    };
+    let nextGlobal = syncCustomerServiceV2StateAcrossTabs(global, nextState);
 
-    return syncCustomerServiceV2StateAcrossTabs(global, nextState);
+    if (settings.mode === 'assist') {
+      nextGlobal = pauseCustomerServiceChat(nextGlobal, chatId, message.id);
+    }
+
+    return nextGlobal;
   } catch (error) {
     actions.showNotification({
       message: 'CustomerServiceSyncError',

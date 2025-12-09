@@ -1,7 +1,7 @@
 import type { ApiMessage } from '../../../../api/types';
 import type { CustomerServiceMessageGroup } from '../../../../global/types/customerServiceV2';
 
-const DEFAULT_GROUPING_WINDOW = 60; // 1 minute in seconds
+export const DEFAULT_GROUPING_WINDOW = 60; // 1 minute in seconds
 
 /**
  * Group customer service messages by chat and sender within a time window
@@ -78,25 +78,4 @@ export function groupCustomerServiceMessages(
   allGroups.sort((a, b) => a.firstMessageDate - b.firstMessageDate);
 
   return allGroups;
-}
-
-/**
- * Check if message grouping is enabled in settings
- */
-export function isMessageGroupingEnabled(
-  enableMessageGrouping?: boolean,
-): boolean {
-  // Default to true if not explicitly disabled
-  return enableMessageGrouping !== false;
-}
-
-/**
- * Get grouping window from settings
- */
-export function getMessageGroupingWindow(
-  messageGroupingWindow?: number,
-): number {
-  return messageGroupingWindow && messageGroupingWindow > 0
-    ? messageGroupingWindow
-    : DEFAULT_GROUPING_WINDOW;
 }

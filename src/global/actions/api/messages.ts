@@ -1327,7 +1327,7 @@ addActionHandler('markMessageListRead', (global, actions, payload): ActionReturn
 
   const readCount = countSortedIds(viewportIds, minId, maxId);
   if (!readCount) {
-    return global;
+    return resumeCustomerServicePausedChat(global, chatId, { lastReadInboxMessageId: maxId });
   }
 
   const newUnreadCount = Math.max(0, (threadReadState.unreadCount || 0) - readCount);

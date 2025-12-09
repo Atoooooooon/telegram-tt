@@ -1,4 +1,5 @@
 import type { ApiMessage } from '../../api/types';
+import type { GlobalState } from './index';
 
 export type CustomerServiceQuickReplyMode = 'send' | 'insert';
 
@@ -36,10 +37,11 @@ export type CustomerServiceSettings = {
   quickReplies?: CustomerServiceQuickReply[];
   /** Allow quick reply panel outside customer service context */
   quickReplyPanelGlobal?: boolean;
-  /** Enable message grouping */
-  enableMessageGrouping?: boolean;
-  /** Message grouping time window in seconds (default: 60 = 1 minute) */
-  messageGroupingWindow?: number;
+
+  /** Rule engine: User-configured rules */
+  rules?: UserRule[];
+  /** Rule engine: Configuration */
+  ruleEngineConfig?: RuleEngineConfig;
 };
 
 /**
@@ -112,4 +114,101 @@ export type CustomerServiceMessageGroup = {
   lastMessageDate: number;
   /** Total message count in group */
   messageCount: number;
+};
+
+// ============ Rule Engine Types ============
+
+/**
+ * Capability type classification
+ */
+export type CapabilityType = 'checker' | 'extractor' | 'action';
+
+/**
+ * Configuration schema for capability parameters
+ */
+export type CapabilityConfigSchema = {
+  [key: string]: {
+    type: 'string' | 'number' | 'boolean' | 'select' | 'textarea';
+    label: string;
+    default?: any;
+    options?: string[];
+    placeholder?: string;
+    required?: boolean;
+  };
+};
+
+/**
+ * Capability execution input
+ */
+export type CapabilityInput = {
+  message: ApiMessage;
+  config: Record<string, any>;
+  global: GlobalState;
+  actions: any;
+  pipelineData: Record<string, any>;
+};
+
+/**
+ * Capability execution output
+ */
+export type CapabilityOutput = {
+  success: boolean;
+  data?: Record<string, any>;
+  error?: string;
+};
+
+/**
+ * Capability definition
+ */
+export type Capability = {
+  id: string;
+  name: string;
+  type: CapabilityType;
+  description?: string;
+  configSchema: CapabilityConfigSchema;
+  execute: (input: CapabilityInput) => Promise<CapabilityOutput>;
+};
+
+/**
+ * Pipeline step in a rule
+ */
+export type PipelineStep = {
+  id: string;
+  capabilityId: string;
+  config: Record<string, any>;
+  onSuccess?: {
+    continueNext?: boolean;
+    gotoStep?: string;
+    executeAction?: string;
+  };
+  onFailure?: {
+    stopPipeline?: boolean;
+    gotoStep?: string;
+    executeAction?: string;
+  };
+};
+
+/**
+ * User-configured rule
+ */
+export type UserRule = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  priority?: number;
+  trigger: {
+    eventType: 'customer_message' | 'bot_reply' | 'any_message';
+    chatIds?: string[];
+    senderIds?: string[];
+  };
+  pipeline: PipelineStep[];
+};
+
+/**
+ * Rule engine configuration
+ */
+export type RuleEngineConfig = {
+  enabled: boolean;
+  fallbackToLegacy: boolean;
+  maxExecutionTime: number;
 };

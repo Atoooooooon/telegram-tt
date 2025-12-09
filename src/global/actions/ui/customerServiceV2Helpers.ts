@@ -2,7 +2,9 @@ import type { GlobalState } from '../../types';
 import type { CustomerServiceSettings, CustomerServiceV2State } from '../../types/customerServiceV2';
 
 import { CUSTOMER_SERVICE_CONFIG } from '../../../config/customerService';
+import { selectChat } from '../../selectors';
 import { normalizeCustomerServiceQuickReplies } from '../../helpers/customerServiceV2Settings';
+import { updateTabState } from '../../reducers/tabs';
 
 export function ownersMatch(left?: string, right?: string): boolean {
   if (!left || !right) {
@@ -66,8 +68,6 @@ export function getDefaultCustomerServiceV2Settings(): CustomerServiceSettings {
     autoRead: false,
     quickReplies: normalizeCustomerServiceQuickReplies(CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES),
     quickReplyPanelGlobal: false,
-    enableMessageGrouping: CUSTOMER_SERVICE_CONFIG.ENABLE_MESSAGE_GROUPING,
-    messageGroupingWindow: CUSTOMER_SERVICE_CONFIG.MESSAGE_GROUPING_WINDOW,
   };
 }
 
@@ -107,4 +107,94 @@ export function normalizeSettingsForSave(settings: CustomerServiceSettings): Cus
     quickReplies: normalizeCustomerServiceQuickReplies(settings.quickReplies || []),
     quickReplyPanelGlobal: Boolean(settings.quickReplyPanelGlobal),
   };
+}
+
+type PauseOptions = {
+  pausedAt?: number;
+};
+
+export function pauseCustomerServiceChat(
+  global: GlobalState,
+  chatId: string,
+  messageId: number,
+  options?: PauseOptions,
+): GlobalState {
+  if (!messageId) {
+    return global;
+  }
+
+  let nextGlobal = global;
+  const pausedAt = options?.pausedAt ?? Date.now();
+
+  Object.values(nextGlobal.byTabId).forEach(({ id: tabId, customerServiceV2 }) => {
+    if (!customerServiceV2 || customerServiceV2.settings?.mode !== 'assist') {
+      return;
+    }
+
+    const previousEntry = customerServiceV2.pausedChats?.[chatId];
+    if (previousEntry && previousEntry.lastMessageId >= messageId) {
+      return;
+    }
+
+    const pausedChats = {
+      ...(customerServiceV2.pausedChats || {}),
+      [chatId]: {
+        pausedAt,
+        lastMessageId: messageId,
+      },
+    };
+
+    nextGlobal = updateTabState(nextGlobal, {
+      customerServiceV2: {
+        ...customerServiceV2,
+        pausedChats,
+      },
+    }, tabId);
+  });
+
+  return nextGlobal;
+}
+
+type ResumePausedOptions = {
+  lastReadInboxMessageId?: number;
+  hasUnread?: boolean;
+};
+
+export function resumeCustomerServicePausedChat(
+  global: GlobalState,
+  chatId: string,
+  options?: ResumePausedOptions,
+): GlobalState {
+  let nextGlobal = global;
+
+  const chat = selectChat(nextGlobal, chatId);
+  const effectiveLastRead = options?.lastReadInboxMessageId ?? chat?.lastReadInboxMessageId ?? 0;
+  const hasUnread = options?.hasUnread ?? Boolean(chat?.unreadCount && chat.unreadCount > 0);
+
+  if (!effectiveLastRead && hasUnread) {
+    return nextGlobal;
+  }
+
+  Object.values(nextGlobal.byTabId).forEach(({ id: tabId, customerServiceV2 }) => {
+    if (!customerServiceV2?.pausedChats || customerServiceV2.settings?.mode !== 'assist') {
+      return;
+    }
+
+    const pauseInfo = customerServiceV2.pausedChats[chatId];
+    if (!pauseInfo?.lastMessageId) {
+      return;
+    }
+
+    if ((effectiveLastRead && effectiveLastRead >= pauseInfo.lastMessageId) || !hasUnread) {
+      const { [chatId]: _removed, ...remainingPaused } = customerServiceV2.pausedChats;
+      nextGlobal = updateTabState(nextGlobal, {
+        customerServiceV2: {
+          ...customerServiceV2,
+          pausedChats: Object.keys(remainingPaused).length ? remainingPaused : undefined,
+        },
+      }, tabId);
+    }
+  });
+
+  return nextGlobal;
 }
