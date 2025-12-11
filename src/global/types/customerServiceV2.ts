@@ -146,6 +146,7 @@ export type CapabilityInput = {
   global: GlobalState;
   actions: any;
   pipelineData: Record<string, any>;
+  step?: PipelineStep; // Optional: for async capabilities that need access to routing config
 };
 
 /**
@@ -155,6 +156,14 @@ export type CapabilityOutput = {
   success: boolean;
   data?: Record<string, any>;
   error?: string;
+  /**
+   * Deferred execution for async capabilities
+   * When set, the sync engine will stop and register this task to async executor
+   */
+  deferred?: {
+    delay: number; // Delay in milliseconds
+    checkFn: () => Promise<boolean>; // Returns true for success, false for failure
+  };
 };
 
 /**
@@ -170,6 +179,15 @@ export type Capability = {
 };
 
 /**
+ * Action execution configuration
+ * Can be a simple capability ID string or an object with config
+ */
+export type ActionExecution = string | {
+  capabilityId: string;
+  config?: Record<string, any>;
+};
+
+/**
  * Pipeline step in a rule
  */
 export type PipelineStep = {
@@ -179,12 +197,12 @@ export type PipelineStep = {
   onSuccess?: {
     continueNext?: boolean;
     gotoStep?: string;
-    executeAction?: string;
+    executeAction?: ActionExecution;
   };
   onFailure?: {
     stopPipeline?: boolean;
     gotoStep?: string;
-    executeAction?: string;
+    executeAction?: ActionExecution;
   };
 };
 
@@ -196,6 +214,10 @@ export type UserRule = {
   id: string;
   name: string;
   enabled: boolean;
+  /** Execution phase: pre-filter runs before filtering, post-filter runs after (default) */
+  executionPhase?: 'pre-filter' | 'post-filter';
+  /** Skip all post-processing (filtering and post-filter rules) when true */
+  skipPostProcessing?: boolean;
   trigger: {
     eventType: 'customer_message' | 'bot_reply' | 'any_message';
     chatIds?: string[];

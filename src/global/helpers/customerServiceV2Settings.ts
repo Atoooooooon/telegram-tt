@@ -17,16 +17,17 @@ export const DEFAULT_DEBUG_RULE: UserRule = {
   id: 'debug_auto_reply_foo_bar',
   name: '[调试] 检测foo自动回复bar',
   enabled: true,
+  executionPhase: 'post-filter',
   trigger: {
-    eventType: 'customer_message',
+    eventType: 'customer_message' as const,
   },
   pipeline: [
     {
       id: 'check_foo',
-      capabilityId: 'check_text_match',
+      capabilityId: 'check_message',
       config: {
-        pattern: 'foo',
-        mode: '包含',
+        textPattern: 'foo',
+        textMode: '包含',
       },
       onSuccess: { continueNext: true },
       onFailure: { stopPipeline: true },

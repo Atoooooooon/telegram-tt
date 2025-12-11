@@ -7,7 +7,7 @@ import { registerCapability } from '../ruleEngine';
 
 // Import checkers
 import {
-  checkTextMatchCapability,
+  checkMessageCapability,
   checkHasReplyCapability,
 } from './checkers';
 
@@ -21,7 +21,7 @@ import {
 // Auto-register all capabilities
 export function registerAllCapabilities(): void {
   // Checkers
-  registerCapability(checkTextMatchCapability);
+  registerCapability(checkMessageCapability);
   registerCapability(checkHasReplyCapability);
 
   // Actions
@@ -33,7 +33,7 @@ export function registerAllCapabilities(): void {
 // Export for reference
 export {
   // Checkers
-  checkTextMatchCapability,
+  checkMessageCapability,
   checkHasReplyCapability,
   // Actions
   actionMarkReadCapability,

@@ -30,13 +30,13 @@ function resolveTypingDelayMs(configuredDelay?: number): number {
 }
 
 /**
- * Mark message as read (remove from customer service queue)
+ * Mark message as read in Telegram
  */
 export const actionMarkReadCapability: Capability = {
   id: 'action_mark_read',
   name: '标记为已读',
   type: 'action',
-  description: '从客服队列移除消息',
+  description: '标记 Telegram 消息为已读',
 
   configSchema: {
     targetMessage: {
@@ -45,16 +45,24 @@ export const actionMarkReadCapability: Capability = {
       options: ['当前消息', '回复的原消息'],
       default: '回复的原消息',
     },
+    maxUnreadCount: {
+      type: 'number',
+      label: '最大已读条数',
+      default: 1,
+    },
   },
 
-  async execute({ message, config, actions }) {
-    const { targetMessage = '回复的原消息' } = config;
+  async execute({ message, config, global }) {
+    const { targetMessage = '回复的原消息', maxUnreadCount = 1 } = config;
 
     let targetId: number;
     if (targetMessage === '当前消息') {
       targetId = message.id;
     } else {
-      const replyToId = (message as any).replyToMessageId;
+      const { getMessageReplyInfo } = await import('../replies');
+      const replyInfo = getMessageReplyInfo(message);
+      const replyToId = replyInfo?.replyToMsgId;
+
       if (!replyToId) {
         return {
           success: false,
@@ -65,9 +73,50 @@ export const actionMarkReadCapability: Capability = {
     }
 
     try {
-      await actions.removeFromCustomerServiceV2({
-        chatId: message.chatId,
-        messageId: targetId,
+      const { callApi } = await import('../../../api/gramjs');
+      const { selectChat, selectChatMessages } = await import('../../selectors');
+
+      const chat = selectChat(global, message.chatId);
+      if (!chat) {
+        return {
+          success: false,
+          error: 'Chat not found',
+        };
+      }
+
+      const threadId = (message as { threadId?: number }).threadId ?? MAIN_THREAD_ID;
+
+      // Check unread count before marking as read
+      const lastReadInboxMessageId = chat.lastReadInboxMessageId || 0;
+      const messages = selectChatMessages(global, message.chatId);
+
+      // Count unread messages between lastReadInboxMessageId and targetId
+      let unreadCount = 0;
+      if (messages) {
+        const messageIds = Object.keys(messages).map(Number).sort((a, b) => a - b);
+        for (const msgId of messageIds) {
+          if (msgId > lastReadInboxMessageId && msgId <= targetId) {
+            const msg = messages[msgId];
+            if (msg && !msg.isOutgoing) {
+              unreadCount += 1;
+            }
+          }
+        }
+      }
+
+      // If unread count exceeds maxUnreadCount, abort
+      if (unreadCount > maxUnreadCount) {
+        return {
+          success: false,
+          error: `Prevented batch read: ${unreadCount} messages would be marked as read, exceeds maxUnreadCount (${maxUnreadCount}).`,
+        };
+      }
+
+      // Mark message as read in Telegram
+      await callApi('markMessageListRead', {
+        chat,
+        threadId,
+        maxId: targetId,
       });
 
       return {

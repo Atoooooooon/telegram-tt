@@ -382,48 +382,70 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
         const isMonitored = isMonitoredChat(chatId, global);
 
         if (isMonitored) {
-          // 基础过滤检查（优先于规则引擎）
-          const isFiltered = shouldFilterMessage(chatId, message.senderId, messageText, global);
+          // Phase 1: Execute pre-filter rules (before any filtering)
+          const settings = customerServiceV2?.settings;
+          const preFilterRules = settings?.rules?.filter((r) => r.enabled && r.executionPhase === 'pre-filter') || [];
 
-          // 如果暂停监听，直接跳过
-          if (isPaused) {
-            console.log("Chat monitoring paused for:", chatId, "message:", message.id, "ignored (assist mode)");
-            // 暂停状态下不进入队列，也不执行规则引擎
-          } else if (isFiltered) {
-            // 消息被基础过滤器过滤掉（用户被屏蔽或内容匹配过滤正则）
-            // 不执行规则引擎，不进入队列
-            console.log("Message filtered by basic filters:", message.id, "in chat:", chatId);
+          // Determine message type for rule engine
+          const isBotMessage = message.senderId && isFilteredUser(message.senderId, global);
+          const eventType = isBotMessage ? 'bot_reply' : 'customer_message';
 
-            // 检查是否启用自动已读功能
-            const shouldAutoRead = customerServiceV2?.settings?.autoRead || false;
-            if (shouldAutoRead) {
-              console.log("Auto-reading filtered message in monitored chat:", message.id);
-              const chat = selectChat(global, chatId);
-              if (chat) {
-                callApi('markMessageListRead', {
-                  chat,
-                  threadId: MAIN_THREAD_ID,
-                  maxId: message.id,
-                }).then(() => {
-                  console.log("Auto-read successful for filtered message:", message.id);
-                }).catch((error) => {
-                  console.error("Auto-read failed for filtered message:", message.id, error);
-                });
-              }
+          // Execute pre-filter rules if any
+          const preFilterPromise = preFilterRules.length > 0
+            ? processMessageWithRules(newMessage, eventType, global, actions, preFilterRules)
+            : Promise.resolve({ matched: false, skipPostProcessing: false });
+
+          preFilterPromise.then(({ skipPostProcessing: skipByPreFilter }) => {
+            if (skipByPreFilter) {
+              // Pre-filter rule requested to skip all post-processing
+              // eslint-disable-next-line no-console
+              console.log('[RuleEngine] Pre-filter rule skipped post-processing for message:', message.id);
+              return;
             }
-          } else {
-            // 消息通过了基础过滤，现在交给规则引擎处理
-            // Determine if this is a customer message or bot reply
-            const isBotMessage = message.senderId && isFilteredUser(message.senderId, global);
-            const eventType = isBotMessage ? 'bot_reply' : 'customer_message';
 
-            // Execute rule engine (non-blocking)
-            processMessageWithRules(
-              newMessage,
-              eventType,
-              global,
-              actions,
-            ).then((handledByRules) => {
+            // Phase 2: Basic filtering (original logic)
+            const isFiltered = shouldFilterMessage(chatId, message.senderId, messageText, global);
+
+            // 如果暂停监听，直接跳过
+            if (isPaused) {
+              console.log("Chat monitoring paused for:", chatId, "message:", message.id, "ignored (assist mode)");
+              return;
+            }
+
+            if (isFiltered) {
+              // 消息被基础过滤器过滤掉（用户被屏蔽或内容匹配过滤正则）
+              console.log("Message filtered by basic filters:", message.id, "in chat:", chatId);
+
+              // 检查是否启用自动已读功能
+              const shouldAutoRead = customerServiceV2?.settings?.autoRead || false;
+              if (shouldAutoRead) {
+                console.log("Auto-reading filtered message in monitored chat:", message.id);
+                const chat = selectChat(global, chatId);
+                if (chat) {
+                  callApi('markMessageListRead', {
+                    chat,
+                    threadId: MAIN_THREAD_ID,
+                    maxId: message.id,
+                  }).then(() => {
+                    console.log("Auto-read successful for filtered message:", message.id);
+                  }).catch((error) => {
+                    console.error("Auto-read failed for filtered message:", message.id, error);
+                  });
+                }
+              }
+              return;
+            }
+
+            // Phase 3: Execute post-filter rules (after filtering, default behavior)
+            const postFilterRules = settings?.rules?.filter(
+              (r) => r.enabled && (!r.executionPhase || r.executionPhase === 'post-filter'),
+            ) || [];
+
+            const postFilterPromise = postFilterRules.length > 0
+              ? processMessageWithRules(newMessage, eventType, global, actions, postFilterRules)
+              : Promise.resolve({ matched: false, skipPostProcessing: false });
+
+            postFilterPromise.then(({ matched: handledByRules }) => {
               // If no rules handled the message, add to queue (legacy behavior)
               if (!handledByRules) {
                 console.log("No rules matched, adding to customer service queue:", message.id);
@@ -432,11 +454,14 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
                 console.log("Message handled by rule engine:", message.id);
               }
             }).catch((error) => {
-              console.error('[RuleEngine] Processing failed:', error);
+              console.error('[RuleEngine] Post-filter processing failed:', error);
               // On error, fallback to adding to queue
               actions.addToCustomerServiceV2({ message: newMessage, chatId, tabId: currentTabId });
             });
-          }
+          }).catch((error) => {
+            console.error('[RuleEngine] Pre-filter processing failed:', error);
+            // On pre-filter error, continue with normal flow
+          });
         } else {
           // 不是监听的群组，不做任何客服相关处理
           console.log("Message from non-monitored chat:", chatId, "message:", message.id, "ignored");
