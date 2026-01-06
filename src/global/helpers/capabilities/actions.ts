@@ -217,13 +217,31 @@ export const actionAutoReplyCapability: Capability = {
         await waitFor(delayMs);
       }
 
+      const replyInfo = (() => {
+        if (replyToOriginal) {
+          return {
+            type: 'message' as const,
+            replyToMsgId: message.id,
+            ...(threadId !== MAIN_THREAD_ID && { replyToTopId: threadId }),
+          };
+        }
+
+        if (threadId !== MAIN_THREAD_ID) {
+          return {
+            type: 'message' as const,
+            replyToMsgId: threadId,
+            replyToTopId: threadId,
+            isForumTopic: true,
+          };
+        }
+
+        return undefined;
+      })();
+
       await callApi('sendMessage', {
         chat,
         text: replyText,
-        replyInfo: replyToOriginal ? {
-          type: 'message',
-          replyToMsgId: message.id,
-        } : undefined,
+        replyInfo,
       });
 
       if (typingActionActive) {

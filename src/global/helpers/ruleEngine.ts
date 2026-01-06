@@ -163,6 +163,52 @@ export function isCapabilityRegistered(capabilityId: string): boolean {
 }
 
 /**
+ * Validate that every capability referenced in provided rules is registered
+ * Throws early so built-in rule configs can't silently rot
+ */
+export function validateRuleCapabilities(rules?: UserRule[], context: string = 'rules'): void {
+  if (!rules?.length) {
+    return;
+  }
+
+  const missing = new Set<string>();
+
+  function ensureCapabilityRegistered(capabilityId: string | undefined, source: string) {
+    if (!capabilityId) {
+      return;
+    }
+    if (!isCapabilityRegistered(capabilityId)) {
+      missing.add(`${capabilityId} @ ${source}`);
+    }
+  }
+
+  rules.forEach((rule) => {
+    rule.pipeline.forEach((step, index) => {
+      const source = `${rule.id || 'rule'}#${step.id || index + 1}`;
+      ensureCapabilityRegistered(step.capabilityId, source);
+
+      if (step.onSuccess?.executeAction) {
+        const actionId = typeof step.onSuccess.executeAction === 'string'
+          ? step.onSuccess.executeAction
+          : step.onSuccess.executeAction.capabilityId;
+        ensureCapabilityRegistered(actionId, `${source}:onSuccess`);
+      }
+
+      if (step.onFailure?.executeAction) {
+        const actionId = typeof step.onFailure.executeAction === 'string'
+          ? step.onFailure.executeAction
+          : step.onFailure.executeAction.capabilityId;
+        ensureCapabilityRegistered(actionId, `${source}:onFailure`);
+      }
+    });
+  });
+
+  if (missing.size > 0) {
+    throw new Error(`[RuleEngine] Unregistered capabilities in ${context}: ${Array.from(missing).join(', ')}`);
+  }
+}
+
+/**
  * Execute a single rule
  */
 export async function executeRule(

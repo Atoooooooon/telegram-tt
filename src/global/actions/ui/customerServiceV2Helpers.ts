@@ -42,34 +42,44 @@ export function logCustomerServiceCloudSyncDebug(...args: unknown[]) {
   console.log('[CustomerServiceCloudSync]', ...args);
 }
 
-export function getDefaultCustomerServiceV2Settings(): CustomerServiceSettings {
+type CustomerServiceConfig = typeof CUSTOMER_SERVICE_CONFIG;
+
+function normalizeRegexFilterEntry(filter: unknown) {
+  if (filter instanceof RegExp) {
+    return { source: filter.source, flags: filter.flags };
+  }
+
+  if (filter && typeof (filter as { source?: string; flags?: string }).source === 'string') {
+    return {
+      source: (filter as { source: string }).source,
+      flags: typeof (filter as { flags?: string }).flags === 'string' ? (filter as { flags: string }).flags : '',
+    };
+  }
+
+  if (typeof filter === 'string') {
+    return { source: filter, flags: '' };
+  }
+
+  return { source: String(filter), flags: '' };
+}
+
+export function mapCustomerServiceConfigToSettings(
+  config: CustomerServiceConfig = CUSTOMER_SERVICE_CONFIG,
+): CustomerServiceSettings {
   return {
-    monitoredChatIds: [...CUSTOMER_SERVICE_CONFIG.MONITORED_CHAT_IDS],
-    filteredUserIds: [...CUSTOMER_SERVICE_CONFIG.FILTERED_USER_IDS],
-    regexFilters: (CUSTOMER_SERVICE_CONFIG.REGEX_FILTERS || []).map((filter) => {
-      if (filter instanceof RegExp) {
-        return { source: filter.source, flags: filter.flags };
-      }
-
-      if (filter && typeof (filter as { source?: string; flags?: string }).source === 'string') {
-        return {
-          source: (filter as { source: string }).source,
-          flags: typeof (filter as { flags?: string }).flags === 'string' ? (filter as { flags: string }).flags : '',
-        };
-      }
-
-      if (typeof filter === 'string') {
-        return { source: filter, flags: '' };
-      }
-
-      return { source: String(filter), flags: '' };
-    }),
+    monitoredChatIds: [...config.MONITORED_CHAT_IDS],
+    filteredUserIds: [...config.FILTERED_USER_IDS],
+    regexFilters: (config.REGEX_FILTERS || []).map(normalizeRegexFilterEntry),
     mode: 'oncall',
     autoRead: false,
-    quickReplies: normalizeCustomerServiceQuickReplies(CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES),
+    quickReplies: normalizeCustomerServiceQuickReplies(config.QUICK_REPLIES),
     quickReplyPanelGlobal: false,
     rules: undefined,
   };
+}
+
+export function getDefaultCustomerServiceV2Settings(): CustomerServiceSettings {
+  return mapCustomerServiceConfigToSettings();
 }
 
 export function syncCustomerServiceV2StateAcrossTabs(

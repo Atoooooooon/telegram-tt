@@ -2,7 +2,10 @@ import type { ApiMessage } from '../../api/types';
 import type { GlobalState } from '../types';
 import { CUSTOMER_SERVICE_VIRTUAL_CHAT_ID, type CustomerServiceV2State } from '../types/customerServiceV2';
 
-import { loadCustomerServiceV2SettingsFromStorage } from '../helpers/customerServiceV2Settings';
+import {
+  DEFAULT_DEBUG_RULE,
+  loadCustomerServiceV2SettingsFromStorage,
+} from '../helpers/customerServiceV2Settings';
 import { selectTabState } from './tabs';
 
 /**
@@ -112,37 +115,7 @@ export function selectCustomerServiceV2Settings(
   if (!baseSettings.rules || baseSettings.rules.length === 0) {
     return {
       ...baseSettings,
-      rules: [
-        {
-          id: 'debug_auto_reply_foo_bar',
-          name: '[调试] 检测foo自动回复bar',
-          enabled: true,
-          priority: 5,
-          trigger: {
-            eventType: 'customer_message',
-          },
-          pipeline: [
-            {
-              id: 'check_foo',
-              capabilityId: 'check_text_match',
-              config: {
-                pattern: 'foo',
-                mode: '包含',
-              },
-              onSuccess: { continueNext: true },
-              onFailure: { stopPipeline: true },
-            },
-            {
-              id: 'reply_bar',
-              capabilityId: 'action_auto_reply',
-              config: {
-                template: 'bar',
-                replyToOriginal: true,
-              },
-            },
-          ],
-        },
-      ],
+      rules: [JSON.parse(JSON.stringify(DEFAULT_DEBUG_RULE))],
     };
   }
 
