@@ -501,15 +501,6 @@ export type CustomerServiceSettings = {
    * 新增: 规则列表
    */
   rules?: UserRule[];
-
-  /**
-   * 新增: 规则引擎配置
-   */
-  ruleEngineConfig?: {
-    enabled: boolean;  // 是否启用规则引擎
-    fallbackToLegacy: boolean;  // 无规则匹配时是否使用旧逻辑
-    maxExecutionTime: number;  // 单条规则最大执行时间(ms)
-  };
 };
 ```
 
@@ -631,12 +622,6 @@ global.customerServiceV2 = {
       { /* rule1 */ },
       { /* rule2 */ },
     ],
-
-    ruleEngineConfig: {
-      enabled: true,
-      fallbackToLegacy: true,
-      maxExecutionTime: 5000,
-    }
   }
 }
 

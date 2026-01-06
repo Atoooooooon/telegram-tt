@@ -69,7 +69,6 @@ export function getDefaultCustomerServiceV2Settings(): CustomerServiceSettings {
     quickReplies: normalizeCustomerServiceQuickReplies(CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES),
     quickReplyPanelGlobal: false,
     rules: undefined,
-    ruleEngineConfig: undefined,
   };
 }
 
@@ -109,7 +108,6 @@ export function normalizeSettingsForSave(settings: CustomerServiceSettings): Cus
     quickReplies: normalizeCustomerServiceQuickReplies(settings.quickReplies || []),
     quickReplyPanelGlobal: Boolean(settings.quickReplyPanelGlobal),
     rules: settings.rules,
-    ruleEngineConfig: settings.ruleEngineConfig,
   };
 }
 

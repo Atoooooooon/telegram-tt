@@ -2,8 +2,8 @@ import type React from '../../../../../lib/teact/teact';
 import type { FC } from '../../../../../lib/teact/teact';
 import { memo, useRef, useState } from '../../../../../lib/teact/teact';
 
-import type { RuleEngineConfig, UserRule } from '../../../../../global/types/customerServiceV2';
-import { DEFAULT_DEBUG_RULE, DEFAULT_RULE_ENGINE_CONFIG } from '../../../../../global/helpers/customerServiceV2Settings';
+import type { UserRule } from '../../../../../global/types/customerServiceV2';
+import { DEFAULT_DEBUG_RULE } from '../../../../../global/helpers/customerServiceV2Settings';
 
 import { isCapabilityRegistered } from '../../../../../global/helpers/ruleEngine';
 import useLang from '../../../../../hooks/useLang';
@@ -20,20 +20,15 @@ import layoutStyles from '../CustomerServiceSettingsModal.module.scss';
 import styles from './RuleEngineTab.module.scss';
 
 type Props = {
-  ruleEngineConfig?: RuleEngineConfig;
   rules?: UserRule[];
-  onConfigChange: (config: RuleEngineConfig) => void;
   onRulesChange: (rules: UserRule[]) => void;
 };
 
 const RuleEngineTab: FC<Props> = ({
-  ruleEngineConfig,
   rules,
-  onConfigChange,
   onRulesChange,
 }) => {
   const lang = useLang();
-  const config = ruleEngineConfig ? { ...ruleEngineConfig } : { ...DEFAULT_RULE_ENGINE_CONFIG };
   const safeRules = rules ? rules.slice() : [];
 
   const [draggedIndex, setDraggedIndex] = useState<number | undefined>();
@@ -217,16 +212,6 @@ const RuleEngineTab: FC<Props> = ({
           <Icon name="settings" className={layoutStyles.sectionIcon} />
           {lang('CustomerServiceRuleEngineRules')}
         </h3>
-        <p className={layoutStyles.sectionDescription}>
-          规则引擎配置（OCR、AI 等外部服务接入）
-        </p>
-      </div>
-
-      <div className={styles.ruleEngineConfigPlaceholder}>
-        <p className={styles.placeholderText}>
-          <Icon name="lock" />
-          外部 API 配置区域（开发中）
-        </p>
       </div>
 
       <div className={layoutStyles.sectionHeader}>

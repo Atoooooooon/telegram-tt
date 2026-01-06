@@ -4,19 +4,19 @@
  */
 
 import { registerCapability } from '../ruleEngine';
-
-// Import checkers
-import {
-  checkMessageCapability,
-  checkHasReplyCapability,
-} from './checkers';
-
 // Import actions
 import {
-  actionMarkReadCapability,
-  actionAutoReplyCapability,
   actionAddQueueCapability,
+  actionAutoReplyCapability,
+  actionForwardCapability,
+  actionMarkReadCapability,
+  actionSendToCapability,
 } from './actions';
+// Import checkers
+import {
+  checkHasReplyCapability,
+  checkMessageCapability,
+} from './checkers';
 
 // Auto-register all capabilities
 export function registerAllCapabilities(): void {
@@ -28,6 +28,8 @@ export function registerAllCapabilities(): void {
   registerCapability(actionMarkReadCapability);
   registerCapability(actionAutoReplyCapability);
   registerCapability(actionAddQueueCapability);
+  registerCapability(actionForwardCapability);
+  registerCapability(actionSendToCapability);
 }
 
 // Export for reference
@@ -39,4 +41,6 @@ export {
   actionMarkReadCapability,
   actionAutoReplyCapability,
   actionAddQueueCapability,
+  actionForwardCapability,
+  actionSendToCapability,
 };

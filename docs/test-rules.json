@@ -1,0 +1,321 @@
+{
+  "description": "测试规则 - action_forward 和 action_send_to 能力验证",
+  "note": "将这些规则添加到 CustomerServiceSettings.rules 数组中进行测试",
+  "important": "⚠️ 测试前请替换 toChatId 为你的实际聊天ID",
+
+  "rules": [
+    {
+      "id": "test_forward_simple",
+      "name": "测试1: 简单转发",
+      "enabled": true,
+      "priority": 100,
+      "trigger": {
+        "eventType": "customer_message"
+      },
+      "pipeline": [
+        {
+          "id": "check_keyword",
+          "capabilityId": "check_message",
+          "config": {
+            "textPattern": "测试转发",
+            "textMode": "包含"
+          },
+          "onSuccess": {
+            "continueNext": true
+          },
+          "onFailure": {
+            "stopPipeline": true
+          }
+        },
+        {
+          "id": "forward_message",
+          "capabilityId": "action_forward",
+          "config": {
+            "toChatId": "REPLACE_WITH_YOUR_CHAT_ID",
+            "dropAuthor": false,
+            "dropCaption": false
+          }
+        }
+      ]
+    },
+
+    {
+      "id": "test_send_to_simple",
+      "name": "测试2: 简单发送通知",
+      "enabled": true,
+      "priority": 99,
+      "trigger": {
+        "eventType": "customer_message"
+      },
+      "pipeline": [
+        {
+          "id": "check_keyword",
+          "capabilityId": "check_message",
+          "config": {
+            "textPattern": "测试通知",
+            "textMode": "包含"
+          },
+          "onSuccess": {
+            "continueNext": true
+          },
+          "onFailure": {
+            "stopPipeline": true
+          }
+        },
+        {
+          "id": "send_notification",
+          "capabilityId": "action_send_to",
+          "config": {
+            "toChatId": "REPLACE_WITH_YOUR_CHAT_ID",
+            "template": "📢 收到测试消息\n\n内容: {{text}}\n时间: {{date}}"
+          }
+        }
+      ]
+    },
+
+    {
+      "id": "test_forward_hide_author",
+      "name": "测试3: 转发(隐藏作者)",
+      "enabled": true,
+      "priority": 98,
+      "trigger": {
+        "eventType": "customer_message"
+      },
+      "pipeline": [
+        {
+          "id": "check_keyword",
+          "capabilityId": "check_message",
+          "config": {
+            "textPattern": "测试匿名转发",
+            "textMode": "包含"
+          },
+          "onSuccess": {
+            "continueNext": true
+          },
+          "onFailure": {
+            "stopPipeline": true
+          }
+        },
+        {
+          "id": "forward_anonymous",
+          "capabilityId": "action_forward",
+          "config": {
+            "toChatId": "REPLACE_WITH_YOUR_CHAT_ID",
+            "dropAuthor": true,
+            "dropCaption": false
+          }
+        }
+      ]
+    },
+
+    {
+      "id": "test_send_with_template",
+      "name": "测试4: 发送(使用模板变量)",
+      "enabled": true,
+      "priority": 97,
+      "trigger": {
+        "eventType": "customer_message"
+      },
+      "pipeline": [
+        {
+          "id": "check_keyword",
+          "capabilityId": "check_message",
+          "config": {
+            "textPattern": "测试模板",
+            "textMode": "包含"
+          },
+          "onSuccess": {
+            "continueNext": true
+          },
+          "onFailure": {
+            "stopPipeline": true
+          }
+        },
+        {
+          "id": "send_with_vars",
+          "capabilityId": "action_send_to",
+          "config": {
+            "toChatId": "REPLACE_WITH_YOUR_CHAT_ID",
+            "template": "🎯 模板测试\n\n消息ID: {{messageId}}\n消息文本: {{text}}\n发送者: {{senderId}}\n聊天ID: {{chatId}}"
+          }
+        }
+      ]
+    },
+
+    {
+      "id": "test_forward_and_send_combo",
+      "name": "测试5: 组合(转发+通知)",
+      "enabled": true,
+      "priority": 96,
+      "trigger": {
+        "eventType": "customer_message"
+      },
+      "pipeline": [
+        {
+          "id": "check_keyword",
+          "capabilityId": "check_message",
+          "config": {
+            "textPattern": "测试组合",
+            "textMode": "包含"
+          },
+          "onSuccess": {
+            "continueNext": true
+          },
+          "onFailure": {
+            "stopPipeline": true
+          }
+        },
+        {
+          "id": "forward_full_message",
+          "capabilityId": "action_forward",
+          "config": {
+            "toChatId": "REPLACE_WITH_GROUP_CHAT_ID",
+            "dropAuthor": false,
+            "dropCaption": false
+          }
+        },
+        {
+          "id": "send_brief_notification",
+          "capabilityId": "action_send_to",
+          "config": {
+            "toChatId": "REPLACE_WITH_ADMIN_USER_ID",
+            "template": "⚡ 快速通知: 收到组合测试消息"
+          }
+        }
+      ]
+    },
+
+    {
+      "id": "test_complaint_forward",
+      "name": "测试6: 投诉转发(实际场景)",
+      "enabled": true,
+      "priority": 95,
+      "trigger": {
+        "eventType": "customer_message"
+      },
+      "pipeline": [
+        {
+          "id": "check_complaint",
+          "capabilityId": "check_message",
+          "config": {
+            "textPattern": "投诉|差评|退款",
+            "textMode": "正则"
+          },
+          "onSuccess": {
+            "continueNext": true
+          },
+          "onFailure": {
+            "stopPipeline": true
+          }
+        },
+        {
+          "id": "forward_to_admin_group",
+          "capabilityId": "action_forward",
+          "config": {
+            "toChatId": "REPLACE_WITH_ADMIN_GROUP_ID",
+            "dropAuthor": false,
+            "dropCaption": false
+          }
+        },
+        {
+          "id": "notify_manager",
+          "capabilityId": "action_send_to",
+          "config": {
+            "toChatId": "REPLACE_WITH_MANAGER_ID",
+            "template": "🚨 投诉告警\n\n消息: {{text}}\n\n请立即查看管理群!"
+          }
+        },
+        {
+          "id": "add_to_queue",
+          "capabilityId": "action_add_queue",
+          "config": {}
+        }
+      ]
+    },
+
+    {
+      "id": "test_sensitive_alert",
+      "name": "测试7: 敏感词告警",
+      "enabled": true,
+      "priority": 94,
+      "trigger": {
+        "eventType": "customer_message"
+      },
+      "pipeline": [
+        {
+          "id": "check_sensitive",
+          "capabilityId": "check_message",
+          "config": {
+            "textPattern": "测试敏感词",
+            "textMode": "包含"
+          },
+          "onSuccess": {
+            "continueNext": true
+          },
+          "onFailure": {
+            "stopPipeline": true
+          }
+        },
+        {
+          "id": "send_alert",
+          "capabilityId": "action_send_to",
+          "config": {
+            "toChatId": "REPLACE_WITH_ADMIN_ID",
+            "template": "⚠️ 敏感词告警\n\n内容: {{text}}\n来源: {{chatId}}\n发送者: {{senderId}}\n\n请立即处理!"
+          }
+        }
+      ]
+    }
+  ],
+
+  "testInstructions": {
+    "step1": "替换所有 REPLACE_WITH_YOUR_CHAT_ID 为实际的聊天ID",
+    "step2": "将 rules 数组中的对象复制到 CustomerServiceSettings.rules",
+    "step3": "确保需要测试的规则 enabled = true",
+    "step4": "测试方法",
+    "tests": [
+      {
+        "test": "测试1",
+        "action": "发送消息: '测试转发'",
+        "expected": "消息被转发到指定聊天"
+      },
+      {
+        "test": "测试2",
+        "action": "发送消息: '测试通知'",
+        "expected": "收到格式化的通知消息"
+      },
+      {
+        "test": "测试3",
+        "action": "发送消息: '测试匿名转发'",
+        "expected": "消息被转发但隐藏原作者"
+      },
+      {
+        "test": "测试4",
+        "action": "发送消息: '测试模板'",
+        "expected": "收到包含消息详细信息的通知"
+      },
+      {
+        "test": "测试5",
+        "action": "发送消息: '测试组合'",
+        "expected": "消息被转发到群组 + 简要通知发送给个人"
+      },
+      {
+        "test": "测试6",
+        "action": "发送消息: '我要投诉'",
+        "expected": "转发到管理群 + 告警通知管理员 + 添加到客服队列"
+      },
+      {
+        "test": "测试7",
+        "action": "发送消息: '测试敏感词'",
+        "expected": "收到详细的告警通知"
+      }
+    ]
+  },
+
+  "howToGetChatId": {
+    "method1": "右键点击聊天 -> 复制链接 -> 从链接中提取ID",
+    "method2": "使用 Telegram Bot API: getUpdates 获取",
+    "method3": "在浏览器控制台运行: selectChat(getGlobal(), 'chatId')",
+    "note": "群组ID通常以 -100 开头,用户ID是正数"
+  }
+}

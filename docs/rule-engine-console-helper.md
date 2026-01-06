@@ -23,13 +23,6 @@
     settings.rules = [];
   }
 
-  // 启用规则引擎
-  settings.ruleEngineConfig = {
-    enabled: true,
-    fallbackToLegacy: true,
-    maxExecutionTime: 5000,
-  };
-
   // 添加规则
   settings.rules.push({
     id: 'auto_reply_foo_bar',
@@ -88,13 +81,6 @@
 ```javascript
 // 获取当前设置
 const settings = JSON.parse(localStorage.getItem('customerServiceV2Settings') || '{}');
-
-// 完整配置
-settings.ruleEngineConfig = {
-  enabled: true,
-  fallbackToLegacy: true,
-  maxExecutionTime: 5000,
-};
 
 settings.rules = [
   // 规则1: 检测foo回复bar
@@ -344,7 +330,6 @@ console.log('🔄 请刷新页面');
 ### 查看规则引擎配置
 ```javascript
 const settings = JSON.parse(localStorage.getItem('customerServiceV2Settings') || '{}');
-console.log('规则引擎配置:', settings.ruleEngineConfig);
 console.log('规则总数:', (settings.rules || []).length);
 console.log('已启用规则:', (settings.rules || []).filter(r => r.enabled).length);
 ```
@@ -353,7 +338,6 @@ console.log('已启用规则:', (settings.rules || []).filter(r => r.enabled).le
 ```javascript
 const settings = JSON.parse(localStorage.getItem('customerServiceV2Settings') || '{}');
 delete settings.rules;
-delete settings.ruleEngineConfig;
 localStorage.setItem('customerServiceV2Settings', JSON.stringify(settings));
 console.log('✅ 规则引擎已重置');
 console.log('🔄 请刷新页面');

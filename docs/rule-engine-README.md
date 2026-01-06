@@ -39,7 +39,9 @@
   - 接口定义
   - 开发步骤
   - 最佳实践(DO & DON'T)
-- 内置能力参考(12个能力详细说明)
+- 内置能力参考(包含检测、提取、动作类能力)
+  - 检测类: check_message, check_has_reply
+  - 动作类: action_mark_read, action_auto_reply, action_add_queue, action_forward, action_send_to
 - 配置示例和工具函数
 
 **快速预览**:

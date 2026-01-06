@@ -5,6 +5,7 @@
 
 import type { Capability } from '../../types/customerServiceV2';
 import { MAIN_THREAD_ID } from '../../../api/types';
+
 import { renderTemplate } from '../templateRenderer';
 
 const MIN_TYPING_DELAY_MS = 900;
@@ -278,6 +279,180 @@ export const actionAddQueueCapability: Capability = {
       return {
         success: false,
         error: `Failed to add to queue: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  },
+};
+
+/**
+ * Forward message to another chat
+ */
+export const actionForwardCapability: Capability = {
+  id: 'action_forward',
+  name: '转发消息',
+  type: 'action',
+  description: '转发消息到指定聊天窗口',
+
+  configSchema: {
+    toChatId: {
+      type: 'string',
+      label: '目标聊天ID',
+      required: true,
+      placeholder: '输入目标聊天的ID',
+    },
+    dropAuthor: {
+      type: 'boolean',
+      label: '隐藏原作者',
+      default: false,
+    },
+    dropCaption: {
+      type: 'boolean',
+      label: '删除原标题',
+      default: false,
+    },
+  },
+
+  async execute({ message, config, global }) {
+    const { toChatId, dropAuthor = false, dropCaption = false } = config;
+
+    if (!toChatId) {
+      return {
+        success: false,
+        error: 'Target chat ID is required',
+      };
+    }
+
+    try {
+      const { callApi } = await import('../../../api/gramjs');
+      const { selectChat } = await import('../../selectors');
+
+      const fromChat = selectChat(global, message.chatId);
+      const toChat = selectChat(global, toChatId);
+
+      if (!fromChat) {
+        return {
+          success: false,
+          error: 'Source chat not found',
+        };
+      }
+
+      if (!toChat) {
+        return {
+          success: false,
+          error: 'Target chat not found',
+        };
+      }
+
+      const threadId = (message as { threadId?: number }).threadId ?? MAIN_THREAD_ID;
+
+      // Mark message as read before forwarding (simulate real user behavior)
+      try {
+        await callApi('markMessageListRead', {
+          chat: fromChat,
+          threadId,
+          maxId: message.id,
+        });
+      } catch (markReadError) {
+        console.error('[RuleEngine] Forward mark read failed:', markReadError);
+        // Continue even if mark read fails
+      }
+
+      await callApi('forwardMessages', {
+        fromChat,
+        toChat,
+        messages: [message],
+        noAuthors: dropAuthor,
+        noCaptions: dropCaption,
+      });
+
+      return {
+        success: true,
+        data: {
+          forwardedTo: toChatId,
+          messageId: message.id,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: `Failed to forward message: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  },
+};
+
+/**
+ * Send new message to another chat
+ */
+export const actionSendToCapability: Capability = {
+  id: 'action_send_to',
+  name: '发送消息到窗口',
+  type: 'action',
+  description: '发送新消息到指定聊天窗口',
+
+  configSchema: {
+    toChatId: {
+      type: 'string',
+      label: '目标聊天ID',
+      required: true,
+      placeholder: '输入目标聊天的ID',
+    },
+    template: {
+      type: 'textarea',
+      label: '消息模板',
+      required: true,
+      placeholder: '支持 {{变量}} 语法',
+    },
+  },
+
+  async execute({ message, config, pipelineData, global }) {
+    const { toChatId, template } = config;
+
+    if (!toChatId) {
+      return {
+        success: false,
+        error: 'Target chat ID is required',
+      };
+    }
+
+    if (!template) {
+      return {
+        success: false,
+        error: 'Message template is required',
+      };
+    }
+
+    try {
+      const { callApi } = await import('../../../api/gramjs');
+      const { selectChat } = await import('../../selectors');
+
+      const toChat = selectChat(global, toChatId);
+
+      if (!toChat) {
+        return {
+          success: false,
+          error: 'Target chat not found',
+        };
+      }
+
+      const text = renderTemplate(template, pipelineData);
+
+      await callApi('sendMessage', {
+        chat: toChat,
+        text,
+      });
+
+      return {
+        success: true,
+        data: {
+          sentTo: toChatId,
+          sentText: text,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: `Failed to send message: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   },

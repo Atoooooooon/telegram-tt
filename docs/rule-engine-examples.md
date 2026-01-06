@@ -159,6 +159,174 @@ const ruleAutoReplyFAQ: UserRule = {
 };
 ```
 
+## 示例5: 投诉消息自动转发到管理群
+
+```typescript
+const ruleForwardComplaint: UserRule = {
+  id: 'rule_forward_complaint',
+  name: '投诉消息转发',
+  enabled: true,
+  priority: 9,
+
+  trigger: {
+    eventType: 'customer_message',
+  },
+
+  pipeline: [
+    // 检测投诉关键词
+    {
+      id: 'check_complaint',
+      capabilityId: 'check_message',
+      config: {
+        textPattern: '投诉|差评|退款|问题',
+        textMode: '正则',
+      },
+      onSuccess: {
+        continueNext: true,
+      },
+      onFailure: {
+        stopPipeline: true,
+      },
+    },
+
+    // 转发到管理群
+    {
+      id: 'forward_to_admin',
+      capabilityId: 'action_forward',
+      config: {
+        toChatId: '-1001234567890', // 替换为你的管理群ID
+        dropAuthor: false,           // 保留原作者信息
+        dropCaption: false,          // 保留原标题
+      },
+    },
+
+    // 同时添加到客服队列
+    {
+      id: 'add_to_queue',
+      capabilityId: 'action_add_queue',
+      config: {},
+    },
+  ],
+};
+```
+
+**使用场景说明**:
+- 客户发送包含投诉关键词的消息时
+- 自动转发完整消息到管理群(保留原始格式和作者信息)
+- 同时添加到客服队列,确保人工跟进
+
+## 示例6: 异常消息告警通知
+
+```typescript
+const ruleAlertOnAbnormal: UserRule = {
+  id: 'rule_abnormal_alert',
+  name: '异常消息告警',
+  enabled: true,
+  priority: 10,
+
+  trigger: {
+    eventType: 'customer_message',
+  },
+
+  pipeline: [
+    // 检测敏感词
+    {
+      id: 'check_sensitive',
+      capabilityId: 'check_message',
+      config: {
+        textPattern: '骗子|诈骗|举报|违法',
+        textMode: '正则',
+      },
+      onSuccess: {
+        continueNext: true,
+      },
+      onFailure: {
+        stopPipeline: true,
+      },
+    },
+
+    // 发送告警到管理员
+    {
+      id: 'notify_admin',
+      capabilityId: 'action_send_to',
+      config: {
+        toChatId: '987654321', // 替换为管理员的用户ID
+        template: '🚨 异常消息告警\n\n用户: {{sender}}\n群组: {{chatTitle}}\n内容: {{text}}\n\n请立即处理!',
+      },
+    },
+
+    // 添加到高优先级队列
+    {
+      id: 'add_to_queue',
+      capabilityId: 'action_add_queue',
+      config: {},
+    },
+  ],
+};
+```
+
+**使用场景说明**:
+- 检测到敏感词时立即通知管理员
+- 使用自定义模板格式化告警消息
+- 发送到管理员的私聊窗口(而非群组)
+
+**与转发的区别**:
+- `action_forward`: 保留原消息的完整结构(适合转发到群组讨论)
+- `action_send_to`: 发送自定义格式的告警(适合发给个人,信息更简洁)
+
+## 示例7: 多渠道通知(转发+告警组合)
+
+```typescript
+const ruleMultiChannelNotify: UserRule = {
+  id: 'rule_multi_notify',
+  name: 'VIP客户消息多渠道通知',
+  enabled: true,
+  priority: 10,
+
+  trigger: {
+    eventType: 'customer_message',
+    chatIds: ['-1001111111111'], // VIP客户群
+  },
+
+  pipeline: [
+    // 转发完整消息到处理群
+    {
+      id: 'forward_to_team',
+      capabilityId: 'action_forward',
+      config: {
+        toChatId: '-1002222222222', // 团队处理群
+        dropAuthor: false,
+      },
+    },
+
+    // 同时发送简要通知给主管
+    {
+      id: 'notify_supervisor',
+      capabilityId: 'action_send_to',
+      config: {
+        toChatId: '123456789', // 主管ID
+        template: '💎 VIP客户消息\n来自: {{sender}}\n预览: {{text}}',
+      },
+    },
+
+    // 添加到客服队列
+    {
+      id: 'add_queue',
+      capabilityId: 'action_add_queue',
+      config: {},
+    },
+  ],
+};
+```
+
+**场景说明**:
+同一条消息触发多个动作:
+1. 完整消息转发到团队群(方便讨论)
+2. 简要通知发送给主管(快速了解)
+3. 添加到客服队列(确保处理)
+
+
+
 ## 完整配置示例
 
 将以上规则添加到设置中:
@@ -167,13 +335,6 @@ const ruleAutoReplyFAQ: UserRule = {
 // 在 customerServiceV2.settings 中
 const settings: CustomerServiceSettings = {
   // ... 现有配置 ...
-
-  // 启用规则引擎
-  ruleEngineConfig: {
-    enabled: true,
-    fallbackToLegacy: true, // 无规则匹配时使用旧逻辑
-    maxExecutionTime: 5000,
-  },
 
   // 规则列表
   rules: [
@@ -211,13 +372,22 @@ const settings: CustomerServiceSettings = {
 ## 可用能力列表
 
 ### 检测类 (Checkers)
-- `check_text_match`: 文本匹配
+- `check_message`: 消息检测(文本/图片/视频/引用)
 - `check_has_reply`: 回复检测
 
 ### 动作类 (Actions)
 - `action_mark_read`: 标记已读
-- `action_auto_reply`: 自动回复
+- `action_auto_reply`: 自动回复(在当前聊天窗口)
 - `action_add_queue`: 添加到队列
+- `action_forward`: 转发消息(保留原消息结构)
+- `action_send_to`: 发送消息到窗口(自定义模板格式)
+
+**能力对比**:
+| 能力 | 用途 | 目标窗口 | 消息格式 |
+|------|------|----------|----------|
+| `action_auto_reply` | 回复客户 | 当前窗口 | 模板文本 |
+| `action_forward` | 转发消息 | 其他窗口 | 保留原消息 |
+| `action_send_to` | 发送通知 | 其他窗口 | 模板文本 |
 
 更多能力参考 API 文档。
 
@@ -240,16 +410,12 @@ await executeRule(testRule, testMessage, global, actions);
 ```typescript
 const settings = selectCustomerServiceV2Settings(global);
 console.log('Rules:', settings?.rules);
-console.log('Engine enabled:', settings?.ruleEngineConfig?.enabled);
 ```
 
 ## 常见问题
 
 **Q: 规则不生效?**
-A: 检查 `ruleEngineConfig.enabled` 是否为 true, `rule.enabled` 是否为 true
-
-**Q: 如何禁用旧逻辑?**
-A: 设置 `ruleEngineConfig.fallbackToLegacy = false`
+A: 检查 `rule.enabled` 是否为 true, 并确认触发条件匹配
 
 **Q: 能力执行失败?**
 A: 查看控制台错误日志,检查 config 参数是否正确

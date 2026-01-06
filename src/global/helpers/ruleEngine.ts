@@ -16,6 +16,15 @@ import type {
 
 import { selectCustomerServiceV2Settings } from '../selectors/customerServiceV2';
 
+import { randomDelayMs, sleep } from '../../util/delays';
+
+const ACTION_STEP_DELAY_MIN_MS = 1000;
+const ACTION_STEP_DELAY_MAX_MS = 10000;
+
+function getRandomActionStepDelayMs(): number {
+  return randomDelayMs(ACTION_STEP_DELAY_MIN_MS, ACTION_STEP_DELAY_MAX_MS);
+}
+
 // Capability registry
 const capabilityRegistry = new Map<string, Capability>();
 
@@ -227,6 +236,14 @@ export async function executeRule(
         break;
       }
 
+      // Add delay after action capabilities to prevent rate limiting
+      if (capability.type === 'action') {
+        const stepDelayMs = getRandomActionStepDelayMs();
+        // eslint-disable-next-line no-console
+        console.log(`[RuleEngine] Waiting ${stepDelayMs}ms after action to prevent rate limiting`);
+        await sleep(stepDelayMs);
+      }
+
       // Handle routing
       if (result.success) {
         ruleMatched = true;
@@ -312,6 +329,12 @@ export async function executeAction(
       config: actionConfig,
     };
     await capability.execute(actionInput);
+
+    // Add delay after action to prevent rate limiting
+    const stepDelayMs = getRandomActionStepDelayMs();
+    // eslint-disable-next-line no-console
+    console.log(`[RuleEngine] Waiting ${stepDelayMs}ms after executeAction to prevent rate limiting`);
+    await sleep(stepDelayMs);
   } catch (error) {
     console.error(`[RuleEngine] Action ${actionId} failed:`, error);
   }
@@ -362,6 +385,14 @@ export async function executePipelineFromStep(
       // Merge output data into pipeline data
       if (result.data) {
         Object.assign(pipelineData, result.data);
+      }
+
+      // Add delay after action capabilities to prevent rate limiting
+      if (capability.type === 'action') {
+        const stepDelayMs = getRandomActionStepDelayMs();
+        // eslint-disable-next-line no-console
+        console.log(`[RuleEngine] Waiting ${stepDelayMs}ms after action to prevent rate limiting`);
+        await sleep(stepDelayMs);
       }
 
       // Handle routing
@@ -427,10 +458,6 @@ export async function processMessageWithRules(
   customRules?: UserRule[],
 ): Promise<{ matched: boolean; skipPostProcessing: boolean }> {
   const settings = selectCustomerServiceV2Settings(global);
-
-  if (!settings?.ruleEngineConfig?.enabled && !customRules) {
-    return { matched: false, skipPostProcessing: false };
-  }
 
   // Use custom rules or filter enabled rules from settings
   const rules = customRules || (settings?.rules?.filter((r) => r.enabled)) || [];

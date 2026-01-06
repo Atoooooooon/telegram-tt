@@ -6,21 +6,14 @@
 
 ## 🚀 场景: AI说"已解决"自动标记已读
 
-### 步骤1: 启用规则引擎
+### 步骤1: 准备设置结构
 
-修改客服设置,添加规则引擎配置:
+确保客服设置中包含 `rules` 数组,用于存放规则:
 
 ```typescript
 // 在 CustomerServiceSettings 中
 {
   // ... 现有配置 ...
-
-  // 启用规则引擎
-  ruleEngineConfig: {
-    enabled: true,           // 开启规则引擎
-    fallbackToLegacy: true,  // 无规则匹配时使用旧逻辑
-    maxExecutionTime: 5000,  // 单条规则最大执行时间(ms)
-  },
 
   // 规则列表
   rules: []  // 先留空,下一步添加
@@ -175,10 +168,9 @@ rules: [
 
 **Q: 规则不生效?**
 ```typescript
-// 检查这三个地方:
-1. ruleEngineConfig.enabled === true ✓
-2. rule.enabled === true ✓
-3. trigger 条件是否匹配 ✓
+// 检查以下两点:
+1. rule.enabled === true ✓
+2. trigger 条件是否匹配 ✓
 ```
 
 **Q: 如何获取机器人ID?**

@@ -40,8 +40,6 @@ export type CustomerServiceSettings = {
 
   /** Rule engine: User-configured rules */
   rules?: UserRule[];
-  /** Rule engine: Configuration */
-  ruleEngineConfig?: RuleEngineConfig;
 };
 
 /**
@@ -224,13 +222,4 @@ export type UserRule = {
     senderIds?: string[];
   };
   pipeline: PipelineStep[];
-};
-
-/**
- * Rule engine configuration
- */
-export type RuleEngineConfig = {
-  enabled: boolean;
-  fallbackToLegacy: boolean;
-  maxExecutionTime: number;
 };

@@ -748,6 +748,92 @@ return {
 
 ---
 
+#### action_forward
+
+**功能**: 转发消息到指定聊天窗口
+
+**配置参数**:
+```typescript
+{
+  toChatId: string;       // 目标聊天ID(必填)
+  dropAuthor?: boolean;   // 隐藏原作者(默认false)
+  dropCaption?: boolean;  // 删除原标题(默认false)
+}
+```
+
+**输出数据**:
+```typescript
+{
+  forwardedTo: string;    // 目标聊天ID
+  messageId: number;      // 原消息ID
+}
+```
+
+**示例**:
+```json
+{
+  "capabilityId": "action_forward",
+  "config": {
+    "toChatId": "-1001234567890",
+    "dropAuthor": false,
+    "dropCaption": false
+  }
+}
+```
+
+**使用场景**:
+- 将客户投诉转发到管理群
+- 将重要消息转发给特定负责人
+- 建立消息备份机制
+
+---
+
+#### action_send_to
+
+**功能**: 发送新消息到指定聊天窗口
+
+**配置参数**:
+```typescript
+{
+  toChatId: string;       // 目标聊天ID(必填)
+  template: string;       // 消息模板(必填,支持 {{变量}})
+}
+```
+
+**输出数据**:
+```typescript
+{
+  sentTo: string;         // 目标聊天ID
+  sentText: string;       // 实际发送的文本
+}
+```
+
+**示例**:
+```json
+{
+  "capabilityId": "action_send_to",
+  "config": {
+    "toChatId": "987654321",
+    "template": "⚠️ 检测到异常消息\n用户: {{sender}}\n内容: {{text}}"
+  }
+}
+```
+
+**使用场景**:
+- 向管理员发送告警通知
+- 跨群组同步消息摘要
+- 触发工作流通知
+
+**注意事项**:
+- 与 `action_auto_reply` 的区别:
+  - `action_auto_reply`: 在当前聊天窗口回复消息
+  - `action_send_to`: 向另一个聊天窗口发送新消息
+- 与 `action_forward` 的区别:
+  - `action_forward`: 转发现有消息(保留原消息结构)
+  - `action_send_to`: 发送自定义格式的新消息(使用模板)
+
+---
+
 #### action_notify
 
 **功能**: 向客服人员发送通知

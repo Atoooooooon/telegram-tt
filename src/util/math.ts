@@ -3,6 +3,11 @@ export const isBetween = (num: number, min: number, max: number) => (num >= min 
 export const round = (num: number, decimals: number = 0) => Math.round(num * 10 ** decimals) / 10 ** decimals;
 export const ceil = (num: number, decimals: number = 0) => Math.ceil(num * 10 ** decimals) / 10 ** decimals;
 export const floor = (num: number, decimals: number = 0) => Math.floor(num * 10 ** decimals) / 10 ** decimals;
+export const randomInt = (min: number, max: number) => {
+  const low = Math.min(min, max);
+  const high = Math.max(min, max);
+  return Math.floor(Math.random() * (high - low + 1)) + low;
+};
 export const lerp = (start: number, end: number, interpolationRatio: number) => {
   return (1 - interpolationRatio) * start + interpolationRatio * end;
 };

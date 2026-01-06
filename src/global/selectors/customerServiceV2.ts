@@ -112,12 +112,6 @@ export function selectCustomerServiceV2Settings(
   if (!baseSettings.rules || baseSettings.rules.length === 0) {
     return {
       ...baseSettings,
-      ruleEngineConfig: {
-        enabled: true,
-        fallbackToLegacy: true,
-        maxExecutionTime: 5000,
-        ...baseSettings.ruleEngineConfig,
-      },
       rules: [
         {
           id: 'debug_auto_reply_foo_bar',
@@ -204,4 +198,3 @@ export function selectCustomerServiceV2ActiveChatIds(
     (chatId) => cs.messagesByChatId[chatId].length > 0,
   );
 }
-

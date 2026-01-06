@@ -413,6 +413,95 @@ const RuleEngineDoc: FC = () => {
               <code>addedToQueue</code>
             </p>
           </div>
+
+          <div className={styles.capabilityItem}>
+            <h6>
+              <code>action_forward</code>
+              {' '}
+              - 转发消息
+            </h6>
+            <p>转发消息到指定聊天窗口,自动模拟真实用户行为(先已读再转发)</p>
+            <ul>
+              <li>
+                <code>toChatId</code>
+                : 目标聊天ID (string, 必填)
+                <br />
+                输入目标聊天的ID
+              </li>
+              <li>
+                <code>dropAuthor</code>
+                : 隐藏原作者 (boolean, 默认 false)
+                <br />
+                设为 true 时转发消息不显示原作者信息
+              </li>
+              <li>
+                <code>dropCaption</code>
+                : 删除原标题 (boolean, 默认 false)
+                <br />
+                设为 true 时转发消息不包含原标题/说明文字
+              </li>
+            </ul>
+            <p>
+              <strong>重要:</strong>
+              {' '}
+              转发前会自动标记消息为已读,模拟真实用户操作,避免触发 Telegram 反机器人检测
+            </p>
+            <p>
+              <strong>输出数据:</strong>
+              {' '}
+              <code>forwardedTo</code>
+              ,
+              {' '}
+              <code>messageId</code>
+            </p>
+          </div>
+
+          <div className={styles.capabilityItem}>
+            <h6>
+              <code>action_send_to</code>
+              {' '}
+              - 发送消息到窗口
+            </h6>
+            <p>
+              发送新消息到指定聊天窗口,支持
+              {' '}
+              <code>{'{{变量}}'}</code>
+              {' '}
+              模板语法
+            </p>
+            <ul>
+              <li>
+                <code>toChatId</code>
+                : 目标聊天ID (string, 必填)
+                <br />
+                输入目标聊天的ID
+              </li>
+              <li>
+                <code>template</code>
+                : 消息模板 (string, 必填)
+                <br />
+                可用变量:
+                {' '}
+                <code>{'{{text}}'}</code>
+                ,
+                {' '}
+                <code>{'{{chatId}}'}</code>
+                ,
+                {' '}
+                <code>{'{{senderId}}'}</code>
+                {' '}
+                及管道中的其他数据
+              </li>
+            </ul>
+            <p>
+              <strong>输出数据:</strong>
+              {' '}
+              <code>sentTo</code>
+              ,
+              {' '}
+              <code>sentText</code>
+            </p>
+          </div>
         </section>
 
         <section className={styles.docSection}>
@@ -645,6 +734,69 @@ const RuleEngineDoc: FC = () => {
   ]
 }`}
           </pre>
+
+          <h6>示例 8: 转发消息到监控群</h6>
+          <pre className={styles.codeExample}>
+            {`{
+  "id": "forward_to_monitor",
+  "name": "关键词消息转发到监控群",
+  "enabled": true,
+  "trigger": {
+    "eventType": "customer_message"
+  },
+  "pipeline": [
+    {
+      "id": "check_keyword",
+      "capabilityId": "check_message",
+      "config": {
+        "textPattern": "投诉|退款|差评",
+        "textMode": "正则"
+      },
+      "onFailure": { "stopPipeline": true }
+    },
+    {
+      "id": "forward_message",
+      "capabilityId": "action_forward",
+      "config": {
+        "toChatId": "-1001234567890",
+        "dropAuthor": false,
+        "dropCaption": false
+      }
+    }
+  ]
+}`}
+          </pre>
+
+          <h6>示例 9: 发送通知到管理群</h6>
+          <pre className={styles.codeExample}>
+            {`{
+  "id": "notify_admin_group",
+  "name": "重要消息通知管理群",
+  "enabled": true,
+  "trigger": {
+    "eventType": "customer_message"
+  },
+  "pipeline": [
+    {
+      "id": "check_important",
+      "capabilityId": "check_message",
+      "config": {
+        "textPattern": "紧急|重要|加急",
+        "textMode": "正则"
+      },
+      "onFailure": { "stopPipeline": true }
+    },
+    {
+      "id": "send_notification",
+      "capabilityId": "action_send_to",
+      "config": {
+        "toChatId": "-1001234567890",
+        "template": "🚨 检测到重要消息\\n来自: {{senderId}}\\n内容: {{text}}"
+      }
+    }
+  ]
+}`}
+          </pre>
         </section>
 
         <section className={styles.docSection}>
@@ -654,6 +806,11 @@ const RuleEngineDoc: FC = () => {
               <strong>执行顺序:</strong>
               {' '}
               规则列表顺序决定优先级,#1 最先执行
+            </li>
+            <li>
+              <strong>步骤延迟:</strong>
+              {' '}
+              规则引擎会在每个 action 类型的步骤执行后自动随机延迟(1-10秒),用于防止 Telegram API 限流封号。
             </li>
             <li>
               <strong>executeAction 参数:</strong>

@@ -5,14 +5,12 @@ import { getActions, withGlobal } from '../../../../global';
 import type { ApiChat, ApiChatFullInfo } from '../../../../api/types';
 import type {
   CustomerServiceQuickReply,
-  RuleEngineConfig,
   UserRule,
 } from '../../../../global/types/customerServiceV2';
 
 import { CUSTOMER_SERVICE_CONFIG } from '../../../../config/customerService';
 import {
   DEFAULT_DEBUG_RULE,
-  DEFAULT_RULE_ENGINE_CONFIG,
   normalizeCustomerServiceQuickReplies,
 } from '../../../../global/helpers/customerServiceV2Settings';
 import { selectCustomerServiceV2Settings } from '../../../../global/selectors/customerServiceV2';
@@ -55,7 +53,6 @@ type StateProps = {
   quickReplies?: CustomerServiceQuickReply[];
   quickReplyPanelGlobal?: boolean;
   rules?: UserRule[];
-  ruleEngineConfig?: RuleEngineConfig;
   };
 };
 
@@ -68,7 +65,6 @@ type FilterSettings = {
   quickReplies: CustomerServiceQuickReply[];
   quickReplyPanelGlobal: boolean;
   rules: UserRule[];
-  ruleEngineConfig: RuleEngineConfig;
 };
 
 type SavedSettings = StateProps['savedSettings'];
@@ -90,13 +86,6 @@ const buildFilterSettings = (saved?: SavedSettings): FilterSettings => ({
   rules: (saved?.rules && saved.rules.length
     ? saved.rules.map((rule) => JSON.parse(JSON.stringify(rule)))
     : [JSON.parse(JSON.stringify(DEFAULT_DEBUG_RULE))]) as UserRule[],
-  ruleEngineConfig: saved?.ruleEngineConfig
-    ? {
-      enabled: saved.ruleEngineConfig.enabled ?? DEFAULT_RULE_ENGINE_CONFIG.enabled,
-      fallbackToLegacy: saved.ruleEngineConfig.fallbackToLegacy ?? DEFAULT_RULE_ENGINE_CONFIG.fallbackToLegacy,
-      maxExecutionTime: saved.ruleEngineConfig.maxExecutionTime ?? DEFAULT_RULE_ENGINE_CONFIG.maxExecutionTime,
-    }
-    : { ...DEFAULT_RULE_ENGINE_CONFIG },
 });
 
 const CustomerServiceSettingsModal = ({
@@ -201,13 +190,6 @@ const CustomerServiceSettingsModal = ({
     }));
   });
 
-  const handleRuleEngineConfigChange = useLastCallback((nextConfig: RuleEngineConfig) => {
-    updateSettings((prev) => ({
-      ...prev,
-      ruleEngineConfig: nextConfig,
-    }));
-  });
-
   const handleRulesChange = useLastCallback((nextRules: UserRule[]) => {
     updateSettings((prev) => ({
       ...prev,
@@ -234,9 +216,6 @@ const CustomerServiceSettingsModal = ({
       quickReplies: normalizeCustomerServiceQuickReplies(settings.quickReplies),
       quickReplyPanelGlobal: Boolean(settings.quickReplyPanelGlobal),
       rules: settings.rules?.length ? JSON.parse(JSON.stringify(settings.rules)) : [],
-      ruleEngineConfig: settings.ruleEngineConfig
-        ? { ...settings.ruleEngineConfig }
-        : { ...DEFAULT_RULE_ENGINE_CONFIG },
     };
 
     saveCustomerServiceV2Settings({ settings: normalizedSettings });
@@ -342,9 +321,7 @@ const CustomerServiceSettingsModal = ({
           )}
           {activeTab === 4 && (
             <RuleEngineTab
-              ruleEngineConfig={settings.ruleEngineConfig}
               rules={settings.rules}
-              onConfigChange={handleRuleEngineConfigChange}
               onRulesChange={handleRulesChange}
             />
           )}

@@ -280,7 +280,6 @@ addActionHandler('toggleCustomerServiceV2Mode', (global, actions, payload): Acti
     ),
     quickReplyPanelGlobal: Boolean(existingSettings.quickReplyPanelGlobal),
     rules: existingSettings.rules,
-    ruleEngineConfig: existingSettings.ruleEngineConfig,
   };
 
   const normalized = normalizeSettingsForSave(updatedSettings);
