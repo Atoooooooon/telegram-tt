@@ -6,6 +6,7 @@
 import type { ApiMessage } from '../../../api/types';
 import type { Capability } from '../../types/customerServiceV2';
 import { getMessageText } from '../messages';
+import { waitHumanLike } from '../../../util/delays';
 
 /**
  * Check message content and properties
@@ -46,6 +47,8 @@ export const checkMessageCapability: Capability = {
   },
 
   async execute({ message, config, pipelineData }) {
+    await waitHumanLike({ minMs: 120, maxMs: 280 });
+
     const {
       textPattern,
       textMode = '包含',
@@ -141,6 +144,8 @@ export const checkHasReplyCapability: Capability = {
   },
 
   async execute({ message, config }) {
+    await waitHumanLike({ minMs: 120, maxMs: 280 });
+
     const { timeWindow = 300 } = config;
 
     // eslint-disable-next-line no-console

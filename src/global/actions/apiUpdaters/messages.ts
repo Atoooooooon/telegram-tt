@@ -14,6 +14,7 @@ import { shouldFilterMessage, isMonitoredChat, isFilteredUser } from '../../../c
 import { callApi } from '../../../api/gramjs';
 import { processMessageWithRules, validateRuleCapabilities } from '../../helpers/ruleEngine';
 import { registerAllCapabilities } from '../../helpers/capabilities';
+import { getHumanDelayMs } from '../../../util/delays';
 import { DEFAULT_DEBUG_RULE } from '../../helpers/customerServiceV2Settings';
 import { areDeepEqual } from '../../../util/areDeepEqual';
 import { isUserId } from '../../../util/entities/ids';
@@ -413,29 +414,32 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
               return;
             }
 
-            if (isFiltered) {
-              // 消息被基础过滤器过滤掉（用户被屏蔽或内容匹配过滤正则）
-              console.log("Message filtered by basic filters:", message.id, "in chat:", chatId);
+              if (isFiltered) {
+                // 消息被基础过滤器过滤掉（用户被屏蔽或内容匹配过滤正则）
+                console.log("Message filtered by basic filters:", message.id, "in chat:", chatId);
 
-              // 检查是否启用自动已读功能
-              const shouldAutoRead = customerServiceV2?.settings?.autoRead || false;
-              if (shouldAutoRead) {
-                console.log("Auto-reading filtered message in monitored chat:", message.id);
-                const chat = selectChat(global, chatId);
-                if (chat) {
-                  callApi('markMessageListRead', {
-                    chat,
-                    threadId: MAIN_THREAD_ID,
-                    maxId: message.id,
-                  }).then(() => {
-                    console.log("Auto-read successful for filtered message:", message.id);
-                  }).catch((error) => {
-                    console.error("Auto-read failed for filtered message:", message.id, error);
-                  });
+                // 检查是否启用自动已读功能
+                const shouldAutoRead = customerServiceV2?.settings?.autoRead || false;
+                if (shouldAutoRead) {
+                  console.log("Auto-reading filtered message in monitored chat:", message.id);
+                  const chat = selectChat(global, chatId);
+                  if (chat) {
+                    const delayMs = getHumanDelayMs({ minMs: 900, maxMs: 1700 });
+                    setTimeout(() => {
+                      callApi('markMessageListRead', {
+                        chat,
+                        threadId: MAIN_THREAD_ID,
+                        maxId: message.id,
+                      }).then(() => {
+                        console.log("Auto-read successful for filtered message:", message.id, "after", delayMs, "ms");
+                      }).catch((error) => {
+                        console.error("Auto-read failed for filtered message:", message.id, error);
+                      });
+                    }, delayMs);
+                  }
                 }
+                return;
               }
-              return;
-            }
 
             // Phase 3: Execute post-filter rules (after filtering, default behavior)
             const postFilterRules = settings?.rules?.filter(

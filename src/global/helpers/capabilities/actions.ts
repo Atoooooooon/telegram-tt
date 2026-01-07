@@ -7,6 +7,7 @@ import type { Capability } from '../../types/customerServiceV2';
 import { MAIN_THREAD_ID } from '../../../api/types';
 
 import { renderTemplate } from '../templateRenderer';
+import { waitHumanLike } from '../../../util/delays';
 
 const MIN_TYPING_DELAY_MS = 900;
 const MAX_TYPING_DELAY_MS = 1800;
@@ -54,6 +55,8 @@ export const actionMarkReadCapability: Capability = {
   },
 
   async execute({ message, config, global }) {
+    await waitHumanLike({ minMs: 420, maxMs: 880 });
+
     const { targetMessage = '回复的原消息', maxUnreadCount = 1 } = config;
 
     let targetId: number;
@@ -281,6 +284,8 @@ export const actionAddQueueCapability: Capability = {
   configSchema: {},
 
   async execute({ message, actions }) {
+    await waitHumanLike({ minMs: 420, maxMs: 880 });
+
     try {
       await actions.addToCustomerServiceV2({
         message,
@@ -331,6 +336,8 @@ export const actionForwardCapability: Capability = {
   },
 
   async execute({ message, config, global }) {
+    await waitHumanLike({ minMs: 420, maxMs: 880 });
+
     const { toChatId, dropAuthor = false, dropCaption = false } = config;
 
     if (!toChatId) {
@@ -424,6 +431,8 @@ export const actionSendToCapability: Capability = {
   },
 
   async execute({ message, config, pipelineData, global }) {
+    await waitHumanLike({ minMs: 420, maxMs: 880 });
+
     const { toChatId, template } = config;
 
     if (!toChatId) {
