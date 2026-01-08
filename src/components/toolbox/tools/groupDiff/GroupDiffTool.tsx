@@ -1,16 +1,16 @@
 import type { FC } from '../../../../lib/teact/teact';
 import {
-  memo, useCallback, useEffect, useMemo, useState,
+  memo, useCallback, useMemo, useState,
 } from '../../../../lib/teact/teact';
 
-import type { ApiChat, ApiMessage, ApiUser } from '../../../../api/types';
+import type { ApiChat, ApiUser } from '../../../../api/types';
 import { callApi } from '../../../../api/gramjs';
 import { withGlobal } from '../../../../global';
 import { getUserFullName } from '../../../../global/helpers/users';
 import Button from '../../../ui/Button';
 import InputText from '../../../ui/InputText';
+import Checkbox from '../../../ui/Checkbox';
 import styles from './GroupDiffTool.module.scss';
-import { MAIN_THREAD_ID } from '../../../../api/types';
 
 type StateProps = {
   chatsById: Record<string, ApiChat>;
@@ -26,6 +26,7 @@ type ActivityEntry = {
 };
 
 type MissingGroup = {
+  chat: ApiChat;
   chatId: string;
   title: string;
   alias?: string;
@@ -46,26 +47,6 @@ type InviteState = {
 
 const activityRegex = /^\s*(\d+)\.\s*(-?\d+)(?:\s*\[(.+?)\])?(?:\s*\((\d+)\))?.*/;
 const MAX_USER_SUGGESTIONS = 25;
-const TECH_GROUP_ID = '-1001602618020';
-const RANKING_KEYWORD = '活跃度排行';
-const RANKING_COMMAND = '/actrank';
-
-const delay = (ms: number) => new Promise((resolve) => {
-  setTimeout(resolve, ms);
-});
-
-function extractMessageText(message: ApiMessage | undefined): string {
-  if (!message) {
-    return '';
-  }
-
-  return (
-    (message.content as { text?: { text?: string } })?.text?.text
-    || (message as { text?: string }).text
-    || (message as { message?: string }).message
-    || ''
-  );
-}
 
 function extractBaseId(value?: string) {
   const trimmed = value?.trim();
@@ -110,34 +91,85 @@ function parseActivityInput(raw: string) {
   };
 }
 
+const UserSelector: FC<{
+  search: string;
+  onSearchChange: (val: string) => void;
+  users: Array<{ id: string; title: string; username?: string }>;
+  selectedUserId?: string;
+  onSelect: (id: string) => void;
+  title: string;
+  placeholder?: string;
+  disabled?: boolean;
+  headerAction?: React.ReactNode;
+}> = ({
+  search, onSearchChange, users, selectedUserId, onSelect, title, placeholder, disabled, headerAction,
+}) => {
+  return (
+    <section className={`${styles.panel} ${disabled ? styles.panelDisabled : ''}`}> 
+      <div className={styles.panelHeader}>
+        <h4>{title}</h4>
+        {headerAction || (
+          <span className={styles.panelHint}>最多展示 {MAX_USER_SUGGESTIONS} 条</span>
+        )}
+      </div>
+      <div className={styles.panelBody}>
+        <InputText
+          value={search}
+          placeholder={placeholder || '搜索联系人姓名、用户名或 ID'}
+          onChange={(e) => onSearchChange(e.currentTarget.value)}
+          disabled={disabled}
+        />
+        <div className={styles.userListWrapper}>
+          <div className={styles.userList}>
+            {!disabled && users.length === 0 && (
+              <div className={styles.empty}>没有匹配的联系人，试试换个关键词。</div>
+            )}
+            {!disabled && users.map((user) => (
+              <button
+                key={user.id}
+                type="button"
+                className={`${styles.userItem} ${selectedUserId === user.id ? styles.userItemActive : ''}`}
+                onClick={() => onSelect(user.id)}
+              >
+                <div className={styles.userName}>{user.title}</div>
+                <div className={styles.userMeta}>
+                  <span>ID: {user.id}</span>
+                  {user.username && <span>@{user.username}</span>}
+                </div>
+              </button>
+            ))}
+            {disabled && (
+               <div className={styles.empty}>当前使用“我的群组”作为对比源。</div>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
 const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
-  const [friendSearch, setFriendSearch] = useState('');
-  const [selectedUserId, setSelectedUserId] = useState<string>();
+  const [useMyGroups, setUseMyGroups] = useState(true);
+  
+  // Target User (The one to invite / The one missing groups)
+  const [targetSearch, setTargetSearch] = useState('');
+  const [targetUserId, setTargetUserId] = useState<string>();
+
+  // Source User (The one having groups) - Only when useMyGroups is false
+  const [sourceSearch, setSourceSearch] = useState('');
+  const [sourceUserId, setSourceUserId] = useState<string>();
+
   const [activityInput, setActivityInput] = useState('');
   const [missingGroups, setMissingGroups] = useState<MissingGroup[]>([]);
   const [error, setError] = useState<string>();
   const [isChecking, setIsChecking] = useState(false);
-  const [lastRunUserId, setLastRunUserId] = useState<string>();
-  const [fetchedCommonCount, setFetchedCommonCount] = useState(0);
+  
+  // Stats
+  const [lastSourceCount, setLastSourceCount] = useState(0);
+  const [lastTargetCount, setLastTargetCount] = useState(0);
+  const [lastRunInfo, setLastRunInfo] = useState<{ sourceName: string; targetName: string }>();
+
   const [inviteStates, setInviteStates] = useState<Record<string, InviteState>>({});
-  const [isFetchingRanking, setIsFetchingRanking] = useState(false);
-  const [rankingStatus, setRankingStatus] = useState<string>();
-  const [rankingError, setRankingError] = useState<string>();
-
-  useEffect(() => {
-    if (!rankingStatus && !rankingError) {
-      return undefined;
-    }
-
-    const timer = window.setTimeout(() => {
-      setRankingStatus(undefined);
-      setRankingError(undefined);
-    }, 4000);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [rankingStatus, rankingError]);
 
   const activityData = useMemo(() => parseActivityInput(activityInput), [activityInput]);
   const activityMap = useMemo(() => (
@@ -151,9 +183,6 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
     }, new Map<string, ActivityEntry>())
   ), [activityData]);
   const hasActivityRanking = activityMap.size > 0;
-  const currentUserId = useMemo(() => (
-    Object.values(usersById).find((user) => user.isSelf)?.id
-  ), [usersById]);
 
   const groupChats = useMemo(() => (
     Object.values(chatsById).filter((chat) => (
@@ -177,18 +206,20 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
       .sort((a, b) => a.title.localeCompare(b.title, 'zh-Hans'))
   ), [usersById]);
 
-  const filteredUsers = useMemo(() => {
-    const search = friendSearch.trim().toLowerCase();
-    const list = search
+  const filterUsers = useCallback((search: string) => {
+    const trimmed = search.trim().toLowerCase();
+    const list = trimmed
       ? availableUsers.filter((user) => (
-        user.title.toLowerCase().includes(search)
-        || user.username?.toLowerCase().includes(search)
-        || user.id.toLowerCase().includes(search)
+        user.title.toLowerCase().includes(trimmed)
+        || user.username?.toLowerCase().includes(trimmed)
+        || user.id.toLowerCase().includes(trimmed)
       ))
       : availableUsers;
-
     return list.slice(0, MAX_USER_SUGGESTIONS);
-  }, [availableUsers, friendSearch]);
+  }, [availableUsers]);
+
+  const filteredTargetUsers = useMemo(() => filterUsers(targetSearch), [filterUsers, targetSearch]);
+  const filteredSourceUsers = useMemo(() => filterUsers(sourceSearch), [filterUsers, sourceSearch]);
 
   const fetchAllCommonChats = useCallback(async (userId: string, accessHash: string) => {
     const collected: ApiChat[] = [];
@@ -229,45 +260,69 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
   }, []);
 
   const handleRun = useCallback(async () => {
-    if (!selectedUserId) {
-      setError('请先选择要对比的好友。');
+    if (!targetUserId) {
+      setError('请先选择目标好友（要对比的用户）。');
+      return;
+    }
+    
+    if (!useMyGroups && !sourceUserId) {
+      setError('请先选择来源好友（作为基准的用户）。');
       return;
     }
 
-    const targetUser = usersById[selectedUserId];
+    const targetUser = usersById[targetUserId];
     if (!targetUser?.accessHash) {
-      setError('缺少该好友的 accessHash，请先和他聊过天或重新搜索。');
+      setError('缺少目标好友的 accessHash，请先和他聊过天或重新搜索。');
       return;
+    }
+    
+    let sourceUser: ApiUser | undefined;
+    if (!useMyGroups && sourceUserId) {
+      sourceUser = usersById[sourceUserId];
+      if (!sourceUser?.accessHash) {
+        setError('缺少来源好友的 accessHash，请先和他聊过天或重新搜索。');
+        return;
+      }
     }
 
     setError(undefined);
     setIsChecking(true);
 
     try {
-      const commonChats = await fetchAllCommonChats(targetUser.id, targetUser.accessHash);
-      setFetchedCommonCount(commonChats.length);
+      // 1. Get Source Chats
+      let sourceChats: ApiChat[];
+      if (useMyGroups) {
+        sourceChats = groupChats;
+      } else {
+        sourceChats = await fetchAllCommonChats(sourceUser!.id, sourceUser!.accessHash!);
+      }
+      setLastSourceCount(sourceChats.length);
 
-      const friendChatIds = new Set<string>();
-      const friendBaseIds = new Set<string>();
+      // 2. Get Target Chats (Common chats with ME)
+      const targetCommonChats = await fetchAllCommonChats(targetUser.id, targetUser.accessHash);
+      setLastTargetCount(targetCommonChats.length);
 
-      commonChats.forEach((chat) => {
-        friendChatIds.add(chat.id);
+      const targetChatIds = new Set<string>();
+      const targetBaseIds = new Set<string>();
+
+      targetCommonChats.forEach((chat) => {
+        targetChatIds.add(chat.id);
         const base = extractBaseId(chat.id);
         if (base) {
-          friendBaseIds.add(base);
+          targetBaseIds.add(base);
         }
 
         if (chat.migratedTo) {
-          friendChatIds.add(chat.migratedTo.chatId);
+          targetChatIds.add(chat.migratedTo.chatId);
           const mBase = extractBaseId(chat.migratedTo.chatId);
           if (mBase) {
-            friendBaseIds.add(mBase);
+            targetBaseIds.add(mBase);
           }
         }
       });
 
-      const results: MissingGroup[] = groupChats.reduce<MissingGroup[]>((acc, chat) => {
-        if (friendChatIds.has(chat.id)) {
+      const results: MissingGroup[] = sourceChats.reduce<MissingGroup[]>((acc, chat) => {
+        if (targetChatIds.has(chat.id)) {
           return acc;
         }
 
@@ -276,12 +331,13 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
           return acc;
         }
 
-        if (friendBaseIds.has(baseId)) {
+        if (targetBaseIds.has(baseId)) {
           return acc;
         }
 
         const activity = activityMap.get(chat.id) || activityMap.get(baseId);
         acc.push({
+          chat,
           chatId: chat.id,
           title: chat.title,
           alias: activity?.alias,
@@ -308,229 +364,117 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
 
       setMissingGroups(results);
       setInviteStates({});
-      setLastRunUserId(selectedUserId);
+      setLastRunInfo({
+        sourceName: useMyGroups ? '我' : (getUserFullName(sourceUser) || sourceUser!.id),
+        targetName: getUserFullName(targetUser) || targetUser.id,
+      });
+
     } catch (err: any) {
-      setError(err?.message || '请求共同群组失败，请稍后重试。');
+      setError(err?.message || '计算失败，请稍后重试。');
     } finally {
       setIsChecking(false);
     }
-  }, [activityMap, fetchAllCommonChats, groupChats, selectedUserId, usersById]);
+  }, [activityMap, fetchAllCommonChats, groupChats, useMyGroups, sourceUserId, targetUserId, usersById]);
 
-  const handleInvite = useCallback(async (chatId: string) => {
-    if (!selectedUserId) {
+  const handleInvite = useCallback(async (chat: ApiChat) => {
+    if (!targetUserId) {
       setError('请先选择好友后再邀请。');
       return;
     }
 
-    const targetUser = usersById[selectedUserId];
+    const targetUser = usersById[targetUserId];
     if (!targetUser?.accessHash) {
       setError('缺少该好友的 accessHash，请重新搜索后再试。');
       return;
     }
-
-    const chat = chatsById[chatId];
-    if (!chat) {
-      setError('找不到该群的信息，刷新后再试。');
-      return;
-    }
-
+    
     setInviteStates((prev) => ({
       ...prev,
-      [chatId]: { status: 'loading' },
+      [chat.id]: { status: 'loading' },
     }));
 
     try {
       await callApi('addChatMembers', chat, [targetUser]);
       setInviteStates((prev) => ({
         ...prev,
-        [chatId]: { status: 'success' },
+        [chat.id]: { status: 'success' },
       }));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '邀请失败';
       setInviteStates((prev) => ({
         ...prev,
-        [chatId]: { status: 'error', message },
+        [chat.id]: { status: 'error', message },
       }));
     }
-  }, [chatsById, selectedUserId, usersById]);
-
-  const handleFetchRanking = useCallback(async () => {
-    setRankingError(undefined);
-    setRankingStatus(undefined);
-
-    const techChat = chatsById[TECH_GROUP_ID];
-    if (!techChat) {
-      setRankingError('当前账号尚未加入技术群，无法自动获取。');
-      return;
-    }
-
-    setIsFetchingRanking(true);
-    const sentAt = Math.floor(Date.now() / 1000);
-
-    try {
-      await callApi('sendMessage', {
-        chat: techChat,
-        text: RANKING_COMMAND,
-      });
-
-      let fetchedText: string | undefined;
-      let commandMessageId: number | undefined;
-
-      for (let attempt = 0; attempt < 6; attempt++) {
-        // Wait for bot response
-        await delay(attempt === 0 ? 800 : 1200);
-        const history = await callApi('fetchMessages', {
-          chat: techChat,
-          threadId: MAIN_THREAD_ID,
-          limit: 30,
-        }) as { messages?: ApiMessage[] } | undefined;
-
-        const messages = history?.messages || [];
-        if (!commandMessageId && currentUserId) {
-          const commandMessage = messages.find((msg) => (
-            msg.senderId === currentUserId
-            && extractMessageText(msg).trim().startsWith(RANKING_COMMAND)
-            && msg.date >= sentAt - 2
-          ));
-          if (commandMessage) {
-            commandMessageId = commandMessage.id;
-          }
-        }
-
-        const match = messages.find((msg) => {
-          const text = extractMessageText(msg);
-          if (!text || !text.includes(RANKING_KEYWORD)) {
-            return false;
-          }
-
-          const replyToId = (
-            msg.replyInfo && ('replyToMsgId' in msg.replyInfo)
-              ? (msg.replyInfo.replyToMsgId || undefined)
-              : undefined
-          );
-
-          if (commandMessageId) {
-            return replyToId === commandMessageId;
-          }
-
-          return msg.date >= sentAt - 2;
-        });
-
-        if (match) {
-          const rawText = extractMessageText(match);
-          const normalizedLines = rawText
-            .split('\n')
-            .map((line) => line.trim())
-            .filter((line) => /^\d+\./.test(line));
-          fetchedText = normalizedLines.length ? normalizedLines.join('\n') : rawText.trim();
-          break;
-        }
-      }
-
-      if (fetchedText) {
-        setActivityInput(fetchedText);
-        setRankingStatus('已同步最新活跃榜单。');
-      } else {
-        setRankingError('未找到活跃度回复，请稍后再试。');
-      }
-    } catch (err: unknown) {
-      setRankingError(`获取失败：${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setIsFetchingRanking(false);
-    }
-  }, [chatsById, currentUserId]);
-
-  const summaryUser = lastRunUserId ? usersById[lastRunUserId] : undefined;
+  }, [targetUserId, usersById]);
 
   return (
     <div className={styles.root}>
       <div className={styles.intro}>
-        选择一个好友，粘贴活跃度榜单（固定格式），即可计算“我加入但他/她未加入”的群，并按活跃度排序。
+        <p>
+            计算差集： <b>[来源群组]</b> - <b>[目标群组]</b>
+        </p>
       </div>
 
       <div className={styles.grid}>
-        <section className={styles.panel}>
-          <div className={styles.panelHeader}>
-            <h4>选择好友（先添加好友私信）</h4>
-            <span className={styles.panelHint}>最多展示 {MAX_USER_SUGGESTIONS} 条匹配结果</span>
-          </div>
-          <div className={styles.panelBody}>
-            <InputText
-              value={friendSearch}
-              placeholder="搜索联系人姓名、用户名或 ID"
-              onChange={(e) => setFriendSearch(e.currentTarget.value)}
-            />
-            <div className={styles.userListWrapper}>
-              <div className={styles.userList}>
-                {filteredUsers.length === 0 && (
-                  <div className={styles.empty}>没有匹配的联系人，试试换个关键词。</div>
-                )}
-                {filteredUsers.map((user) => (
-                  <button
-                    key={user.id}
-                    type="button"
-                    className={`${styles.userItem} ${selectedUserId === user.id ? styles.userItemActive : ''}`}
-                    onClick={() => setSelectedUserId(user.id)}
-                  >
-                    <div className={styles.userName}>{user.title}</div>
-                    <div className={styles.userMeta}>
-                      <span>ID: {user.id}</span>
-                      {user.username && <span>@{user.username}</span>}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
+        <UserSelector
+            title="选择来源好友 (基准)"
+            search={sourceSearch}
+            onSearchChange={setSourceSearch}
+            users={filteredSourceUsers}
+            selectedUserId={sourceUserId}
+            onSelect={setSourceUserId}
+            placeholder="搜索来源好友..."
+            disabled={useMyGroups}
+            headerAction={( /* This replace string is provided by the user, I am not allowed to change it. */
+                <Checkbox
+                    checked={useMyGroups}
+                    label="使用我的群组"
+                    onCheck={(checked) => setUseMyGroups(checked)}
+                />
+            )}
+        />
+      
+        <UserSelector
+            title="选择目标好友 (被减)"
+            search={targetSearch}
+            onSearchChange={setTargetSearch}
+            users={filteredTargetUsers}
+            selectedUserId={targetUserId}
+            onSelect={setTargetUserId}
+            placeholder="搜索目标好友..."
+        />
+      </div>
 
-        <section className={styles.panel}>
+      <section className={`${styles.panel} ${styles.activityPanel}`}>
           <div className={styles.panelHeader}>
-            <h4>活跃度榜单</h4>
-            <span className={styles.panelHint}>例如：1. -4549167178 [TEST] (96)</span>
+            <h4>活跃度榜单 (可选)</h4>
+            <span className={styles.panelHint}>用于排序结果</span>
           </div>
           <div className={styles.panelBody}>
             <textarea
               className={styles.textarea}
               value={activityInput}
               onChange={(e) => setActivityInput(e.currentTarget.value)}
-              placeholder={'1. -4549167178 [TEST] (96)\n2. -4604988776 (6)\n3. -936695322 [haowahaowa] (4)'}
+              placeholder={'1. -4549167178 [TEST] (96)\n...'}
             />
             <div className={styles.activityStats}>
               <span>已解析 {activityData.entries.length} 条</span>
               {activityData.invalid > 0 && (
-                <span className={styles.warning}>忽略 {activityData.invalid} 条格式错误的行</span>
+                <span className={styles.warning}>忽略 {activityData.invalid} 条</span>
               )}
             </div>
             <p className={styles.activityHint}>
-              支持格式：<code>1. -123456789</code> 或 <code>1. -123456789 [Alias] (96)</code>，别名与活跃度可选。
+              支持格式：<code>1. -123456789</code> 或 <code>1. -123456789 [Alias] (96)</code>
             </p>
-            <div className={styles.activityActions}>
-              <Button
-                size="smaller"
-                color="secondary"
-                onClick={handleFetchRanking}
-                disabled={isFetchingRanking}
-                isLoading={isFetchingRanking}
-              >
-                自动获取活跃榜
-              </Button>
-              {rankingStatus && (
-                <span className={styles.successText}>{rankingStatus}</span>
-              )}
-              {rankingError && (
-                <span className={styles.errorText}>{rankingError}</span>
-              )}
-            </div>
           </div>
-        </section>
-      </div>
+      </section>
 
       <div className={styles.actions}>
         <Button
           size="smaller"
           onClick={handleRun}
-          disabled={!selectedUserId || isChecking}
+          disabled={!targetUserId || (!useMyGroups && !sourceUserId) || isChecking}
           isLoading={isChecking}
         >
           计算缺失群组
@@ -548,15 +492,15 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
         <div className={styles.resultsHeader}>
           <div>
             <h4>缺失群组（{missingGroups.length}）</h4>
-            {summaryUser && (
+            {lastRunInfo && (
               <p>
-                对比好友：{getUserFullName(summaryUser) || summaryUser.id}
+                对比：{lastRunInfo.sourceName} 的群组 - {lastRunInfo.targetName} 的共同群组
               </p>
             )}
           </div>
           <div className={styles.resultsStats}>
-            <span>我的群：{groupChats.length}</span>
-            <span>好友共同群：{fetchedCommonCount}</span>
+            <span>来源群数：{lastSourceCount}</span>
+            <span>目标共同群数：{lastTargetCount}</span>
             <span>活跃榜：{activityData.entries.length}</span>
           </div>
         </div>
@@ -564,9 +508,9 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
         <div className={styles.resultList}>
           {missingGroups.length === 0 ? (
             <div className={styles.empty}>
-              {lastRunUserId
-                ? '该好友已经加入了我当前账号的所有群。'
-                : '尚未开始，先选择好友并粘贴榜单吧。'}
+              {lastRunInfo
+                ? '没有发现缺失的群组。'
+                : '尚未开始，请选择好友并点击计算.'}
             </div>
           ) : (
             missingGroups.map((group) => {
@@ -601,9 +545,9 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
                       size="smaller"
                       color="primary"
                       className={styles.inviteButton}
-                      disabled={!selectedUserId || inviteState === 'loading'}
+                      disabled={!targetUserId || inviteState === 'loading'}
                       isLoading={inviteState === 'loading'}
-                      onClick={() => handleInvite(group.chatId)}
+                      onClick={() => handleInvite(group.chat)}
                     >
                       邀请进群
                     </Button>
@@ -624,7 +568,7 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
   );
 };
 
-export default memo(withGlobal<{}>(
+export default memo(withGlobal<{}>( 
   (global): StateProps => ({
     chatsById: global.chats.byId,
     usersById: global.users.byId,

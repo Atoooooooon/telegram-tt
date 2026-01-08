@@ -3,6 +3,8 @@
   flex-direction: column;
   height: 100%;
   gap: 1rem;
+  overflow-y: auto;
+  padding-right: 0.5rem; /* Space for scrollbar */
 }
 
 .intro {
@@ -15,6 +17,10 @@
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 1rem;
   align-items: stretch;
+  flex-shrink: 0; /* Prevent shrinking */
+  .checkbox{
+    padding-inline-start: 2.7rem !important;
+  }
 }
 
 .panel {
@@ -26,6 +32,26 @@
   flex-direction: column;
   min-height: 0;
   height: 280px;
+  transition: opacity 0.2s ease;
+}
+
+.activityPanel {
+  height: auto;
+  flex-shrink: 0;
+  
+  .textarea {
+    flex: none;
+    height: 120px;
+  }
+}
+
+.panelDisabled {
+  opacity: 0.6;
+  background: var(--color-background-secondary);
+
+  panelBody {
+    pointer-events: none;
+  }
 }
 
 .panelHeader {
