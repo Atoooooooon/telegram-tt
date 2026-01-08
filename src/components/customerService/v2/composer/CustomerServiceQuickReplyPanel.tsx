@@ -780,12 +780,10 @@ export default memo(withGlobal<OwnProps>(
         : CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES,
     );
     const isCustomerServiceOpen = selectIsCustomerServiceV2Open(global);
-    const csState = selectCustomerServiceV2State(global);
-    const hasContextChat = Boolean(csState?.currentContextChatId);
 
     return {
       quickReplies,
-      isPanelEnabled: isCustomerServiceOpen || hasContextChat,
+      isPanelEnabled: isCustomerServiceOpen,
       isGlobalEnabled: Boolean(settings?.quickReplyPanelGlobal),
     };
   },

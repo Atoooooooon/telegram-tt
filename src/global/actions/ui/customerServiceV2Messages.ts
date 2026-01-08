@@ -69,11 +69,14 @@ addActionHandler('addToCustomerServiceV2', (global, actions, payload): ActionRet
     // FIFO cleanup: Different limits based on mode
     // Assist mode: Keep fewer messages since each chat only needs latest unread message
     // On-call mode: Keep more messages for history
-    const maxMessages = baseState.settings?.mode === 'assist' ? 500 : 5000;
-    const keepMessages = baseState.settings?.mode === 'assist' ? 450 : 4900;
+    const isAssistMode = baseState.settings?.mode === 'assist';
+    const maxMessages = isAssistMode ? 50 : 100;
+    const keepMessages = isAssistMode ? 30 : 100;
+    let didCleanup = false;
 
     if (messages.length >= maxMessages) {
       messages = messages.slice(-keepMessages);
+      didCleanup = true;
 
       // eslint-disable-next-line no-console
       console.log('[CS-Debug] FIFO cleanup triggered:', {
@@ -86,20 +89,31 @@ addActionHandler('addToCustomerServiceV2', (global, actions, payload): ActionRet
     // Add new message
     messages = [...messages, message];
 
-    // Update lookup map by chat ID
-    // Filter out read messages from existing chat messages
-    let chatMessages = existingChatMessages;
-    if (baseState.settings?.mode === 'assist' && chat?.lastReadInboxMessageId) {
-      chatMessages = chatMessages.filter((msg) => msg.id > chat.lastReadInboxMessageId!);
+    let messagesByChatId: Record<string, ApiMessage[]>;
+    if (didCleanup) {
+      messagesByChatId = {};
+      messages.forEach((msg) => {
+        if (!messagesByChatId[msg.chatId]) {
+          messagesByChatId[msg.chatId] = [];
+        }
+        messagesByChatId[msg.chatId].push(msg);
+      });
+    } else {
+      // Update lookup map by chat ID
+      // Filter out read messages from existing chat messages
+      let chatMessages = existingChatMessages;
+      if (isAssistMode && chat?.lastReadInboxMessageId) {
+        chatMessages = chatMessages.filter((msg) => msg.id > chat.lastReadInboxMessageId!);
+      }
+
+      // Add new message to chat messages
+      chatMessages = [...chatMessages, message];
+
+      messagesByChatId = {
+        ...baseState.messagesByChatId,
+        [chatId]: chatMessages,
+      };
     }
-
-    // Add new message to chat messages
-    chatMessages = [...chatMessages, message];
-
-    const messagesByChatId = {
-      ...baseState.messagesByChatId,
-      [chatId]: chatMessages,
-    };
 
     const settings = baseState.settings
       || loadCustomerServiceV2SettingsFromStorage()

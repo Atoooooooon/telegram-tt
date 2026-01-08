@@ -1,15 +1,16 @@
 import type { FC } from '../../../../lib/teact/teact';
 import {
-  memo, useCallback, useMemo, useState,
+  memo, useCallback, useEffect, useMemo, useState,
 } from '../../../../lib/teact/teact';
 
-import type { ApiChat, ApiUser } from '../../../../api/types';
+import type { ApiChat, ApiMessage, ApiUser } from '../../../../api/types';
 import { callApi } from '../../../../api/gramjs';
 import { withGlobal } from '../../../../global';
 import { getUserFullName } from '../../../../global/helpers/users';
 import Button from '../../../ui/Button';
 import InputText from '../../../ui/InputText';
 import styles from './GroupDiffTool.module.scss';
+import { MAIN_THREAD_ID } from '../../../../api/types';
 
 type StateProps = {
   chatsById: Record<string, ApiChat>;
@@ -35,6 +36,7 @@ type MissingGroup = {
 type CommonChatsResponse = {
   chats: ApiChat[];
   nextMaxId?: string;
+  count?: number;
 };
 
 type InviteState = {
@@ -44,6 +46,26 @@ type InviteState = {
 
 const activityRegex = /^\s*(\d+)\.\s*(-?\d+)(?:\s*\[(.+?)\])?(?:\s*\((\d+)\))?.*/;
 const MAX_USER_SUGGESTIONS = 25;
+const TECH_GROUP_ID = '-1001602618020';
+const RANKING_KEYWORD = '活跃度排行';
+const RANKING_COMMAND = '/actrank';
+
+const delay = (ms: number) => new Promise((resolve) => {
+  setTimeout(resolve, ms);
+});
+
+function extractMessageText(message: ApiMessage | undefined): string {
+  if (!message) {
+    return '';
+  }
+
+  return (
+    (message.content as { text?: { text?: string } })?.text?.text
+    || (message as { text?: string }).text
+    || (message as { message?: string }).message
+    || ''
+  );
+}
 
 function extractBaseId(value?: string) {
   const trimmed = value?.trim();
@@ -96,18 +118,42 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
   const [error, setError] = useState<string>();
   const [isChecking, setIsChecking] = useState(false);
   const [lastRunUserId, setLastRunUserId] = useState<string>();
-  const [copiedChatId, setCopiedChatId] = useState<string>();
   const [fetchedCommonCount, setFetchedCommonCount] = useState(0);
   const [inviteStates, setInviteStates] = useState<Record<string, InviteState>>({});
+  const [isFetchingRanking, setIsFetchingRanking] = useState(false);
+  const [rankingStatus, setRankingStatus] = useState<string>();
+  const [rankingError, setRankingError] = useState<string>();
+
+  useEffect(() => {
+    if (!rankingStatus && !rankingError) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setRankingStatus(undefined);
+      setRankingError(undefined);
+    }, 4000);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [rankingStatus, rankingError]);
 
   const activityData = useMemo(() => parseActivityInput(activityInput), [activityInput]);
   const activityMap = useMemo(() => (
     activityData.entries.reduce((map, entry) => {
+      const normalizedId = entry.chatId.trim();
+      if (normalizedId) {
+        map.set(normalizedId, entry);
+      }
       map.set(entry.baseId, entry);
       return map;
     }, new Map<string, ActivityEntry>())
   ), [activityData]);
   const hasActivityRanking = activityMap.size > 0;
+  const currentUserId = useMemo(() => (
+    Object.values(usersById).find((user) => user.isSelf)?.id
+  ), [usersById]);
 
   const groupChats = useMemo(() => (
     Object.values(chatsById).filter((chat) => (
@@ -148,6 +194,7 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
     const collected: ApiChat[] = [];
     const seen = new Set<string>();
     let cursor: string | undefined;
+    let expectedCount: number | undefined;
 
     while (true) {
       const chunk = await callApi('getCommonChats', {
@@ -164,11 +211,18 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
         }
       });
 
+      if (chunk?.count !== undefined) {
+        expectedCount = chunk.count;
+      }
+
       if (!chunk?.nextMaxId || chats.length === 0 || chunk.nextMaxId === cursor) {
         break;
       }
 
       cursor = chunk.nextMaxId;
+      if (expectedCount !== undefined && collected.length >= expectedCount) {
+        break;
+      }
     }
 
     return collected;
@@ -193,21 +247,40 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
       const commonChats = await fetchAllCommonChats(targetUser.id, targetUser.accessHash);
       setFetchedCommonCount(commonChats.length);
 
+      const friendChatIds = new Set<string>();
       const friendBaseIds = new Set<string>();
+
       commonChats.forEach((chat) => {
-        const baseId = extractBaseId(chat.id);
-        if (baseId) {
-          friendBaseIds.add(baseId);
+        friendChatIds.add(chat.id);
+        const base = extractBaseId(chat.id);
+        if (base) {
+          friendBaseIds.add(base);
+        }
+
+        if (chat.migratedTo) {
+          friendChatIds.add(chat.migratedTo.chatId);
+          const mBase = extractBaseId(chat.migratedTo.chatId);
+          if (mBase) {
+            friendBaseIds.add(mBase);
+          }
         }
       });
 
       const results: MissingGroup[] = groupChats.reduce<MissingGroup[]>((acc, chat) => {
-        const baseId = extractBaseId(chat.id);
-        if (!baseId || friendBaseIds.has(baseId)) {
+        if (friendChatIds.has(chat.id)) {
           return acc;
         }
 
-        const activity = activityMap.get(baseId);
+        const baseId = extractBaseId(chat.id);
+        if (!baseId) {
+          return acc;
+        }
+
+        if (friendBaseIds.has(baseId)) {
+          return acc;
+        }
+
+        const activity = activityMap.get(chat.id) || activityMap.get(baseId);
         acc.push({
           chatId: chat.id,
           title: chat.title,
@@ -242,14 +315,6 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
       setIsChecking(false);
     }
   }, [activityMap, fetchAllCommonChats, groupChats, selectedUserId, usersById]);
-
-  const handleCopy = useCallback((chatId: string) => {
-    navigator.clipboard?.writeText(chatId).catch(() => undefined);
-    setCopiedChatId(chatId);
-    setTimeout(() => {
-      setCopiedChatId(undefined);
-    }, 1500);
-  }, []);
 
   const handleInvite = useCallback(async (chatId: string) => {
     if (!selectedUserId) {
@@ -288,6 +353,92 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
       }));
     }
   }, [chatsById, selectedUserId, usersById]);
+
+  const handleFetchRanking = useCallback(async () => {
+    setRankingError(undefined);
+    setRankingStatus(undefined);
+
+    const techChat = chatsById[TECH_GROUP_ID];
+    if (!techChat) {
+      setRankingError('当前账号尚未加入技术群，无法自动获取。');
+      return;
+    }
+
+    setIsFetchingRanking(true);
+    const sentAt = Math.floor(Date.now() / 1000);
+
+    try {
+      await callApi('sendMessage', {
+        chat: techChat,
+        text: RANKING_COMMAND,
+      });
+
+      let fetchedText: string | undefined;
+      let commandMessageId: number | undefined;
+
+      for (let attempt = 0; attempt < 6; attempt++) {
+        // Wait for bot response
+        await delay(attempt === 0 ? 800 : 1200);
+        const history = await callApi('fetchMessages', {
+          chat: techChat,
+          threadId: MAIN_THREAD_ID,
+          limit: 30,
+        }) as { messages?: ApiMessage[] } | undefined;
+
+        const messages = history?.messages || [];
+        if (!commandMessageId && currentUserId) {
+          const commandMessage = messages.find((msg) => (
+            msg.senderId === currentUserId
+            && extractMessageText(msg).trim().startsWith(RANKING_COMMAND)
+            && msg.date >= sentAt - 2
+          ));
+          if (commandMessage) {
+            commandMessageId = commandMessage.id;
+          }
+        }
+
+        const match = messages.find((msg) => {
+          const text = extractMessageText(msg);
+          if (!text || !text.includes(RANKING_KEYWORD)) {
+            return false;
+          }
+
+          const replyToId = (
+            msg.replyInfo && ('replyToMsgId' in msg.replyInfo)
+              ? (msg.replyInfo.replyToMsgId || undefined)
+              : undefined
+          );
+
+          if (commandMessageId) {
+            return replyToId === commandMessageId;
+          }
+
+          return msg.date >= sentAt - 2;
+        });
+
+        if (match) {
+          const rawText = extractMessageText(match);
+          const normalizedLines = rawText
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => /^\d+\./.test(line));
+          fetchedText = normalizedLines.length ? normalizedLines.join('\n') : rawText.trim();
+          break;
+        }
+      }
+
+      if (fetchedText) {
+        setActivityInput(fetchedText);
+        setRankingStatus('已同步最新活跃榜单。');
+      } else {
+        setRankingError('未找到活跃度回复，请稍后再试。');
+      }
+    } catch (err: unknown) {
+      setRankingError(`获取失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsFetchingRanking(false);
+    }
+  }, [chatsById, currentUserId]);
 
   const summaryUser = lastRunUserId ? usersById[lastRunUserId] : undefined;
 
@@ -354,6 +505,23 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
             <p className={styles.activityHint}>
               支持格式：<code>1. -123456789</code> 或 <code>1. -123456789 [Alias] (96)</code>，别名与活跃度可选。
             </p>
+            <div className={styles.activityActions}>
+              <Button
+                size="smaller"
+                color="secondary"
+                onClick={handleFetchRanking}
+                disabled={isFetchingRanking}
+                isLoading={isFetchingRanking}
+              >
+                自动获取活跃榜
+              </Button>
+              {rankingStatus && (
+                <span className={styles.successText}>{rankingStatus}</span>
+              )}
+              {rankingError && (
+                <span className={styles.errorText}>{rankingError}</span>
+              )}
+            </div>
           </div>
         </section>
       </div>
@@ -429,14 +597,6 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
                     </div>
                   </div>
                   <div className={styles.resultActions}>
-                    <Button
-                      size="smaller"
-                      color="secondary"
-                      className={styles.copyButton}
-                      onClick={() => handleCopy(group.chatId)}
-                    >
-                      {copiedChatId === group.chatId ? '已复制' : '复制 ID'}
-                    </Button>
                     <Button
                       size="smaller"
                       color="primary"

@@ -2823,10 +2823,11 @@ export async function getCommonChats({
   }
 
   const chats = response.chats.map(buildApiChatFromPreview).filter(Boolean);
-  const nextChat = response.chats.length === limit ? response.chats[response.chats.length - 1] : undefined;
+  const nextChat = response.chats[response.chats.length - 1];
 
   return {
     chats,
+    count: 'count' in response ? response.count : undefined,
     nextMaxId: nextChat ? nextChat.id.toString() : undefined,
   };
 }
