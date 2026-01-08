@@ -51,7 +51,13 @@ const UserFiltersTab: FC<Props> = ({
     }
 
     const query = searchQuery.toLowerCase();
-    const results: SearchResult[] = [];
+    const results = new Map<string, SearchResult>();
+    const addResult = (result: SearchResult) => {
+      const existing = results.get(result.id);
+      if (!existing || (existing.type === 'chat' && result.type === 'user')) {
+        results.set(result.id, result);
+      }
+    };
 
     Object.values(safeUsers).forEach((user) => {
       if (!user) return;
@@ -64,7 +70,7 @@ const UserFiltersTab: FC<Props> = ({
       const idMatch = user.id.includes(query);
 
       if (nameMatch || usernameMatch || idMatch) {
-        results.push({
+        addResult({
           id: user.id,
           name: fullName || user.firstName || user.lastName || `User ${user.id}`,
           username,
@@ -82,7 +88,7 @@ const UserFiltersTab: FC<Props> = ({
       const idMatch = chat.id.includes(query);
 
       if (titleMatch || usernameMatch || idMatch) {
-        results.push({
+        addResult({
           id: chat.id,
           name: chat.title,
           username: normalizedUsername,
@@ -91,7 +97,7 @@ const UserFiltersTab: FC<Props> = ({
       }
     });
 
-    return results.sort((a, b) => a.name.localeCompare(b.name)).slice(0, 10);
+    return Array.from(results.values()).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 10);
   }, [searchQuery, safeUsers, safeChats]);
 
   const getUserInfo = useCallback((userId: string) => {
