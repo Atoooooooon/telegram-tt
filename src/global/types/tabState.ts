@@ -65,6 +65,7 @@ import type {
   ApiVideo,
 } from '../../api/types';
 import type { CustomerServiceV2State } from './customerServiceV2';
+import type { ToolboxState } from './toolbox';
 import type { FoldersActions } from '../../hooks/reducers/useFoldersReducer';
 import type { ReducerAction } from '../../hooks/useReducer';
 import type {
@@ -230,6 +231,7 @@ export type TabState = {
   isCustomerServiceV2SettingsOpen?: boolean;
 
   customerServiceV2?: CustomerServiceV2State;
+  toolbox?: ToolboxState;
 
   reactionPicker?: {
     chatId?: string;

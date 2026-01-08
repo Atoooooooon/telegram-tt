@@ -39,6 +39,7 @@ import './ui/reactions';
 import './ui/stories';
 import './ui/statistics';
 import './ui/customerServiceV2';
+import './ui/toolbox';
 import './apiUpdaters/initial';
 import './apiUpdaters/chats';
 import './apiUpdaters/messages';

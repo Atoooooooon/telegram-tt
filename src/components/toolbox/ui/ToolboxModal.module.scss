@@ -1,0 +1,198 @@
+.modal {
+  width: min(1220px, 95vw);
+  height: min(780px, 94vh);
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog {
+  width: min(1220px, 95vw) !important;
+  max-width: min(1220px, 95vw) !important;
+  min-height: min(640px, 92vh) !important;
+  max-height: min(780px, 94vh) !important;
+}
+
+.modalContent {
+  padding: 0 !important;
+  height: min(780px, 94vh) !important;
+  max-height: none !important;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--border-radius-modal);
+  overflow: hidden;
+  background: var(--color-background);
+}
+
+.container {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  border-top: 1px solid var(--color-borders);
+  background-color: var(--color-background);
+}
+
+.sidebar {
+  width: 280px;
+  border-right: 1px solid var(--color-borders);
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-panel, var(--color-background));
+}
+
+.sidebarHeader {
+  padding: 1rem;
+  border-bottom: 1px solid var(--color-borders);
+}
+
+.sidebarTitle {
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 0.5rem;
+}
+
+.searchInput {
+  width: 100%;
+}
+
+.toolList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem 0;
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.35rem;
+  padding: 2rem 1rem;
+  color: var(--color-text-secondary);
+}
+
+.sidebarItem {
+  width: 100%;
+  border: none;
+  background: transparent;
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  font-size: 0.9375rem;
+  color: var(--color-text);
+}
+
+.sidebarItem:hover {
+  background-color: var(--color-chat-hover);
+}
+
+.sidebarItemActive {
+  background-color: var(--color-chat-hover);
+  border-left: 3px solid var(--color-primary);
+}
+
+.sidebarItemIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: 0.5rem;
+  background-color: var(--color-chat-hover);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 1.1rem;
+}
+
+.sidebarItemTitle {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.15rem;
+}
+
+.sidebarItemDescription {
+  display: block;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 1.5rem;
+  gap: 1rem;
+  background-color: var(--color-background);
+}
+
+.placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2rem;
+  border: 1px dashed var(--color-borders);
+  border-radius: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.placeholderHint {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.activeTool {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 1rem;
+}
+
+.activeToolHeader {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--color-borders);
+}
+
+.activeToolIcon {
+  width: 48px;
+  height: 48px;
+  border-radius: 0.75rem;
+  background-color: var(--color-chat-hover);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+}
+
+.activeToolTitle {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.activeToolDescription {
+  margin: 0.35rem 0 0;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+.toolSurface {
+  flex: 1;
+  min-height: 0;
+  padding: 1rem;
+  border: 1px solid var(--color-borders);
+  border-radius: 0.75rem;
+  background-color: var(--color-panel, var(--color-background));
+  overflow-y: auto;
+  overflow-x: hidden;
+}

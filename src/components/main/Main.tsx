@@ -76,6 +76,7 @@ import PaymentModal from '../payment/PaymentModal.async';
 import ReceiptModal from '../payment/ReceiptModal.async';
 import RightColumn from '../right/RightColumn';
 import StoryViewer from '../story/StoryViewer.async';
+import { ToolboxModal } from '../toolbox';
 import AttachBotRecipientPicker from './AttachBotRecipientPicker.async';
 import BotTrustModal from './BotTrustModal.async';
 import DeleteFolderDialog from './DeleteFolderDialog.async';
@@ -597,6 +598,7 @@ const Main = ({
       <Dialogs />
       <AudioPlayer noUi />
       <ModalContainer />
+      <ToolboxModal />
       <SafeLinkModal url={safeLinkModalUrl} />
       <HistoryCalendar isOpen={isHistoryCalendarOpen} />
       <StickerSetModal

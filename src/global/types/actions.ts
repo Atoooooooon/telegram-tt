@@ -1906,6 +1906,11 @@ export interface ActionPayloads {
     origin: AudioOrigin;
   } & WithTabId;
 
+  // Toolbox
+  openToolbox: WithTabId;
+  closeToolbox: WithTabId;
+  setToolboxActiveTool: { toolId: string } & WithTabId;
+
   // Downloads
   downloadSelectedMessages: WithTabId | undefined;
   downloadMedia: {

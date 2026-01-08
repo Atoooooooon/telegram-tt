@@ -2795,6 +2795,42 @@ export async function fetchPreparedInlineMessage({
   return buildPreparedInlineMessage(result);
 }
 
+export async function getCommonChats({
+  userId,
+  accessHash,
+  limit = 200,
+  maxId,
+}: {
+  userId: string;
+  accessHash: string;
+  limit?: number;
+  maxId?: string;
+}) {
+  const inputUser = buildInputUser(userId, accessHash);
+
+  const response = await invokeRequest(new GramJs.messages.GetCommonChats({
+    userId: inputUser,
+    maxId: maxId ? BigInt(maxId) : DEFAULT_PRIMITIVES.BIGINT,
+    limit,
+  }), {
+    shouldThrow: true,
+  });
+
+  if (!response || !response.chats) {
+    return {
+      chats: [],
+    };
+  }
+
+  const chats = response.chats.map(buildApiChatFromPreview).filter(Boolean);
+  const nextChat = response.chats.length === limit ? response.chats[response.chats.length - 1] : undefined;
+
+  return {
+    chats,
+    nextMaxId: nextChat ? nextChat.id.toString() : undefined,
+  };
+}
+
 export function incrementLocalMessagesCounter() {
   incrementLocalMessageCounter();
 }
