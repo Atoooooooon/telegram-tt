@@ -1,0 +1,60 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main  
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'  # 根据项目需求调整版本
+          cache: 'npm'
+
+      - name: Create .env file
+        run: |
+          cat << EOF > .env
+          TELEGRAM_API_ID=${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH=${{ secrets.TELEGRAM_API_HASH }}
+          UPSTASH_REDIS_REST_URL=${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN=${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          BASE_URL=${{ secrets.BASE_URL }}
+          EOF
+
+      - name: Install dependencies
+        run: npm i
+
+      - name: Build project
+        run: npm run build:dev
+
+      - name: Package dist folder
+        run: tar -cvf dist.tar dist
+
+      - name: Deploy to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: "dist.tar"
+          target: "/root/tgweb/dist-portable-bundle"
+
+      - name: Extract and restart service
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd /root/tgweb/dist-portable-bundle
+            rm -rf dist  # 删除旧的 dist 目录
+            tar -xvf dist.tar
+            rm dist.tar  # 清理压缩包
+            ./tg_web.sh restart
