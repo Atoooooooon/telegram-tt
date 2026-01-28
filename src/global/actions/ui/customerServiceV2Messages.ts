@@ -305,32 +305,36 @@ addActionHandler('syncCustomerServiceV2Message', (global, actions, payload): Act
  * Clear all Customer Service V2 messages
  */
 addActionHandler('clearCustomerServiceV2Messages', async (global, actions, payload): Promise<void> => {
-  const { tabId = getCurrentTabId() } = payload || {};
+  const { tabId = getCurrentTabId(), shouldMarkRead } = payload || {};
 
   const cs = selectCustomerServiceV2State(global, tabId);
   const baseState = ensureCustomerServiceV2State(cs);
 
-  const markReadPromises = Object.entries(baseState.messagesByChatId || {}).map(([chatId, chatMessages]) => {
-    if (!chatMessages || chatMessages.length === 0) {
-      return undefined;
-    }
+  const resolvedShouldMarkRead = shouldMarkRead === true;
 
-    const chat = selectChat(global, chatId);
-    if (!chat) {
-      return undefined;
-    }
+  const markReadPromises = resolvedShouldMarkRead
+    ? Object.entries(baseState.messagesByChatId || {}).map(([chatId, chatMessages]) => {
+      if (!chatMessages || chatMessages.length === 0) {
+        return undefined;
+      }
 
-    const maxMessageId = chatMessages.reduce((max, { id }) => (id > max ? id : max), 0);
-    if (!maxMessageId) {
-      return undefined;
-    }
+      const chat = selectChat(global, chatId);
+      if (!chat) {
+        return undefined;
+      }
 
-    return callApi('markMessageListRead', {
-      chat,
-      threadId: MAIN_THREAD_ID,
-      maxId: maxMessageId,
-    }).catch(() => undefined);
-  }).filter(Boolean) as Promise<unknown>[];
+      const maxMessageId = chatMessages.reduce((max, { id }) => (id > max ? id : max), 0);
+      if (!maxMessageId) {
+        return undefined;
+      }
+
+      return callApi('markMessageListRead', {
+        chat,
+        threadId: MAIN_THREAD_ID,
+        maxId: maxMessageId,
+      }).catch(() => undefined);
+    }).filter(Boolean) as Promise<unknown>[]
+    : [];
 
   const nextState: CustomerServiceV2State = {
     ...baseState,

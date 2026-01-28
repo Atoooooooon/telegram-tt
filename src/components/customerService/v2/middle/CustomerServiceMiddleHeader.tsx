@@ -45,7 +45,7 @@ const CustomerServiceMiddleHeader: FC<OwnProps & StateProps> = ({
   const modeClassName = currentMode === 'oncall' ? styles.modeOnCall : styles.modeAssist;
 
   const handleClearAll = useLastCallback(() => {
-    clearCustomerServiceV2Messages({ tabId: getCurrentTabId() });
+    clearCustomerServiceV2Messages({ tabId: getCurrentTabId(), shouldMarkRead: true });
   });
 
   const handleOpenSettings = useLastCallback(() => {

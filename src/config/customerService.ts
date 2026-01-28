@@ -106,11 +106,6 @@ export const shouldFilterMessage = (
   messageText?: ApiFormattedText,
   global?: GlobalState,
 ): boolean => {
-  // 不是监听的群组,过滤掉
-  if (!isMonitoredChat(chatId, global)) {
-    return true;
-  }
-
   // 用户被过滤,过滤掉
   if (isFilteredUser(senderId, global)) {
     return true;
