@@ -1,5 +1,6 @@
 import type { GlobalState } from '../types';
-import type { CustomerServiceSettings } from '../types/customerServiceV2';
+import type { CustomerServiceSettings } from '../types';
+import type { ApiFormattedText } from '../../api/types';
 
 import { CUSTOMER_SERVICE_CONFIG } from '../../config/customerService';
 import { normalizeCustomerServiceQuickReplies } from './customerServiceV2Settings';
@@ -93,4 +94,26 @@ export function isFilteredByRegex(messageText: string, global?: GlobalState): bo
       return false;
     }
   });
+}
+
+/**
+ * Comprehensive check if message should be filtered
+ */
+export function shouldFilterMessage(
+  chatId: string,
+  senderId?: string,
+  messageText?: ApiFormattedText,
+  global?: GlobalState,
+): boolean {
+  // User is filtered, skip message
+  if (senderId && isFilteredUser(senderId, global)) {
+    return true;
+  }
+
+  // Message content matches regex filter, skip message
+  if (messageText?.text && isFilteredByRegex(messageText.text, global)) {
+    return true;
+  }
+
+  return false;
 }

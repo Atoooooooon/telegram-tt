@@ -1,16 +1,7 @@
-import type { ApiFormattedText } from '../api/types';
 import type { GlobalState } from '../global/types';
 import type {
   CustomerServiceQuickReply,
 } from '../global/types/customerServiceV2';
-
-import {
-  getEffectiveCustomerServiceSettings,
-  getMergedRegexFilters,
-  isMonitoredChat as isMonitoredChatHelper,
-  isFilteredUser as isFilteredUserHelper,
-  isFilteredByRegex as isFilteredByRegexHelper,
-} from '../global/helpers/customerServiceV2';
 
 const envRedisUrl = process.env.UPSTASH_REDIS_REST_URL as string | undefined;
 const envRedisToken = process.env.UPSTASH_REDIS_REST_TOKEN as string | undefined;
@@ -70,51 +61,3 @@ export const CUSTOMER_SERVICE_CONFIG = {
   CLOUD_SYNC_REDIS_URL: envRedisUrl,
   CLOUD_SYNC_REDIS_TOKEN: envRedisToken,
 } as const;
-
-/**
- * Check if chat is being monitored for customer service
- * @deprecated Use isMonitoredChatHelper from helpers/customerServiceV2 directly
- */
-export const isMonitoredChat = (chatId: string, global?: GlobalState): boolean => {
-  return isMonitoredChatHelper(chatId, global);
-};
-
-/**
- * Check if user is filtered (blocked from customer service)
- * @deprecated Use isFilteredUserHelper from helpers/customerServiceV2 directly
- */
-export const isFilteredUser = (userId?: string, global?: GlobalState): boolean => {
-  if (!userId) return false;
-  return isFilteredUserHelper(userId, global);
-};
-
-/**
- * Check if message text matches regex filters
- * @deprecated Use isFilteredByRegexHelper from helpers/customerServiceV2 directly
- */
-export const isFilteredByRegex = (messageText?: ApiFormattedText, global?: GlobalState): boolean => {
-  if (!messageText) return false;
-  return isFilteredByRegexHelper(messageText.text, global);
-};
-
-/**
- * Comprehensive check if message should be filtered
- */
-export const shouldFilterMessage = (
-  chatId: string,
-  senderId?: string,
-  messageText?: ApiFormattedText,
-  global?: GlobalState,
-): boolean => {
-  // 用户被过滤,过滤掉
-  if (isFilteredUser(senderId, global)) {
-    return true;
-  }
-
-  // 消息内容匹配过滤正则,过滤掉
-  if (isFilteredByRegex(messageText, global)) {
-    return true;
-  }
-
-  return false;
-};
