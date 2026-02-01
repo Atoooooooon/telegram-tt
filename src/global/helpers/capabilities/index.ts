@@ -17,12 +17,17 @@ import {
   checkHasReplyCapability,
   checkMessageCapability,
 } from './checkers';
+// Import extractors
+import { textProcessorCapability } from './extractors';
 
 // Auto-register all capabilities
 export function registerAllCapabilities(): void {
   // Checkers
   registerCapability(checkMessageCapability);
   registerCapability(checkHasReplyCapability);
+
+  // Extractors
+  registerCapability(textProcessorCapability);
 
   // Actions
   registerCapability(actionMarkReadCapability);
@@ -37,6 +42,8 @@ export {
   // Checkers
   checkMessageCapability,
   checkHasReplyCapability,
+  // Extractors
+  textProcessorCapability,
   // Actions
   actionMarkReadCapability,
   actionAutoReplyCapability,
