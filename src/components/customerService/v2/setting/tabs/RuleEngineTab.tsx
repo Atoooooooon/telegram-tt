@@ -5,7 +5,8 @@ import { memo, useRef, useState } from '../../../../../lib/teact/teact';
 import type { UserRule } from '../../../../../global/types/customerServiceV2';
 import { DEFAULT_DEBUG_RULE } from '../../../../../global/helpers/customerServiceV2Settings';
 
-import { isCapabilityRegistered } from '../../../../../global/helpers/ruleEngine';
+import { getAllRegisteredCapabilityIds, isCapabilityRegistered } from '../../../../../global/helpers/ruleEngine';
+import { registerAllCapabilities } from '../../../../../global/helpers/capabilities';
 import useLang from '../../../../../hooks/useLang';
 import useLastCallback from '../../../../../hooks/useLastCallback';
 
@@ -161,6 +162,9 @@ const RuleEngineTab: FC<Props> = ({
 
   const handleApplyRuleEdit = useLastCallback(() => {
     try {
+      // Ensure all capabilities are registered before validation
+      registerAllCapabilities();
+
       const parsed = JSON.parse(editingRuleJson || '{}');
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
         throw new Error('JSON root 必须是对象');
@@ -183,6 +187,7 @@ const RuleEngineTab: FC<Props> = ({
 
       // Validate capability IDs in pipeline
       if (updatedRule.pipeline && Array.isArray(updatedRule.pipeline)) {
+        const registeredCapabilities = getAllRegisteredCapabilityIds().sort();
         const invalidCapabilities: string[] = [];
         updatedRule.pipeline.forEach((step, index) => {
           if (step.capabilityId && !isCapabilityRegistered(step.capabilityId)) {
@@ -192,7 +197,11 @@ const RuleEngineTab: FC<Props> = ({
 
         if (invalidCapabilities.length > 0) {
           setRuleEditError(
-            `发现未注册的能力:\n${invalidCapabilities.join('\n')}\n\n请检查能力 ID 是否正确,或查看文档了解可用能力列表。`,
+            `发现未注册的能力:\n${invalidCapabilities.join('\n')}` +
+            (registeredCapabilities.length > 0
+              ? `\n\n可用能力:\n${registeredCapabilities.join('\n')}`
+              : '') +
+            '\n\n请检查能力 ID 是否正确,或查看文档了解可用能力列表。',
           );
           return;
         }

@@ -10,7 +10,7 @@ import type {
 import { MAIN_THREAD_ID } from '../../../api/types';
 
 import { SERVICE_NOTIFICATIONS_USER_ID } from '../../../config';
-import { shouldFilterMessage, isMonitoredChat, isFilteredUser } from '../../../config/customerService';
+import { isMonitoredChat, isFilteredUser, shouldFilterMessage } from '../../helpers/customerServiceV2';
 import { callApi } from '../../../api/gramjs';
 import { processMessageWithRules, validateRuleCapabilities } from '../../helpers/ruleEngine';
 import { registerAllCapabilities } from '../../helpers/capabilities';

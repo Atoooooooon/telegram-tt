@@ -311,6 +311,195 @@ const RuleEngineDoc: FC = () => {
 
           <div className={styles.capabilityItem}>
             <h6>
+              <code>text_processor</code>
+              {' '}
+              - 文本处理器
+            </h6>
+            <p>通用文本处理能力，支持清洗、提取、转换、验证四个阶段</p>
+
+            <h6>输入/输出</h6>
+            <ul>
+              <li>
+                <code>inputField</code>
+                : 输入字段名 (string, 默认 text)
+              </li>
+              <li>
+                <code>outputField</code>
+                : 输出字段名 (string, 默认 extractedText)
+              </li>
+            </ul>
+
+            <h6>清洗配置 (Clean)</h6>
+            <ul>
+              <li>
+                <code>cleanEnabled</code>
+                : 启用清洗 (boolean, 默认 false)
+              </li>
+              <li>
+                <code>cleanPrefixes</code>
+                : 移除前缀 (string, 默认 /ds,/df,/d,/订单,/单号)
+              </li>
+              <li>
+                <code>cleanTrim</code>
+                : 去除首尾空格 (boolean, 默认 true)
+              </li>
+              <li>
+                <code>cleanRemoveSpecial</code>
+                : 移除特殊字符 (boolean, 默认 false)
+              </li>
+              <li>
+                <code>cleanRemoveWhitespace</code>
+                : 移除所有空格 (boolean, 默认 false)
+              </li>
+            </ul>
+
+            <h6>提取配置 (Extract)</h6>
+            <ul>
+              <li>
+                <code>extractEnabled</code>
+                : 启用提取 (boolean, 默认 false)
+              </li>
+              <li>
+                <code>extractPattern</code>
+                : 正则表达式 (string, 如 数字模式 <code>{"([0-9]{8,})"}</code>)
+              </li>
+              <li>
+                <code>extractFlags</code>
+                : 正则 flags (string, 如 g、i、m)
+              </li>
+              <li>
+                <code>extractGroupIndex</code>
+                : 捕获组索引 (number, 默认 0)
+              </li>
+              <li>
+                <code>extractFallback</code>
+                : 未匹配默认值 (string)
+              </li>
+            </ul>
+
+            <h6>转换配置 (Transform)</h6>
+            <ul>
+              <li>
+                <code>transformEnabled</code>
+                : 启用转换 (boolean, 默认 false)
+              </li>
+              <li>
+                <code>transformCase</code>
+                : 大小写 (string, none/upper/lower/capitalize)
+              </li>
+              <li>
+                <code>transformReplaceFrom</code>
+                : 替换内容 (string)
+              </li>
+              <li>
+                <code>transformReplaceTo</code>
+                : 替换为 (string)
+              </li>
+            </ul>
+
+            <h6>验证配置 (Validate)</h6>
+            <ul>
+              <li>
+                <code>validateEnabled</code>
+                : 启用验证 (boolean, 默认 false)
+              </li>
+              <li>
+                <code>validateMinLength</code>
+                : 最小长度 (number)
+              </li>
+              <li>
+                <code>validateMaxLength</code>
+                : 最大长度 (number)
+              </li>
+              <li>
+                <code>validateNumeric</code>
+                : 仅数字 (boolean, 默认 false)
+              </li>
+            </ul>
+
+            <p>
+              <strong>输出数据:</strong>
+              {' '}
+              <code>outputField</code>
+              {' '}
+              (默认
+              {' '}
+              <code>extractedText</code>
+              )
+              ,
+              {' '}
+              <code>matchedText</code>
+              ,
+              {' '}
+              <code>validated</code>
+            </p>
+
+            <h6>处理示例</h6>
+            <pre className={styles.codeExample}>
+              {`// 输入: "/ds 511684153654你好请问"
+{
+  "capabilityId": "text_processor",
+  "config": {
+    "inputField": "text",
+    "outputField": "orderNumber",
+    "cleanEnabled": true,
+    "cleanPrefixes": "/ds,/df,/d,/订单,/单号",
+    "cleanTrim": true,
+    "cleanRemoveSpecial": true,
+    "extractEnabled": true,
+    "extractPattern": "([0-9]{8,})",
+    "extractGroupIndex": 0,
+    "validateEnabled": true,
+    "validateMinLength": 8,
+    "validateMaxLength": 32,
+    "validateNumeric": true
+  }
+}
+// 输出: {{orderNumber}} = "511684153654"`}
+            </pre>
+
+            <h6>常见输入处理</h6>
+            <p>
+              <strong>格式:</strong>
+              {' '}
+              输入
+              {' '}
+              → 清洗后 → 提取结果
+            </p>
+            <ul>
+              <li>
+                <code>/ds 511684153654</code>
+                {' '}
+                → <code>511684153654</code>
+                {' '}
+                → <code>511684153654</code>
+              </li>
+              <li>
+                <code>/ds 511684153654你好请问</code>
+                {' '}
+                → <code>511684153654</code>
+                {' '}
+                → <code>511684153654</code>
+              </li>
+              <li>
+                <code>/df 12532532534</code>
+                {' '}
+                → <code>12532532534</code>
+                {' '}
+                → <code>12532532534</code>
+              </li>
+              <li>
+                <code>6203564895</code>
+                {' '}
+                → <code>6203564895</code>
+                {' '}
+                → <code>6203564895</code>
+              </li>
+            </ul>
+          </div>
+
+          <div className={styles.capabilityItem}>
+            <h6>
               <code>action_mark_read</code>
               {' '}
               - 标记为已读

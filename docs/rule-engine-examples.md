@@ -375,6 +375,9 @@ const settings: CustomerServiceSettings = {
 - `check_message`: 消息检测(文本/图片/视频/引用)
 - `check_has_reply`: 回复检测
 
+### 提取类 (Extractors)
+- `text_processor`: 文本处理器(清洗/提取/转换/验证)
+
 ### 动作类 (Actions)
 - `action_mark_read`: 标记已读
 - `action_auto_reply`: 自动回复(在当前聊天窗口)
@@ -389,7 +392,135 @@ const settings: CustomerServiceSettings = {
 | `action_forward` | 转发消息 | 其他窗口 | 保留原消息 |
 | `action_send_to` | 发送通知 | 其他窗口 | 模板文本 |
 
-更多能力参考 API 文档。
+## text_processor 文本处理器
+
+通用文本处理能力，支持清洗、提取、转换、验证四个阶段的操作。
+
+### 输入/输出
+
+| 字段 | 类型 | 说明 |
+|-----|------|------|
+| `inputField` | string | 输入字段名，默认 `text` |
+| `outputField` | string | 输出字段名，默认 `extractedText` |
+
+### 清洗配置 (Clean)
+
+| 字段 | 类型 | 默认值 | 说明 |
+|-----|------|--------|------|
+| `cleanEnabled` | boolean | false | 启用清洗 |
+| `cleanPrefixes` | string | `/ds,/df,/d,/订单,/单号` | 要移除的命令前缀（逗号分隔） |
+| `cleanTrim` | boolean | true | 去除首尾空格 |
+| `cleanRemoveSpecial` | boolean | false | 移除特殊字符（保留数字、字母、中文） |
+| `cleanRemoveWhitespace` | boolean | false | 移除所有空格 |
+
+### 提取配置 (Extract)
+
+| 字段 | 类型 | 默认值 | 说明 |
+|-----|------|--------|------|
+| `extractEnabled` | boolean | false | 启用提取 |
+| `extractPattern` | string | - | 正则表达式（需包含捕获组） |
+| `extractFlags` | string | - | 正则 flags，如 `g`、`i`、`m` |
+| `extractGroupIndex` | number | 0 | 捕获组索引，0=整个匹配 |
+| `extractFallback` | string | - | 未匹配时的默认值 |
+
+### 转换配置 (Transform)
+
+| 字段 | 类型 | 默认值 | 说明 |
+|-----|------|--------|------|
+| `transformEnabled` | boolean | false | 启用转换 |
+| `transformCase` | string | `none` | 大小写：`none`/`upper`/`lower`/`capitalize` |
+| `transformReplaceFrom` | string | - | 要替换的字符串 |
+| `transformReplaceTo` | string | - | 替换后的字符串 |
+
+### 验证配置 (Validate)
+
+| 字段 | 类型 | 默认值 | 说明 |
+|-----|------|--------|------|
+| `validateEnabled` | boolean | false | 启用验证 |
+| `validateMinLength` | number | 0 | 最小长度 |
+| `validateMaxLength` | number | 0 | 最大长度 |
+| `validateNumeric` | boolean | false | 仅数字 |
+
+### 输出字段
+
+处理完成后可在后续步骤使用以下变量：
+
+| 变量 | 说明 |
+|-----|------|
+| `{{extractedText}}` | 处理后的文本 |
+| `{{matchedText}}` | 兼容字段，同上 |
+| `{{orderNumber}}` | 兼容字段，同上 |
+| `{{validated}}` | 是否通过验证 |
+
+### 示例：提取单号
+
+处理 `/ds 511684153654你好请问` → 提取 `511684153654`
+
+```json
+{
+  "id": "extract_order",
+  "name": "智能单号提取",
+  "enabled": true,
+  "trigger": { "eventType": "customer_message" },
+  "pipeline": [
+    {
+      "capabilityId": "text_processor",
+      "config": {
+        "inputField": "text",
+        "outputField": "orderNumber",
+        "cleanEnabled": true,
+        "cleanPrefixes": "/ds,/df,/d,/订单,/单号",
+        "cleanTrim": true,
+        "cleanRemoveSpecial": true,
+        "extractEnabled": true,
+        "extractPattern": "([0-9]{8,})",
+        "extractGroupIndex": 0,
+        "validateEnabled": true,
+        "validateMinLength": 8,
+        "validateMaxLength": 32,
+        "validateNumeric": true
+      }
+    },
+    {
+      "capabilityId": "check_message",
+      "config": {
+        "textPattern": "{{orderNumber}}",
+        "textMode": "完全相等"
+      },
+      "onFailure": { "stopPipeline": true }
+    },
+    {
+      "capabilityId": "action_auto_reply",
+      "config": {
+        "template": "/ds@PayingIDBot {{orderNumber}}",
+        "replyToOriginal": true
+      }
+    }
+  ]
+}
+```
+
+### 常见输入处理
+
+| 输入 | 清洗后 | 提取结果 |
+|-----|--------|---------|
+| `/ds 511684153654` | `511684153654` | `511684153654` |
+| `/ds 511684153654你好请问` | `511684153654` | `511684153654` |
+| `/df 12532532534` | `12532532534` | `12532532534` |
+| `6203564895` | `6203564895` | `6203564895` |
+
+### 模板变量引用
+
+在后续步骤中引用处理结果：
+
+```json
+{
+  "capabilityId": "action_auto_reply",
+  "config": {
+    "template": "查询单号: {{orderNumber}}"
+  }
+}
+```
 
 ## 调试技巧
 
