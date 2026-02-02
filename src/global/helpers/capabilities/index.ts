@@ -19,6 +19,7 @@ import {
 } from './checkers';
 // Import extractors
 import { textProcessorCapability } from './extractors';
+import { ocrImageCapability } from './ocr';
 
 // Auto-register all capabilities
 export function registerAllCapabilities(): void {
@@ -28,6 +29,7 @@ export function registerAllCapabilities(): void {
 
   // Extractors
   registerCapability(textProcessorCapability);
+  registerCapability(ocrImageCapability);
 
   // Actions
   registerCapability(actionMarkReadCapability);
@@ -44,6 +46,7 @@ export {
   checkHasReplyCapability,
   // Extractors
   textProcessorCapability,
+  ocrImageCapability,
   // Actions
   actionMarkReadCapability,
   actionAutoReplyCapability,

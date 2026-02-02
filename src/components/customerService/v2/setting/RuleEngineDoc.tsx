@@ -500,6 +500,148 @@ const RuleEngineDoc: FC = () => {
 
           <div className={styles.capabilityItem}>
             <h6>
+              <code>ocr_image</code>
+              {' '}
+              - 图片文字识别
+            </h6>
+            <p>调用外部 OCR 服务识别图片文字(百度/腾讯)，可将结果写入 pipelineData 供后续步骤使用</p>
+
+            <h6>基础配置</h6>
+            <ul>
+              <li>
+                <code>provider</code>
+                : 服务商 (string, baidu/tencent, 默认 baidu)
+              </li>
+              <li>
+                <code>outputField</code>
+                : 识别文本输出字段 (string, 默认 ocrText)
+              </li>
+              <li>
+                <code>linesField</code>
+                : 行结果输出字段 (string, 默认 ocrLines)
+              </li>
+              <li>
+                <code>rawField</code>
+                : 原始响应输出字段 (string, 默认 ocrRaw)
+              </li>
+              <li>
+                <code>setText</code>
+                : 写入 pipelineData.text (boolean, 默认 true)
+              </li>
+              <li>
+                <code>ignoreMissingImage</code>
+                : 无图片时忽略 (boolean, 默认 false)
+              </li>
+              <li>
+                <code>failOnEmpty</code>
+                : 识别为空视为失败 (boolean, 默认 true)
+              </li>
+              <li>
+                <code>languageType</code>
+                : 语言参数(服务商自定义) (string, 可选)
+              </li>
+            </ul>
+
+            <h6>百度 OCR 配置</h6>
+            <ul>
+              <li>
+                <code>baiduApiKey</code>
+                : 百度 API Key (string)
+              </li>
+              <li>
+                <code>baiduSecretKey</code>
+                : 百度 Secret Key (string)
+              </li>
+              <li>
+                <code>baiduAccessToken</code>
+                : 百度 Access Token(可选)
+              </li>
+              <li>
+                <code>baiduProxyUrl</code>
+                : 百度 Proxy 地址(可选)
+              </li>
+              <li>
+                <code>baiduDetectDirection</code>
+                : 检测图像方向 (boolean)
+              </li>
+              <li>
+                <code>baiduDetectLanguage</code>
+                : 检测语言 (boolean)
+              </li>
+              <li>
+                <code>baiduParagraph</code>
+                : 返回段落信息 (boolean)
+              </li>
+              <li>
+                <code>baiduProbability</code>
+                : 返回置信度 (boolean)
+              </li>
+            </ul>
+
+            <h6>腾讯 OCR 配置</h6>
+            <ul>
+              <li>
+                <code>tencentSecretId</code>
+                : 腾讯 SecretId (string)
+              </li>
+              <li>
+                <code>tencentSecretKey</code>
+                : 腾讯 SecretKey (string)
+              </li>
+              <li>
+                <code>tencentRegion</code>
+                : 腾讯 Region(可选)
+              </li>
+              <li>
+                <code>tencentIsPdf</code>
+                : 是否为 PDF (boolean)
+              </li>
+              <li>
+                <code>tencentPdfPageNumber</code>
+                : PDF 页码 (number)
+              </li>
+              <li>
+                <code>tencentIsWords</code>
+                : 输出单字信息 (boolean)
+              </li>
+            </ul>
+
+            <p>
+              <strong>输出数据:</strong>
+              {' '}
+              <code>outputField</code>
+              (默认
+              {' '}
+              <code>ocrText</code>
+              )
+              ,
+              {' '}
+              <code>linesField</code>
+              ,
+              {' '}
+              <code>rawField</code>
+              ,
+              {' '}
+              <code>ocrProvider</code>
+            </p>
+
+            <h6>配置示例(百度)</h6>
+            <pre className={styles.codeExample}>
+              {`{
+  "capabilityId": "ocr_image",
+  "config": {
+    "provider": "baidu",
+    "baiduProxyUrl": "/api/ocr/baidu",
+    "baiduApiKey": "YOUR_API_KEY",
+    "baiduSecretKey": "YOUR_SECRET_KEY",
+    "outputField": "ocrText"
+  }
+}`}
+            </pre>
+          </div>
+
+          <div className={styles.capabilityItem}>
+            <h6>
               <code>action_mark_read</code>
               {' '}
               - 标记为已读
