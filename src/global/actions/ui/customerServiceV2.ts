@@ -363,7 +363,7 @@ addActionHandler('checkPausedChatsStatusV2', (global, actions, payload): ActionR
 });
 
 addActionHandler('saveCustomerServiceV2Settings', (global, actions, payload): ActionReturnType => {
-  const { settings, tabId = getCurrentTabId() } = payload;
+  const { settings, tabId = getCurrentTabId(), skipCloudSync = false } = payload;
 
   const cs = selectCustomerServiceV2State(global, tabId);
   const normalized = normalizeSettingsForSave(settings);
@@ -385,7 +385,7 @@ addActionHandler('saveCustomerServiceV2Settings', (global, actions, payload): Ac
   const currentUserId = nextGlobal.currentUserId ? String(nextGlobal.currentUserId) : undefined;
   const ownerId = preference?.ownerId;
 
-  if (token && currentUserId && ownerId && ownersMatch(ownerId, currentUserId)) {
+  if (!skipCloudSync && token && currentUserId && ownerId && ownersMatch(ownerId, currentUserId)) {
     const lang = getTranslationFn();
     void actions.syncCustomerServiceV2Cloud({
       tabId,
