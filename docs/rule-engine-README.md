@@ -58,6 +58,18 @@ registerCapability({
 
 ---
 
+### 3. [AI 助手生成指南](./rule-engine-ai-guide.md)
+
+**适合人群**: AI Agent、高级用户
+
+**内容概览**:
+- 面向 LLM 的系统上下文理解
+- 能力 Schema 与输出字段定义
+- 跨群查询、OCR 等典型场景 Recipe
+- JSON 配置生成的最佳实践
+
+---
+
 ## 🚀 快速开始
 
 ### 1. 阅读顺序建议

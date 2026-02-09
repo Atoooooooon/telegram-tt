@@ -462,9 +462,7 @@ export const actionSendToCapability: Capability = {
         };
       }
 
-      const text = renderTemplate(template, pipelineData);
-
-      await callApi('sendMessage', {
+      const result = await callApi('sendMessage', {
         chat: toChat,
         text,
       });
@@ -474,6 +472,7 @@ export const actionSendToCapability: Capability = {
         data: {
           sentTo: toChatId,
           sentText: text,
+          sentMessageId: result?.id,
         },
       };
     } catch (error) {

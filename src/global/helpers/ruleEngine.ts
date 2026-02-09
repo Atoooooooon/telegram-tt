@@ -33,7 +33,7 @@ const capabilityRegistry = new Map<string, Capability>();
  */
 type DeferredTask = {
   delay: number;
-  checkFn: () => Promise<boolean>;
+  checkFn: () => Promise<boolean | { success: boolean; data?: Record<string, any> }>;
   pipeline: PipelineStep[];
   stepIndex: number;
   message: ApiMessage;
@@ -52,7 +52,9 @@ function registerDeferredTask(task: DeferredTask): void {
       console.log(`[RuleEngine:Async] Executing deferred task for message ${task.message.id}`);
 
       // Execute the check function to get success/failure
-      const success = await task.checkFn();
+      const checkResult = await task.checkFn();
+      const success = typeof checkResult === 'boolean' ? checkResult : checkResult.success;
+      const resultData = typeof checkResult === 'boolean' ? undefined : checkResult.data;
 
       // eslint-disable-next-line no-console
       console.log(`[RuleEngine:Async] Check result: ${success ? 'success' : 'failure'}`);
@@ -64,13 +66,19 @@ function registerDeferredTask(task: DeferredTask): void {
       const { getGlobal } = await import('../index');
       const freshGlobal = getGlobal();
 
+      // Update pipeline data with result data if available
+      const updatedPipelineData = { ...task.pipelineData };
+      if (resultData) {
+        Object.assign(updatedPipelineData, resultData);
+      }
+
       // Create input for routing
       const input: CapabilityInput = {
         message: task.message,
         config: step.config,
         global: freshGlobal,
         actions: task.actions,
-        pipelineData: task.pipelineData,
+        pipelineData: updatedPipelineData,
         step,
       };
 
@@ -125,7 +133,7 @@ function registerDeferredTask(task: DeferredTask): void {
           task.message,
           freshGlobal,
           task.actions,
-          task.pipelineData,
+          updatedPipelineData,
         );
       }
     } catch (error) {

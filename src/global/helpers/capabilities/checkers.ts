@@ -44,9 +44,29 @@ export const checkMessageCapability: Capability = {
       label: '检查是否有引用',
       default: false,
     },
+
+    // Variable Comparison (New)
+    variableKey: {
+      type: 'string',
+      label: '检查变量名',
+      placeholder: '如 botReplyText 或 chat.title',
+    },
+    variableOperator: {
+      type: 'select',
+      label: '变量操作符',
+      options: ['contains', 'equals', 'regex', 'exists', 'not_exists'],
+      default: 'contains',
+    },
+    variableExpectedValue: {
+      type: 'string',
+      label: '期望值',
+      placeholder: '支持 {{变量}} 语法',
+    },
   },
 
-  async execute({ message, config, pipelineData }) {
+  async execute({
+    message, config, pipelineData, global,
+  }) {
     await waitHumanLike({ minMs: 120, maxMs: 280 });
 
     const {
@@ -55,12 +75,15 @@ export const checkMessageCapability: Capability = {
       checkHasPhoto = false,
       checkHasVideo = false,
       checkIsReply = false,
+      variableKey,
+      variableOperator = 'contains',
+      variableExpectedValue,
     } = config;
 
     const results: Record<string, any> = {};
     let allChecksPassed = true;
 
-    // Check text if textPattern is provided
+    // 1. Basic Message Checks (Text, Media, Reply)
     if (textPattern) {
       const text = pipelineData.text || getMessageText(message)?.text || '';
       pipelineData.text = text;
@@ -80,45 +103,172 @@ export const checkMessageCapability: Capability = {
           error: `Text pattern matching failed: ${error instanceof Error ? error.message : String(error)}`,
         };
       }
-
       results.textMatched = textMatched;
-      results.matchedText = textMatched ? text : undefined;
       if (!textMatched) allChecksPassed = false;
     }
 
-    // Check photo
-    if (checkHasPhoto) {
-      const hasPhoto = message.content.photo !== undefined;
-      results.hasPhoto = hasPhoto;
-      if (!hasPhoto) allChecksPassed = false;
-    }
+    if (checkHasPhoto && message.content.photo === undefined) allChecksPassed = false;
+    if (checkHasVideo && message.content.video === undefined) allChecksPassed = false;
+    if (checkIsReply && message.replyInfo === undefined) allChecksPassed = false;
 
-    // Check video
-    if (checkHasVideo) {
-      const hasVideo = message.content.video !== undefined;
-      results.hasVideo = hasVideo;
-      if (!hasVideo) allChecksPassed = false;
-    }
+    // 2. Variable Comparison Logic (Advanced)
+    if (variableKey) {
+      let actualValue: any;
 
-    // Check reply/quote
-    if (checkIsReply) {
-      const isReply = message.replyInfo !== undefined;
-      results.isReply = isReply;
-      if (isReply && message.replyInfo) {
-        results.replyInfo = {
-          type: message.replyInfo.type,
-          ...(message.replyInfo.type === 'message' && {
-            replyToMsgId: message.replyInfo.replyToMsgId,
-            replyToPeerId: message.replyInfo.replyToPeerId,
-          }),
-        };
+      // Handle special metadata
+      if (variableKey === 'chat.title') {
+        const { selectChat } = await import('../../selectors');
+        const chat = selectChat(global, message.chatId);
+        actualValue = chat?.title || '';
+      } else {
+        actualValue = pipelineData[variableKey];
       }
-      if (!isReply) allChecksPassed = false;
+
+      // Render expected value if it contains templates
+      const { renderTemplate } = await import('../templateRenderer');
+      const expectedValue = variableExpectedValue ? renderTemplate(variableExpectedValue, pipelineData) : '';
+
+      let varPassed = false;
+      const actualString = String(actualValue || '');
+
+      switch (variableOperator) {
+        case 'exists':
+          varPassed = actualValue !== undefined && actualValue !== null && actualValue !== '';
+          break;
+        case 'not_exists':
+          varPassed = actualValue === undefined || actualValue === null || actualValue === '';
+          break;
+        case 'equals':
+          varPassed = actualString === expectedValue;
+          break;
+        case 'contains':
+          varPassed = actualString.includes(expectedValue);
+          break;
+        case 'regex':
+          try {
+            varPassed = new RegExp(expectedValue).test(actualString);
+          } catch (e) {
+            varPassed = false;
+          }
+          break;
+        default:
+          varPassed = false;
+      }
+
+      results.variableCheck = {
+        key: variableKey,
+        actualValue,
+        expectedValue,
+        passed: varPassed,
+      };
+      if (!varPassed) allChecksPassed = false;
     }
 
     return {
       success: allChecksPassed,
       data: results,
+    };
+  },
+};
+
+/**
+ * Wait for a reply in a specific chat
+ */
+export const waitForReplyCapability: Capability = {
+  id: 'wait_for_reply',
+  name: '等待回复',
+  type: 'checker',
+  description: '在指定聊天中等待特定消息的回复(非阻塞)',
+
+  configSchema: {
+    chatId: {
+      type: 'string',
+      label: '目标聊天ID',
+      placeholder: '留空表示当前聊天',
+    },
+    messageIdField: {
+      type: 'string',
+      label: '消息ID字段',
+      default: 'sentMessageId',
+      placeholder: 'pipelineData 中的字段名',
+    },
+    timeout: {
+      type: 'number',
+      label: '超时秒数',
+      default: 60,
+    },
+    pollInterval: {
+      type: 'number',
+      label: '轮询间隔(秒)',
+      default: 5,
+    },
+  },
+
+  async execute({ message, config, pipelineData }) {
+    const {
+      chatId = message.chatId,
+      messageIdField = 'sentMessageId',
+      timeout = 60,
+      pollInterval = 5,
+    } = config;
+
+    const targetMessageId = pipelineData[messageIdField];
+    if (!targetMessageId) {
+      return {
+        success: false,
+        error: `Target message ID not found in pipelineData.${messageIdField}`,
+      };
+    }
+
+    const startTime = Date.now();
+
+    // eslint-disable-next-line no-console
+    console.log(`[wait_for_reply] Waiting for reply to ${targetMessageId} in ${chatId}`);
+
+    return {
+      success: true,
+      deferred: {
+        delay: pollInterval * 1000,
+        checkFn: async () => {
+          const { getGlobal } = await import('../../index');
+          const { selectChatMessages } = await import('../../selectors');
+          const { getMessageText } = await import('../messages');
+          const { sleep } = await import('../../../util/delays');
+
+          while (Date.now() - startTime < timeout * 1000) {
+            const freshGlobal = getGlobal();
+            const chatMessages = selectChatMessages(freshGlobal, chatId);
+
+            if (chatMessages) {
+              const replies = Object.values(chatMessages).filter((m: ApiMessage) => {
+                return m.replyInfo?.type === 'message' && m.replyInfo.replyToMsgId === targetMessageId;
+              });
+
+              if (replies.length > 0) {
+                const lastReply = replies[replies.length - 1];
+                const replyText = getMessageText(lastReply)?.text || '';
+                // eslint-disable-next-line no-console
+                console.log(`[wait_for_reply] Found reply: ${replyText}`);
+
+                return {
+                  success: true,
+                  data: {
+                    botReplyText: replyText,
+                    botReplyMessageId: lastReply.id,
+                  },
+                };
+              }
+            }
+
+            // Wait for next poll
+            await sleep(pollInterval * 1000);
+          }
+
+          // eslint-disable-next-line no-console
+          console.log('[wait_for_reply] Timeout reached');
+          return false;
+        },
+      },
     };
   },
 };
