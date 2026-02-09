@@ -55,8 +55,6 @@ export const actionMarkReadCapability: Capability = {
   },
 
   async execute({ message, config, global }) {
-    await waitHumanLike({ minMs: 420, maxMs: 880 });
-
     const { targetMessage = '回复的原消息', maxUnreadCount = 1 } = config;
 
     let targetId: number;
@@ -241,11 +239,24 @@ export const actionAutoReplyCapability: Capability = {
         return undefined;
       })();
 
-      await callApi('sendMessage', {
+      const result = await callApi('sendMessage', {
         chat,
         text: replyText,
         replyInfo,
       });
+
+      // Robust extraction of message ID from GramJS update structures
+      let sentMessageId: number | undefined;
+      if (result && typeof result === 'object') {
+        if ('id' in result && typeof result.id === 'number') {
+          sentMessageId = result.id;
+        } else if ('updates' in result && Array.isArray(result.updates)) {
+          const idUpdate = result.updates.find((u: any) => 'id' in u && typeof u.id === 'number');
+          if (idUpdate) sentMessageId = idUpdate.id;
+        } else if ('messageId' in result) {
+          sentMessageId = (result as any).messageId;
+        }
+      }
 
       if (typingActionActive) {
         callApi('sendMessageAction', {
@@ -261,6 +272,7 @@ export const actionAutoReplyCapability: Capability = {
         success: true,
         data: {
           repliedText: replyText,
+          sentMessageId,
         },
       };
     } catch (error) {
@@ -284,8 +296,6 @@ export const actionAddQueueCapability: Capability = {
   configSchema: {},
 
   async execute({ message, actions }) {
-    await waitHumanLike({ minMs: 420, maxMs: 880 });
-
     try {
       await actions.addToCustomerServiceV2({
         message,
@@ -336,8 +346,6 @@ export const actionForwardCapability: Capability = {
   },
 
   async execute({ message, config, global }) {
-    await waitHumanLike({ minMs: 420, maxMs: 880 });
-
     const { toChatId, dropAuthor = false, dropCaption = false } = config;
 
     if (!toChatId) {
@@ -431,8 +439,6 @@ export const actionSendToCapability: Capability = {
   },
 
   async execute({ message, config, pipelineData, global }) {
-    await waitHumanLike({ minMs: 420, maxMs: 880 });
-
     const { toChatId, template } = config;
 
     if (!toChatId) {
@@ -462,17 +468,32 @@ export const actionSendToCapability: Capability = {
         };
       }
 
+      const text = renderTemplate(template, pipelineData);
+
       const result = await callApi('sendMessage', {
         chat: toChat,
         text,
       });
+
+      // Robust extraction of message ID from GramJS update structures
+      let sentMessageId: number | undefined;
+      if (result && typeof result === 'object') {
+        if ('id' in result && typeof result.id === 'number') {
+          sentMessageId = result.id;
+        } else if ('updates' in result && Array.isArray(result.updates)) {
+          const idUpdate = result.updates.find((u: any) => 'id' in u && typeof u.id === 'number');
+          if (idUpdate) sentMessageId = idUpdate.id;
+        } else if ('messageId' in result) {
+          sentMessageId = (result as any).messageId;
+        }
+      }
 
       return {
         success: true,
         data: {
           sentTo: toChatId,
           sentText: text,
-          sentMessageId: result?.id,
+          sentMessageId,
         },
       };
     } catch (error) {

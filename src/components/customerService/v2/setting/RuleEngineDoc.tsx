@@ -118,8 +118,8 @@ const RuleEngineDoc: FC = () => {
               : 成功时行为 (可选)
               <ul>
                 <li>
-                  <code>continueNext</code>
-                  : 继续下一步 (boolean, 默认 true)
+                  <code>stopPipeline</code>
+                  : 停止执行 (boolean, 默认 false)
                 </li>
                 <li>
                   <code>gotoStep</code>

@@ -160,7 +160,7 @@ export type CapabilityOutput = {
    */
   deferred?: {
     delay: number; // Delay in milliseconds
-    checkFn: () => Promise<boolean>; // Returns true for success, false for failure
+    checkFn: () => Promise<boolean | { success: boolean; data?: Record<string, any> }>; // Returns result or result with data
   };
 };
 
@@ -193,7 +193,7 @@ export type PipelineStep = {
   capabilityId: string;
   config: Record<string, any>;
   onSuccess?: {
-    continueNext?: boolean;
+    stopPipeline?: boolean;
     gotoStep?: string;
     executeAction?: ActionExecution;
   };

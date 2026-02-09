@@ -67,8 +67,6 @@ export const checkMessageCapability: Capability = {
   async execute({
     message, config, pipelineData, global,
   }) {
-    await waitHumanLike({ minMs: 120, maxMs: 280 });
-
     const {
       textPattern,
       textMode = '包含',
@@ -131,28 +129,34 @@ export const checkMessageCapability: Capability = {
       let varPassed = false;
       const actualString = String(actualValue || '');
 
-      switch (variableOperator) {
-        case 'exists':
-          varPassed = actualValue !== undefined && actualValue !== null && actualValue !== '';
-          break;
-        case 'not_exists':
-          varPassed = actualValue === undefined || actualValue === null || actualValue === '';
-          break;
-        case 'equals':
-          varPassed = actualString === expectedValue;
-          break;
-        case 'contains':
-          varPassed = actualString.includes(expectedValue);
-          break;
-        case 'regex':
-          try {
-            varPassed = new RegExp(expectedValue).test(actualString);
-          } catch (e) {
+      // Security Check: If expectedValue is empty but operator is contains/equals/regex, 
+      // it's likely a missing variable. Don't allow it to pass to prevent false positives.
+      if (!expectedValue && (variableOperator === 'contains' || variableOperator === 'equals' || variableOperator === 'regex')) {
+        varPassed = false;
+      } else {
+        switch (variableOperator) {
+          case 'exists':
+            varPassed = actualValue !== undefined && actualValue !== null && actualValue !== '';
+            break;
+          case 'not_exists':
+            varPassed = actualValue === undefined || actualValue === null || actualValue === '';
+            break;
+          case 'equals':
+            varPassed = actualString === expectedValue;
+            break;
+          case 'contains':
+            varPassed = actualString.includes(expectedValue);
+            break;
+          case 'regex':
+            try {
+              varPassed = new RegExp(expectedValue).test(actualString);
+            } catch (e) {
+              varPassed = false;
+            }
+            break;
+          default:
             varPassed = false;
-          }
-          break;
-        default:
-          varPassed = false;
+        }
       }
 
       results.variableCheck = {
@@ -244,21 +248,37 @@ export const waitForReplyCapability: Capability = {
                 return m.replyInfo?.type === 'message' && m.replyInfo.replyToMsgId === targetMessageId;
               });
 
-              if (replies.length > 0) {
-                const lastReply = replies[replies.length - 1];
-                const replyText = getMessageText(lastReply)?.text || '';
-                // eslint-disable-next-line no-console
-                console.log(`[wait_for_reply] Found reply: ${replyText}`);
-
-                return {
-                  success: true,
-                  data: {
-                    botReplyText: replyText,
-                    botReplyMessageId: lastReply.id,
-                  },
-                };
-              }
-            }
+                        if (replies.length > 0) {
+                          const lastReply = replies[replies.length - 1];
+                          const replyText = getMessageText(lastReply)?.text || '';
+                          // eslint-disable-next-line no-console
+                          console.log(`[wait_for_reply] Found reply: ${replyText}`);
+              
+                          // Mark the reply as read (human-like behavior)
+                          try {
+                            const { callApi } = await import('../../../api/gramjs');
+                            const { selectChat } = await import('../../selectors');
+                            const chat = selectChat(freshGlobal, chatId);
+                            if (chat) {
+                              const threadId = (lastReply as any).threadId || 0;
+                              await callApi('markMessageListRead', {
+                                chat,
+                                threadId,
+                                maxId: lastReply.id,
+                              });
+                            }
+                          } catch (e) {
+                            console.error('[wait_for_reply] Mark read failed:', e);
+                          }
+              
+                          return {
+                            success: true,
+                            data: {
+                              botReplyText: replyText,
+                              botReplyMessageId: lastReply.id,
+                            },
+                          };
+                        }            }
 
             // Wait for next poll
             await sleep(pollInterval * 1000);
@@ -294,8 +314,6 @@ export const checkHasReplyCapability: Capability = {
   },
 
   async execute({ message, config }) {
-    await waitHumanLike({ minMs: 120, maxMs: 280 });
-
     const { timeWindow = 300 } = config;
 
     // eslint-disable-next-line no-console

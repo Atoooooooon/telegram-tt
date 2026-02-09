@@ -37,7 +37,7 @@ The Rule Engine processes incoming Telegram messages (from customers or bots) th
 
 ## Pipeline Routing
 Each step can have:
-- `onSuccess`: `{ continueNext: boolean, gotoStep: string, executeAction: string }`
+- `onSuccess`: `{ stopPipeline: boolean, gotoStep: string, executeAction: string }`
 - `onFailure`: `{ stopPipeline: boolean, gotoStep: string, executeAction: string }`
 
 ## Common Recipes
