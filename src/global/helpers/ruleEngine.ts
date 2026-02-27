@@ -178,15 +178,16 @@ export function validateRuleCapabilities(rules?: UserRule[], context: string = '
 /**
  * Log execution message to pipelineData
  */
-function logExecution(pipelineData: Record<string, any>, message: string) {
+function logExecution(pipelineData: Record<string, any>, message: string, stepId?: string) {
   if (!pipelineData.executionLog) {
     pipelineData.executionLog = [];
   }
   const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
-  const logEntry = `[${timestamp}] ${message}`;
+  const stepInfo = stepId ? ` [Step: ${stepId}]` : '';
+  const logEntry = `[${timestamp}]${stepInfo} ${message}`;
   pipelineData.executionLog.push(logEntry);
   // eslint-disable-next-line no-console
-  console.log(`[RuleEngine] ${message}`);
+  console.log(`[RuleEngine]${stepInfo} ${message}`);
 }
 
 /**
@@ -253,26 +254,39 @@ async function executePipelineInternal(
 
   while (currentStepIndex < pipeline.length) {
     const step = pipeline[currentStepIndex];
+    const stepId = step.id || String(currentStepIndex + 1);
     const capability = capabilityRegistry.get(step.capabilityId);
 
     if (!capability) {
-      logExecution(pipelineData, `Error: Capability not found: ${step.capabilityId}`);
+      logExecution(pipelineData, `Error: Capability not found: ${step.capabilityId}`, stepId);
       terminatedByFailure = true;
       break;
     }
 
-    logExecution(pipelineData, `Step ${currentStepIndex + 1}/${pipeline.length}: ${capability.name}`);
+    logExecution(pipelineData, `Capability: ${capability.name}`, stepId);
 
     try {
-      // Unified human-like delay before step (simulates "thinking" or "observing")
+      // Unified human-like delay before step
       const delayMs = getRandomStepDelayMs(capability.type === 'action');
-      logExecution(pipelineData, `Simulating human delay: ${delayMs}ms`);
+      logExecution(pipelineData, `Simulating human delay: ${delayMs}ms`, stepId);
       await sleep(delayMs);
 
+      // --- Sanity Check: Ensure message still exists in GlobalState ---
+      const { getGlobal } = await import('../index');
+      const { selectChatMessage } = await import('../selectors');
+      const freshGlobal = getGlobal();
+      const currentMessage = selectChatMessage(freshGlobal, message.chatId, message.id);
+
+      if (!currentMessage) {
+        logExecution(pipelineData, 'Abort: Message was deleted by user during processing.', stepId);
+        return { ruleMatched, terminatedByFailure: true };
+      }
+      // ------------------------------------------------------------
+
       const input: CapabilityInput = {
-        message,
+        message: currentMessage, // Use the latest version of the message
         config: step.config,
-        global,
+        global: freshGlobal,
         actions,
         pipelineData,
         step,
@@ -281,9 +295,9 @@ async function executePipelineInternal(
       const result: CapabilityOutput = await capability.execute(input);
 
       // Log step result
-      logExecution(pipelineData, `Step Result: ${result.success ? 'SUCCESS' : 'FAILURE'}${result.error ? ` - Error: ${result.error}` : ''}`);
+      logExecution(pipelineData, `Step Result: ${result.success ? 'SUCCESS' : 'FAILURE'}${result.error ? ` - Error: ${result.error}` : ''}`, stepId);
       if (result.data && Object.keys(result.data).length > 0) {
-        logExecution(pipelineData, `Step Output: ${JSON.stringify(result.data)}`);
+        logExecution(pipelineData, `Step Output: ${JSON.stringify(result.data)}`, stepId);
       }
 
       // Merge output data
@@ -359,9 +373,13 @@ export async function executeRule(
   global: GlobalState,
   actions: any,
 ): Promise<boolean> {
+  const { selectChat } = await import('../selectors');
+  const chat = selectChat(global, message.chatId);
+
   const pipelineData: Record<string, any> = {
     message,
     chatId: message.chatId,
+    chatTitle: chat?.title || '', // Pre-load chat title
     senderId: message.senderId || '',
     text: '',
     executionLog: [],
@@ -434,10 +452,6 @@ export async function executePipelineFromStep(
   await executePipelineInternal(pipeline, startIndex, message, global, actions, pipelineData);
 }
 
-// Deduplication cache: fingerprint -> timestamp
-const processedFingeprints = new Map<string, number>();
-const DEDUPLICATION_WINDOW_MS = 10000; // 10 seconds
-
 /**
  * Process message with all enabled rules (main entry point)
  */
@@ -448,25 +462,6 @@ export async function processMessageWithRules(
   actions: any,
   customRules?: UserRule[],
 ): Promise<{ matched: boolean; skipPostProcessing: boolean }> {
-  // Generate a robust fingerprint: combination of stable properties
-  // This handles the case where message.id changes from local to server ID
-  const textContent = message.content?.text?.text || '';
-  const fingerprint = `${message.chatId}:${message.senderId}:${message.date}:${textContent.substring(0, 50)}`;
-
-  const now = Date.now();
-  const lastProcessed = processedFingeprints.get(fingerprint);
-  if (lastProcessed && (now - lastProcessed < DEDUPLICATION_WINDOW_MS)) {
-    return { matched: false, skipPostProcessing: false };
-  }
-  processedFingeprints.set(fingerprint, now);
-
-  // Periodic cleanup
-  if (processedFingeprints.size > 1000) {
-    for (const [key, ts] of processedFingeprints.entries()) {
-      if (now - ts > DEDUPLICATION_WINDOW_MS) processedFingeprints.delete(key);
-    }
-  }
-
   const settings = selectCustomerServiceV2Settings(global);
   const rules = customRules || (settings?.rules?.filter((r) => r.enabled)) || [];
 

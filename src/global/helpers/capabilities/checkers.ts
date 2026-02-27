@@ -113,11 +113,9 @@ export const checkMessageCapability: Capability = {
     if (variableKey) {
       let actualValue: any;
 
-      // Handle special metadata
-      if (variableKey === 'chat.title') {
-        const { selectChat } = await import('../../selectors');
-        const chat = selectChat(global, message.chatId);
-        actualValue = chat?.title || '';
+      // Handle special metadata and normal variables
+      if (variableKey === 'chat.title' || variableKey === 'chatTitle') {
+        actualValue = pipelineData.chatTitle;
       } else {
         actualValue = pipelineData[variableKey];
       }
