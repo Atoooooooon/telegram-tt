@@ -3,6 +3,7 @@ import type { ActionReturnType } from '../../types';
 import type { CustomerServiceV2State } from '../../types/customerServiceV2';
 import { MAIN_THREAD_ID } from '../../../api/types';
 
+import { CUSTOMER_SERVICE_CONFIG } from '../../../config/customerService';
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
 import { callApi } from '../../../api/gramjs';
 import { loadCustomerServiceV2SettingsFromStorage } from '../../helpers/customerServiceV2Settings';
@@ -19,7 +20,7 @@ import {
 
 /**
  * Add message to Customer Service V2
- * Implements FIFO cleanup at 5000 messages
+ * Uses bounded in-memory FIFO cleanup based on configured mode limits
  */
 addActionHandler('addToCustomerServiceV2', (global, actions, payload): ActionReturnType => {
   const { message, chatId, tabId = getCurrentTabId() } = payload;
@@ -70,8 +71,10 @@ addActionHandler('addToCustomerServiceV2', (global, actions, payload): ActionRet
     // Assist mode: Keep fewer messages since each chat only needs latest unread message
     // On-call mode: Keep more messages for history
     const isAssistMode = baseState.settings?.mode === 'assist';
-    const maxMessages = isAssistMode ? 50 : 100;
-    const keepMessages = isAssistMode ? 30 : 100;
+    const queueLimits = isAssistMode
+      ? CUSTOMER_SERVICE_CONFIG.MESSAGE_QUEUE_LIMITS.assist
+      : CUSTOMER_SERVICE_CONFIG.MESSAGE_QUEUE_LIMITS.oncall;
+    const { maxMessages, keepMessages } = queueLimits;
     let didCleanup = false;
 
     if (messages.length >= maxMessages) {
@@ -216,14 +219,20 @@ addActionHandler('removeFromCustomerServiceV2', async (global, actions, payload)
  * Used for bulk delete sync
  */
 addActionHandler('removeCustomerServiceV2Messages', (global, actions, payload): ActionReturnType => {
-  const { messageIds, tabId = getCurrentTabId() } = payload;
+  const { messageIds, chatId, tabId = getCurrentTabId() } = payload;
 
   try {
     const cs = selectCustomerServiceV2State(global, tabId);
     const baseState = ensureCustomerServiceV2State(cs);
 
     // Filter out deleted messages
-    const messages = baseState.messages.filter((msg) => !messageIds.includes(msg.id));
+    const messages = baseState.messages.filter((msg) => {
+      if (!messageIds.includes(msg.id)) {
+        return true;
+      }
+
+      return chatId ? msg.chatId !== chatId : false;
+    });
 
     // Rebuild lookup map
     const messagesByChatId: Record<string, ApiMessage[]> = {};

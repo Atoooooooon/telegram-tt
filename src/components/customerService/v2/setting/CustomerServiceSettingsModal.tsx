@@ -10,11 +10,11 @@ import type {
 
 import { CUSTOMER_SERVICE_CONFIG } from '../../../../config/customerService';
 import {
-  DEFAULT_DEBUG_RULE,
   normalizeCustomerServiceQuickReplies,
 } from '../../../../global/helpers/customerServiceV2Settings';
 import { selectCustomerServiceV2Settings } from '../../../../global/selectors/customerServiceV2';
 import { selectTabState } from '../../../../global/selectors/tabs';
+import { getCurrentTabId } from '../../../../util/establishMultitabRole';
 
 import useLang from '../../../../hooks/useLang';
 import useLastCallback from '../../../../hooks/useLastCallback';
@@ -50,9 +50,9 @@ type StateProps = {
     }>;
     mode?: 'oncall' | 'assist';
     autoRead?: boolean;
-  quickReplies?: CustomerServiceQuickReply[];
-  quickReplyPanelGlobal?: boolean;
-  rules?: UserRule[];
+    quickReplies?: CustomerServiceQuickReply[];
+    quickReplyPanelGlobal?: boolean;
+    rules?: UserRule[];
   };
 };
 
@@ -95,7 +95,7 @@ const buildFilterSettings = (saved?: SavedSettings): FilterSettings => ({
   quickReplyPanelGlobal: Boolean(saved?.quickReplyPanelGlobal),
   rules: (saved?.rules && saved.rules.length
     ? saved.rules.map((rule) => JSON.parse(JSON.stringify(rule)))
-    : [JSON.parse(JSON.stringify(DEFAULT_DEBUG_RULE))]) as UserRule[],
+    : []) as UserRule[],
 });
 
 const buildNormalizedSettings = (settings: FilterSettings): NormalizedSettings => ({
@@ -469,6 +469,7 @@ const CustomerServiceSettingsModal = ({
 };
 
 export default memo(withGlobal((global): StateProps => {
+  const tabId = getCurrentTabId();
   const chats = global.chats.byId;
   const chatFullInfos = global.chats.fullInfoById;
   const users = global.users.byId;
@@ -476,8 +477,8 @@ export default memo(withGlobal((global): StateProps => {
     byId: chatFolders,
     orderedIds: orderedFolderIds,
   } = global.chatFolders || {};
-  const savedSettings = selectCustomerServiceV2Settings(global);
-  const tabState = selectTabState(global);
+  const savedSettings = selectCustomerServiceV2Settings(global, tabId);
+  const tabState = selectTabState(global, tabId);
 
   return {
     isOpen: tabState.isCustomerServiceV2SettingsOpen,

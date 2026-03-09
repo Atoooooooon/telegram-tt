@@ -55,10 +55,10 @@ export type PausedChat = {
 /**
  * Customer Service V2 State
  * Ephemeral design - no persistence to IndexedDB
- * Maximum 5000 messages with FIFO cleanup
+ * Bounded in-memory FIFO queue with mode-specific limits
  */
 export type CustomerServiceV2State = {
-  /** Flat array of all CS messages (max 5000, FIFO) */
+  /** Flat array of all CS messages */
   messages: ApiMessage[];
 
   /** Multi-chat lookup map for efficient message display */

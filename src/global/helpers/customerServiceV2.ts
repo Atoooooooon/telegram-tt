@@ -3,7 +3,10 @@ import type { CustomerServiceSettings } from '../types';
 import type { ApiFormattedText } from '../../api/types';
 
 import { CUSTOMER_SERVICE_CONFIG } from '../../config/customerService';
-import { normalizeCustomerServiceQuickReplies } from './customerServiceV2Settings';
+import {
+  loadCustomerServiceV2SettingsFromStorage,
+  normalizeCustomerServiceQuickReplies,
+} from './customerServiceV2Settings';
 import { selectCustomerServiceV2Settings } from '../selectors/customerServiceV2';
 
 /**
@@ -17,7 +20,7 @@ export function getEffectiveCustomerServiceSettings(
     return undefined;
   }
 
-  const v2Settings = selectCustomerServiceV2Settings(global);
+  const v2Settings = selectCustomerServiceV2Settings(global) || loadCustomerServiceV2SettingsFromStorage();
   if (!v2Settings) {
     return undefined;
   }

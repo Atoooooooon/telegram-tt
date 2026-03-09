@@ -19,15 +19,15 @@ import { selectCustomerServiceV2Settings } from '../selectors/customerServiceV2'
 import { randomDelayMs, sleep } from '../../util/delays';
 
 // Delay configuration for simulating human behavior
-const STEP_DELAY_MIN_MS = 1000;
-const STEP_DELAY_MAX_MS = 10000;
 const ACTION_DELAY_MIN_MS = 2000;
-const ACTION_DELAY_MAX_MS = 15000;
+const ACTION_DELAY_MAX_MS = 8000;
 
 function getRandomStepDelayMs(isAction = false): number {
-  return isAction
-    ? randomDelayMs(ACTION_DELAY_MIN_MS, ACTION_DELAY_MAX_MS)
-    : randomDelayMs(STEP_DELAY_MIN_MS, STEP_DELAY_MAX_MS);
+  if (!isAction) {
+    return 0;
+  }
+
+  return randomDelayMs(ACTION_DELAY_MIN_MS, ACTION_DELAY_MAX_MS);
 }
 
 // Capability registry
@@ -266,10 +266,12 @@ async function executePipelineInternal(
     logExecution(pipelineData, `Capability: ${capability.name}`, stepId);
 
     try {
-      // Unified human-like delay before step
+      // Human-like delay only for action steps that may call Telegram APIs
       const delayMs = getRandomStepDelayMs(capability.type === 'action');
-      logExecution(pipelineData, `Simulating human delay: ${delayMs}ms`, stepId);
-      await sleep(delayMs);
+      if (delayMs > 0) {
+        logExecution(pipelineData, `Simulating human delay: ${delayMs}ms`, stepId);
+        await sleep(delayMs);
+      }
 
       // --- Sanity Check: Ensure message still exists in GlobalState ---
       const { getGlobal } = await import('../index');

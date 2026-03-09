@@ -3,7 +3,6 @@ import type { FC } from '../../../../../lib/teact/teact';
 import { memo, useRef, useState } from '../../../../../lib/teact/teact';
 
 import type { UserRule } from '../../../../../global/types/customerServiceV2';
-import { DEFAULT_DEBUG_RULE } from '../../../../../global/helpers/customerServiceV2Settings';
 
 import { getAllRegisteredCapabilityIds, isCapabilityRegistered } from '../../../../../global/helpers/ruleEngine';
 import { registerAllCapabilities } from '../../../../../global/helpers/capabilities';
@@ -76,7 +75,7 @@ const RuleEngineTab: FC<Props> = ({
   });
 
   const handleRestoreDefaults = useLastCallback(() => {
-    onRulesChange([JSON.parse(JSON.stringify(DEFAULT_DEBUG_RULE))]);
+    onRulesChange([]);
   });
 
   const handleDragStart = useLastCallback((index: number) => (event: React.DragEvent<HTMLDivElement>) => {

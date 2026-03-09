@@ -12,10 +12,9 @@ import { MAIN_THREAD_ID } from '../../../api/types';
 import { SERVICE_NOTIFICATIONS_USER_ID } from '../../../config';
 import { isMonitoredChat, isFilteredUser, shouldFilterMessage } from '../../helpers/customerServiceV2';
 import { callApi } from '../../../api/gramjs';
-import { processMessageWithRules, validateRuleCapabilities } from '../../helpers/ruleEngine';
+import { processMessageWithRules } from '../../helpers/ruleEngine';
 import { registerAllCapabilities } from '../../helpers/capabilities';
 import { getHumanDelayMs } from '../../../util/delays';
-import { DEFAULT_DEBUG_RULE } from '../../helpers/customerServiceV2Settings';
 import { areDeepEqual } from '../../../util/areDeepEqual';
 import { isUserId } from '../../../util/entities/ids';
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
@@ -1664,7 +1663,7 @@ export function deleteMessages<T extends GlobalState>(
 
     // Customer Service V2: Sync message deletions
     const currentTabId = getCurrentTabId();
-    actions.removeCustomerServiceV2Messages({ messageIds: ids, tabId: currentTabId });
+    actions.removeCustomerServiceV2Messages({ messageIds: ids, chatId, tabId: currentTabId });
 
     const isAnimatingAsSnap = selectCanAnimateSnapEffect(global);
 

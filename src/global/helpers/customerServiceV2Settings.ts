@@ -6,36 +6,6 @@ import type {
 
 const CUSTOMER_SERVICE_V2_SETTINGS_KEY = 'customerServiceV2Settings';
 
-export const DEFAULT_DEBUG_RULE: UserRule = {
-  id: 'debug_auto_reply_foo_bar',
-  name: '[调试] 检测foo自动回复bar',
-  enabled: true,
-  executionPhase: 'post-filter',
-  trigger: {
-    eventType: 'customer_message' as const,
-  },
-  pipeline: [
-    {
-      id: 'check_foo',
-      capabilityId: 'check_message',
-      config: {
-        textPattern: 'foo',
-        textMode: '包含',
-      },
-      onSuccess: { continueNext: true },
-      onFailure: { stopPipeline: true },
-    },
-    {
-      id: 'reply_bar',
-      capabilityId: 'action_auto_reply',
-      config: {
-        template: 'bar',
-        replyToOriginal: true,
-      },
-    },
-  ],
-};
-
 type NormalizableSettings = {
   monitoredChatIds?: unknown;
   filteredUserIds?: unknown;
@@ -177,20 +147,7 @@ function readFromStorage(key: string): CustomerServiceSettings | undefined {
 }
 
 export function loadCustomerServiceV2SettingsFromStorage(): CustomerServiceSettings | undefined {
-  const settings = readFromStorage(CUSTOMER_SERVICE_V2_SETTINGS_KEY);
-
-  if (!settings) {
-    return undefined;
-  }
-
-  // Add default debug rules if no rules exist
-  if (!settings.rules || settings.rules.length === 0) {
-    settings.rules = [JSON.parse(JSON.stringify(DEFAULT_DEBUG_RULE))];
-
-    console.log('[RuleEngine] Added default debug rules');
-  }
-
-  return settings;
+  return readFromStorage(CUSTOMER_SERVICE_V2_SETTINGS_KEY);
 }
 
 export function saveCustomerServiceV2SettingsToStorage(settings: CustomerServiceSettings) {

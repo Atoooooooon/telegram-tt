@@ -944,12 +944,12 @@ const RuleEngineDoc: FC = () => {
             <li>
               <strong>步骤延迟:</strong>
               {' '}
-              规则执行前会有随机延迟: checker/extractor 步骤约 1-10 秒, action 步骤约 2-15 秒。
+              仅 action 步骤会有随机延迟,范围约 2-8 秒。
               若在路由中使用
               {' '}
               <code>executeAction</code>
               {' '}
-              ,动作执行前还会再叠加一次约 2-15 秒延迟。
+              ,动作执行前还会再叠加一次约 2-8 秒延迟。
             </li>
             <li>
               <strong>executeAction 参数:</strong>
