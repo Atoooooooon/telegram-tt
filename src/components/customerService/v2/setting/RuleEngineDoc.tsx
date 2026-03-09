@@ -44,12 +44,12 @@ const RuleEngineDoc: FC = () => {
                 <li>
                   <code>pre-filter</code>
                   {' '}
-                  - 前置规则(在过滤前执行,可处理未监听群组的消息)
+                  - 前置规则(第一层,在监听群判断前执行,仅按 trigger 条件匹配)
                 </li>
                 <li>
                   <code>post-filter</code>
                   {' '}
-                  - 后置规则(在过滤后执行,默认值)
+                  - 后置规则(在基础过滤后执行,默认值)
                 </li>
               </ul>
             </li>
@@ -72,12 +72,12 @@ const RuleEngineDoc: FC = () => {
                 <li>
                   <code>customer_message</code>
                   {' '}
-                  - 客户消息
+                  - 非过滤发送者消息(不在 filteredUserIds 中)
                 </li>
                 <li>
                   <code>bot_reply</code>
                   {' '}
-                  - 机器人回复
+                  - 过滤发送者消息(发送者在 filteredUserIds 中)
                 </li>
                 <li>
                   <code>any_message</code>
@@ -127,7 +127,13 @@ const RuleEngineDoc: FC = () => {
                 </li>
                 <li>
                   <code>executeAction</code>
-                  : 执行额外动作能力 (string)
+                  : 执行额外动作能力 (
+                  <code>string</code>
+                  {' '}
+                  或
+                  {' '}
+                  <code>{"{ capabilityId, config }"}</code>
+                  )
                 </li>
               </ul>
             </li>
@@ -145,9 +151,46 @@ const RuleEngineDoc: FC = () => {
                 </li>
                 <li>
                   <code>executeAction</code>
-                  : 执行额外动作能力 (string)
+                  : 执行额外动作能力 (
+                  <code>string</code>
+                  {' '}
+                  或
+                  {' '}
+                  <code>{"{ capabilityId, config }"}</code>
+                  )
                 </li>
               </ul>
+            </li>
+          </ul>
+        </section>
+
+        <section className={styles.docSection}>
+          <h5>默认上下文 (pipelineData)</h5>
+          <p>每条消息进入规则引擎时会初始化以下字段,后续能力输出会继续合并到同一个上下文对象中:</p>
+          <ul>
+            <li>
+              <code>message</code>
+              : 当前消息对象
+            </li>
+            <li>
+              <code>chatId</code>
+              : 消息所在聊天ID
+            </li>
+            <li>
+              <code>chatTitle</code>
+              : 聊天标题(来自消息入口上下文)
+            </li>
+            <li>
+              <code>senderId</code>
+              : 发送者ID
+            </li>
+            <li>
+              <code>text</code>
+              : 消息文本(入口预填充,也可被 OCR/文本处理步骤覆盖)
+            </li>
+            <li>
+              <code>executionLog</code>
+              : 引擎执行日志数组
             </li>
           </ul>
         </section>
@@ -213,8 +256,8 @@ const RuleEngineDoc: FC = () => {
                     : 跳转到指定步骤
                   </li>
                   <li>
-                    <code>continueNext</code>
-                    : 是否继续下一步 (默认 true)
+                    <code>stopPipeline</code>
+                    : 是否停止流水线
                   </li>
                 </ul>
               </li>
@@ -652,6 +695,9 @@ const RuleEngineDoc: FC = () => {
                 <code>{'{{text}}'}</code>
                 ,
                 {' '}
+                <code>{'{{chatTitle}}'}</code>
+                ,
+                {' '}
                 <code>{'{{chatId}}'}</code>
                 ,
                 {' '}
@@ -672,6 +718,9 @@ const RuleEngineDoc: FC = () => {
               <strong>输出数据:</strong>
               {' '}
               <code>repliedText</code>
+              ,
+              {' '}
+              <code>sentMessageId</code>
             </p>
           </div>
 
@@ -895,7 +944,12 @@ const RuleEngineDoc: FC = () => {
             <li>
               <strong>步骤延迟:</strong>
               {' '}
-              规则引擎会在每个 action 类型的步骤执行后自动随机延迟(1-10秒),用于防止 Telegram API 限流封号。
+              规则执行前会有随机延迟: checker/extractor 步骤约 1-10 秒, action 步骤约 2-15 秒。
+              若在路由中使用
+              {' '}
+              <code>executeAction</code>
+              {' '}
+              ,动作执行前还会再叠加一次约 2-15 秒延迟。
             </li>
             <li>
               <strong>executeAction 参数:</strong>
@@ -905,7 +959,8 @@ const RuleEngineDoc: FC = () => {
             <li>
               <strong>执行阶段:</strong>
               {' '}
-              前置规则(pre-filter)在过滤前执行,后置规则(post-filter)在过滤后执行。前置规则会处理所有消息,性能开销较大,请谨慎使用
+              三层顺序为: 前置规则(pre-filter) → 基础过滤(监听群/暂停/基础过滤器) → 后置规则(post-filter,默认)。
+              前置规则不受监听群列表限制,仅由规则 trigger 判定是否执行。
             </li>
             <li>
               <strong>跳过后续处理:</strong>
@@ -920,7 +975,20 @@ const RuleEngineDoc: FC = () => {
             <li>
               <strong>管道中断:</strong>
               {' '}
-              onFailure.stopPipeline 默认 false,检测类能力建议设为 true
+              onSuccess/onFailure 未设置
+              {' '}
+              <code>stopPipeline</code>
+              {' '}
+              时默认继续执行下一步。
+              但若步骤抛异常且
+              {' '}
+              <code>onFailure.stopPipeline</code>
+              {' '}
+              未显式设为
+              {' '}
+              <code>false</code>
+              {' '}
+              ,引擎会中断当前规则。
             </li>
             <li>
               <strong>异步能力:</strong>
@@ -935,7 +1003,7 @@ const RuleEngineDoc: FC = () => {
               {' '}
               <code>{'{{变量名}}'}</code>
               {' '}
-              语法,可访问 pipelineData 中的所有数据
+              语法,可访问 pipelineData 中的所有数据。缺失变量会渲染为空字符串。
             </li>
             <li>
               <strong>步骤跳转:</strong>

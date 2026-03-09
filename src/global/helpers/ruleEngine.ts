@@ -372,16 +372,24 @@ export async function executeRule(
   message: ApiMessage,
   global: GlobalState,
   actions: any,
+  initialPipelineData?: Record<string, any>,
 ): Promise<boolean> {
   const { selectChat } = await import('../selectors');
   const chat = selectChat(global, message.chatId);
+  const initialChatTitle = typeof initialPipelineData?.chatTitle === 'string'
+    ? initialPipelineData.chatTitle
+    : undefined;
+  const initialText = typeof initialPipelineData?.text === 'string'
+    ? initialPipelineData.text
+    : undefined;
 
   const pipelineData: Record<string, any> = {
+    ...initialPipelineData,
     message,
     chatId: message.chatId,
-    chatTitle: chat?.title || '', // Pre-load chat title
+    chatTitle: initialChatTitle ?? chat?.title ?? '',
     senderId: message.senderId || '',
-    text: '',
+    text: initialText ?? '',
     executionLog: [],
   };
 
@@ -461,6 +469,7 @@ export async function processMessageWithRules(
   global: GlobalState,
   actions: any,
   customRules?: UserRule[],
+  initialPipelineData?: Record<string, any>,
 ): Promise<{ matched: boolean; skipPostProcessing: boolean }> {
   const settings = selectCustomerServiceV2Settings(global);
   const rules = customRules || (settings?.rules?.filter((r) => r.enabled)) || [];
@@ -478,7 +487,7 @@ export async function processMessageWithRules(
     }
 
     try {
-      const handled = await executeRule(rule, message, global, actions);
+      const handled = await executeRule(rule, message, global, actions, initialPipelineData);
       matched = matched || handled;
 
       if (handled && rule.skipPostProcessing) {
