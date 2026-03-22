@@ -30,6 +30,79 @@ function getRandomStepDelayMs(isAction = false): number {
   return randomDelayMs(ACTION_DELAY_MIN_MS, ACTION_DELAY_MAX_MS);
 }
 
+function getFirstNonEmptyString(...values: Array<string | undefined | null>) {
+  return values.find((value) => typeof value === 'string' && value.trim() !== '');
+}
+
+async function buildInitialPipelineData(
+  message: ApiMessage,
+  global: GlobalState,
+  initialPipelineData?: Record<string, any>,
+) {
+  const [
+    { selectChat, selectPeer, selectSender },
+    { getPeerTitle, getPeerFullTitle },
+    { getMessageText, getMessageStatefulContent },
+    { getMessageSummaryText },
+    { getTranslationFn },
+  ] = await Promise.all([
+    import('../selectors'),
+    import('./peers'),
+    import('./messages'),
+    import('./messageSummary'),
+    import('../../util/localization'),
+  ]);
+
+  const lang = getTranslationFn();
+  const chat = selectChat(global, message.chatId);
+  const chatPeer = selectPeer(global, message.chatId) || chat;
+  const sender = selectSender(global, message);
+  const rawText = getMessageText(message)?.text;
+  const previewText = getMessageSummaryText(lang, message, getMessageStatefulContent(global, message));
+
+  const chatTitle = getFirstNonEmptyString(
+    typeof initialPipelineData?.chatTitle === 'string' ? initialPipelineData.chatTitle : undefined,
+    typeof initialPipelineData?.chatName === 'string' ? initialPipelineData.chatName : undefined,
+    chatPeer ? getPeerTitle(lang, chatPeer) : undefined,
+    chat?.title,
+    message.chatId,
+  ) || '';
+
+  const senderName = getFirstNonEmptyString(
+    typeof initialPipelineData?.senderName === 'string' ? initialPipelineData.senderName : undefined,
+    typeof initialPipelineData?.sender === 'string' ? initialPipelineData.sender : undefined,
+    sender ? getPeerFullTitle(lang, sender) : undefined,
+    sender ? getPeerTitle(lang, sender) : undefined,
+    message.senderId,
+  ) || '';
+
+  const text = getFirstNonEmptyString(
+    typeof initialPipelineData?.text === 'string' ? initialPipelineData.text : undefined,
+    rawText,
+    previewText,
+  ) || '';
+
+  const resolvedPreviewText = getFirstNonEmptyString(
+    typeof initialPipelineData?.previewText === 'string' ? initialPipelineData.previewText : undefined,
+    previewText,
+    rawText,
+  ) || '';
+
+  return {
+    ...initialPipelineData,
+    message,
+    chatId: message.chatId,
+    chatTitle,
+    chatName: chatTitle,
+    senderId: message.senderId || '',
+    sender: senderName,
+    senderName,
+    text,
+    previewText: resolvedPreviewText,
+    executionLog: [],
+  } as Record<string, any>;
+}
+
 // Capability registry
 const capabilityRegistry = new Map<string, Capability>();
 
@@ -376,24 +449,7 @@ export async function executeRule(
   actions: any,
   initialPipelineData?: Record<string, any>,
 ): Promise<boolean> {
-  const { selectChat } = await import('../selectors');
-  const chat = selectChat(global, message.chatId);
-  const initialChatTitle = typeof initialPipelineData?.chatTitle === 'string'
-    ? initialPipelineData.chatTitle
-    : undefined;
-  const initialText = typeof initialPipelineData?.text === 'string'
-    ? initialPipelineData.text
-    : undefined;
-
-  const pipelineData: Record<string, any> = {
-    ...initialPipelineData,
-    message,
-    chatId: message.chatId,
-    chatTitle: initialChatTitle ?? chat?.title ?? '',
-    senderId: message.senderId || '',
-    text: initialText ?? '',
-    executionLog: [],
-  };
+  const pipelineData = await buildInitialPipelineData(message, global, initialPipelineData);
 
   logExecution(pipelineData, `Starting rule: ${rule.name} (${rule.id})`);
 
