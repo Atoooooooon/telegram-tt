@@ -11,9 +11,9 @@ import { DEBUG, EDITABLE_INPUT_ID } from '../../../../config';
 import { normalizeCustomerServiceQuickReplies } from '../../../../global/helpers/customerServiceV2Settings';
 import {
   selectCustomerServiceV2Settings,
-  selectCustomerServiceV2State,
   selectIsCustomerServiceV2Open,
 } from '../../../../global/selectors/customerServiceV2';
+import { getCurrentTabId } from '../../../../util/establishMultitabRole';
 import useLastCallback from '../../../../hooks/useLastCallback';
 import useLang from '../../../../hooks/useLang';
 import buildClassName from '../../../../util/buildClassName';
@@ -773,13 +773,14 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
 
 export default memo(withGlobal<OwnProps>(
   (global): StateProps => {
-    const settings = selectCustomerServiceV2Settings(global);
+    const tabId = getCurrentTabId();
+    const settings = selectCustomerServiceV2Settings(global, tabId);
     const quickReplies = normalizeCustomerServiceQuickReplies(
       settings?.quickReplies && settings.quickReplies.length
         ? settings.quickReplies
         : CUSTOMER_SERVICE_CONFIG.QUICK_REPLIES,
     );
-    const isCustomerServiceOpen = selectIsCustomerServiceV2Open(global);
+    const isCustomerServiceOpen = selectIsCustomerServiceV2Open(global, tabId);
 
     return {
       quickReplies,

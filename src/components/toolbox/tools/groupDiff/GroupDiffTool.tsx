@@ -7,6 +7,7 @@ import type { ApiChat, ApiUser } from '../../../../api/types';
 import { callApi } from '../../../../api/gramjs';
 import { withGlobal } from '../../../../global';
 import { getUserFullName } from '../../../../global/helpers/users';
+import { getRawPeerId } from '../../../../util/entities/ids';
 import Button from '../../../ui/Button';
 import InputText from '../../../ui/InputText';
 import Checkbox from '../../../ui/Checkbox';
@@ -20,7 +21,7 @@ type StateProps = {
 type ActivityEntry = {
   rank: number;
   chatId: string;
-  baseId: string;
+  comparableId?: string;
   alias?: string;
   score: number;
 };
@@ -48,13 +49,41 @@ type InviteState = {
 const activityRegex = /^\s*(\d+)\.\s*(-?\d+)(?:\s*\[(.+?)\])?(?:\s*\((\d+)\))?.*/;
 const MAX_USER_SUGGESTIONS = 25;
 
-function extractBaseId(value?: string) {
+function toComparableChatId(value?: string) {
   const trimmed = value?.trim();
   if (!trimmed) {
     return undefined;
   }
 
-  return trimmed.replace(/^-100/, '').replace(/^-/, '');
+  try {
+    return getRawPeerId(trimmed).toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function getMatchKeys(chat: Pick<ApiChat, 'id' | 'migratedTo'>, withComparableIds = false) {
+  const keys = new Set<string>();
+
+  const append = (chatId?: string) => {
+    const trimmed = chatId?.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    keys.add(trimmed);
+    if (withComparableIds) {
+      const comparableId = toComparableChatId(trimmed);
+      if (comparableId) {
+        keys.add(comparableId);
+      }
+    }
+  };
+
+  append(chat.id);
+  append(chat.migratedTo?.chatId);
+
+  return keys;
 }
 
 function parseActivityInput(raw: string) {
@@ -70,16 +99,16 @@ function parseActivityInput(raw: string) {
     }
 
     const [, rankStr, chatId, alias, scoreStr] = match;
-    const baseId = extractBaseId(chatId);
-    if (!baseId) {
+    const normalizedChatId = chatId.trim();
+    if (!normalizedChatId) {
       invalid += 1;
       return;
     }
 
     entries.push({
       rank: Number(rankStr),
-      chatId: chatId.trim(),
-      baseId,
+      chatId: normalizedChatId,
+      comparableId: toComparableChatId(normalizedChatId),
       alias: alias?.trim(),
       score: scoreStr ? Number(scoreStr) : 0,
     });
@@ -178,7 +207,9 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
       if (normalizedId) {
         map.set(normalizedId, entry);
       }
-      map.set(entry.baseId, entry);
+      if (entry.comparableId) {
+        map.set(entry.comparableId, entry);
+      }
       return map;
     }, new Map<string, ActivityEntry>())
   ), [activityData]);
@@ -302,40 +333,34 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
       const targetCommonChats = await fetchAllCommonChats(targetUser.id, targetUser.accessHash);
       setLastTargetCount(targetCommonChats.length);
 
-      const targetChatIds = new Set<string>();
-      const targetBaseIds = new Set<string>();
+      const targetMatchKeys = new Set<string>();
 
       targetCommonChats.forEach((chat) => {
-        targetChatIds.add(chat.id);
-        const base = extractBaseId(chat.id);
-        if (base) {
-          targetBaseIds.add(base);
-        }
-
-        if (chat.migratedTo) {
-          targetChatIds.add(chat.migratedTo.chatId);
-          const mBase = extractBaseId(chat.migratedTo.chatId);
-          if (mBase) {
-            targetBaseIds.add(mBase);
-          }
-        }
+        getMatchKeys(chat).forEach((key) => targetMatchKeys.add(key));
       });
 
       const results: MissingGroup[] = sourceChats.reduce<MissingGroup[]>((acc, chat) => {
-        if (targetChatIds.has(chat.id)) {
+        const sourceKeys = getMatchKeys(chat);
+        let matched = false;
+        for (const key of sourceKeys) {
+          if (targetMatchKeys.has(key)) {
+            matched = true;
+            break;
+          }
+        }
+        if (matched) {
           return acc;
         }
 
-        const baseId = extractBaseId(chat.id);
-        if (!baseId) {
-          return acc;
+        const activityKeys = getMatchKeys(chat, true);
+        let activity: ActivityEntry | undefined;
+        for (const key of activityKeys) {
+          activity = activityMap.get(key);
+          if (activity) {
+            break;
+          }
         }
 
-        if (targetBaseIds.has(baseId)) {
-          return acc;
-        }
-
-        const activity = activityMap.get(chat.id) || activityMap.get(baseId);
         acc.push({
           chat,
           chatId: chat.id,

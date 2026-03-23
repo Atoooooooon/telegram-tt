@@ -2,10 +2,6 @@ import type { ApiMessage } from '../../api/types';
 import type { GlobalState } from '../types';
 import { CUSTOMER_SERVICE_VIRTUAL_CHAT_ID, type CustomerServiceV2State } from '../types/customerServiceV2';
 
-import {
-  DEFAULT_DEBUG_RULE,
-  loadCustomerServiceV2SettingsFromStorage,
-} from '../helpers/customerServiceV2Settings';
 import { selectTabState } from './tabs';
 
 /**
@@ -21,7 +17,7 @@ export function selectCustomerServiceV2State(
 
 /**
  * Select all Customer Service V2 messages
- * Returns flat array of messages (max 5000)
+ * Returns flat array of in-memory CS messages
  */
 export function selectCustomerServiceV2Messages(
   global: GlobalState,
@@ -105,21 +101,7 @@ export function selectCustomerServiceV2Settings(
   tabId?: number,
 ) {
   const cs = selectCustomerServiceV2State(global, tabId);
-  const baseSettings = cs?.settings || loadCustomerServiceV2SettingsFromStorage();
-
-  if (!baseSettings) {
-    return undefined;
-  }
-
-  // 如果没有任何规则，注入一条默认调试规则（检测 foo 自动回复 bar）
-  if (!baseSettings.rules || baseSettings.rules.length === 0) {
-    return {
-      ...baseSettings,
-      rules: [JSON.parse(JSON.stringify(DEFAULT_DEBUG_RULE))],
-    };
-  }
-
-  return baseSettings;
+  return cs?.settings;
 }
 
 /**

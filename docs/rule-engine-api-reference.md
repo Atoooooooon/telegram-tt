@@ -805,6 +805,7 @@ return {
 {
   sentTo: string;         // 目标聊天ID
   sentText: string;       // 实际发送的文本
+  sentMessageId: number;  // 发送的消息ID (重要：用于后续等待回复)
 }
 ```
 
@@ -831,11 +832,45 @@ return {
 - 与 `action_forward` 的区别:
   - `action_forward`: 转发现有消息(保留原消息结构)
   - `action_send_to`: 发送自定义格式的新消息(使用模板)
-
----
-
-#### action_notify
-
+  
+  ---
+  
+  #### wait_for_reply
+  
+  **功能**: 在指定聊天中等待特定消息的回复(非阻塞轮询)
+  
+  **配置参数**:
+  ```typescript
+  {
+    chatId?: string;        // 目标聊天ID(默认当前聊天)
+    messageIdField: string; // 消息ID来源字段(默认 'sentMessageId')
+    timeout: number;        // 超时秒数(默认 60)
+    pollInterval: number;   // 轮询间隔秒数(默认 5)
+  }
+  ```
+  
+  **输出数据**:
+  ```typescript
+  {
+    botReplyText: string;      // 捕获到的回复文本
+    botReplyMessageId: number; // 回复消息的ID
+  }
+  ```
+  
+  **示例**:
+  ```json
+  {
+    "capabilityId": "wait_for_reply",
+    "config": {
+      "messageIdField": "sentMessageId",
+      "timeout": 30
+    }
+  }
+  ```
+  
+  ---
+  
+  #### action_notify
 **功能**: 向客服人员发送通知
 
 **配置参数**:

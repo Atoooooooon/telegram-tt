@@ -55,10 +55,10 @@ export type PausedChat = {
 /**
  * Customer Service V2 State
  * Ephemeral design - no persistence to IndexedDB
- * Maximum 5000 messages with FIFO cleanup
+ * Bounded in-memory FIFO queue with mode-specific limits
  */
 export type CustomerServiceV2State = {
-  /** Flat array of all CS messages (max 5000, FIFO) */
+  /** Flat array of all CS messages */
   messages: ApiMessage[];
 
   /** Multi-chat lookup map for efficient message display */
@@ -160,7 +160,7 @@ export type CapabilityOutput = {
    */
   deferred?: {
     delay: number; // Delay in milliseconds
-    checkFn: () => Promise<boolean>; // Returns true for success, false for failure
+    checkFn: () => Promise<boolean | { success: boolean; data?: Record<string, any> }>; // Returns result or result with data
   };
 };
 
@@ -193,7 +193,7 @@ export type PipelineStep = {
   capabilityId: string;
   config: Record<string, any>;
   onSuccess?: {
-    continueNext?: boolean;
+    stopPipeline?: boolean;
     gotoStep?: string;
     executeAction?: ActionExecution;
   };

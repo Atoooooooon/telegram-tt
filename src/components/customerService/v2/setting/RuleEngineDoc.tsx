@@ -44,12 +44,12 @@ const RuleEngineDoc: FC = () => {
                 <li>
                   <code>pre-filter</code>
                   {' '}
-                  - 前置规则(在过滤前执行,可处理未监听群组的消息)
+                  - 前置规则(第一层,在监听群判断前执行,仅按 trigger 条件匹配)
                 </li>
                 <li>
                   <code>post-filter</code>
                   {' '}
-                  - 后置规则(在过滤后执行,默认值)
+                  - 后置规则(在基础过滤后执行,默认值)
                 </li>
               </ul>
             </li>
@@ -72,12 +72,12 @@ const RuleEngineDoc: FC = () => {
                 <li>
                   <code>customer_message</code>
                   {' '}
-                  - 客户消息
+                  - 非过滤发送者消息(不在 filteredUserIds 中)
                 </li>
                 <li>
                   <code>bot_reply</code>
                   {' '}
-                  - 机器人回复
+                  - 过滤发送者消息(发送者在 filteredUserIds 中)
                 </li>
                 <li>
                   <code>any_message</code>
@@ -118,8 +118,8 @@ const RuleEngineDoc: FC = () => {
               : 成功时行为 (可选)
               <ul>
                 <li>
-                  <code>continueNext</code>
-                  : 继续下一步 (boolean, 默认 true)
+                  <code>stopPipeline</code>
+                  : 停止执行 (boolean, 默认 false)
                 </li>
                 <li>
                   <code>gotoStep</code>
@@ -127,7 +127,13 @@ const RuleEngineDoc: FC = () => {
                 </li>
                 <li>
                   <code>executeAction</code>
-                  : 执行额外动作能力 (string)
+                  : 执行额外动作能力 (
+                  <code>string</code>
+                  {' '}
+                  或
+                  {' '}
+                  <code>{"{ capabilityId, config }"}</code>
+                  )
                 </li>
               </ul>
             </li>
@@ -145,9 +151,46 @@ const RuleEngineDoc: FC = () => {
                 </li>
                 <li>
                   <code>executeAction</code>
-                  : 执行额外动作能力 (string)
+                  : 执行额外动作能力 (
+                  <code>string</code>
+                  {' '}
+                  或
+                  {' '}
+                  <code>{"{ capabilityId, config }"}</code>
+                  )
                 </li>
               </ul>
+            </li>
+          </ul>
+        </section>
+
+        <section className={styles.docSection}>
+          <h5>默认上下文 (pipelineData)</h5>
+          <p>每条消息进入规则引擎时会初始化以下字段,后续能力输出会继续合并到同一个上下文对象中:</p>
+          <ul>
+            <li>
+              <code>message</code>
+              : 当前消息对象
+            </li>
+            <li>
+              <code>chatId</code>
+              : 消息所在聊天ID
+            </li>
+            <li>
+              <code>chatTitle</code>
+              : 聊天标题(来自消息入口上下文)
+            </li>
+            <li>
+              <code>senderId</code>
+              : 发送者ID
+            </li>
+            <li>
+              <code>text</code>
+              : 消息文本(入口预填充,也可被 OCR/文本处理步骤覆盖)
+            </li>
+            <li>
+              <code>executionLog</code>
+              : 引擎执行日志数组
             </li>
           </ul>
         </section>
@@ -159,74 +202,21 @@ const RuleEngineDoc: FC = () => {
             <h6>
               <code>check_message</code>
               {' '}
-              - 消息检测
+              - 综合检测 (全能校验器)
             </h6>
-            <p>检查消息内容和属性(文本/图片/视频/引用),可组合多种条件</p>
+            <p>检查消息属性、Pipeline 变量或系统元数据。支持多条件组合。</p>
             <ul>
+              <li><strong>基础检查:</strong> <code>textPattern</code> (支持包含/正则/全等), <code>checkHasPhoto</code>, <code>checkHasVideo</code>, <code>checkIsReply</code></li>
               <li>
-                <code>textPattern</code>
-                : 文本匹配模式 (string, 可选,提供后自动启用文本检查)
-              </li>
-              <li>
-                <code>textMode</code>
-                : 文本匹配方式 (string, 可选)
+                <strong>变量对比 (Advanced):</strong>
                 <ul>
-                  <li>
-                    <code>包含</code>
-                    {' '}
-                    - 文本包含关键词 (默认)
-                  </li>
-                  <li>
-                    <code>正则</code>
-                    {' '}
-                    - 正则表达式匹配
-                  </li>
-                  <li>
-                    <code>完全相等</code>
-                    {' '}
-                    - 文本完全相同
-                  </li>
+                  <li><code>variableKey</code>: 要检查的变量名 (如 <code>botReplyText</code> 或 <code>chat.title</code>)</li>
+                  <li><code>variableOperator</code>: 操作符 (contains, equals, regex, exists, not_exists)</li>
+                  <li><code>variableExpectedValue</code>: 期望值 (支持 <code>{"{{变量}}"}</code> 语法)</li>
                 </ul>
               </li>
-              <li>
-                <code>checkHasPhoto</code>
-                : 检查是否有图片 (boolean, 默认 false)
-              </li>
-              <li>
-                <code>checkHasVideo</code>
-                : 检查是否有视频 (boolean, 默认 false)
-              </li>
-              <li>
-                <code>checkIsReply</code>
-                : 检查是否有引用 (boolean, 默认 false)
-              </li>
             </ul>
-            <p>
-              <strong>重要:</strong>
-              {' '}
-              所有启用的检查项都必须通过才会返回 success=true。
-              例如提供 textPattern 且 checkHasPhoto=true 时,消息必须同时包含文本匹配和图片。
-            </p>
-            <p>
-              <strong>输出数据:</strong>
-              {' '}
-              <code>textMatched</code>
-              ,
-              {' '}
-              <code>matchedText</code>
-              ,
-              {' '}
-              <code>hasPhoto</code>
-              ,
-              {' '}
-              <code>hasVideo</code>
-              ,
-              {' '}
-              <code>isReply</code>
-              ,
-              {' '}
-              <code>replyInfo</code>
-            </p>
+            <p><strong>逻辑:</strong> 所有启用的检查项必须全部通过 (AND 逻辑) 才会返回 success。</p>
           </div>
 
           <div className={styles.capabilityItem}>
@@ -266,8 +256,8 @@ const RuleEngineDoc: FC = () => {
                     : 跳转到指定步骤
                   </li>
                   <li>
-                    <code>continueNext</code>
-                    : 是否继续下一步 (默认 true)
+                    <code>stopPipeline</code>
+                    : 是否停止流水线
                   </li>
                 </ul>
               </li>
@@ -500,6 +490,148 @@ const RuleEngineDoc: FC = () => {
 
           <div className={styles.capabilityItem}>
             <h6>
+              <code>ocr_image</code>
+              {' '}
+              - 图片文字识别
+            </h6>
+            <p>调用外部 OCR 服务识别图片文字(百度/腾讯)，可将结果写入 pipelineData 供后续步骤使用</p>
+
+            <h6>基础配置</h6>
+            <ul>
+              <li>
+                <code>provider</code>
+                : 服务商 (string, baidu/tencent, 默认 baidu)
+              </li>
+              <li>
+                <code>outputField</code>
+                : 识别文本输出字段 (string, 默认 ocrText)
+              </li>
+              <li>
+                <code>linesField</code>
+                : 行结果输出字段 (string, 默认 ocrLines)
+              </li>
+              <li>
+                <code>rawField</code>
+                : 原始响应输出字段 (string, 默认 ocrRaw)
+              </li>
+              <li>
+                <code>setText</code>
+                : 写入 pipelineData.text (boolean, 默认 true)
+              </li>
+              <li>
+                <code>ignoreMissingImage</code>
+                : 无图片时忽略 (boolean, 默认 false)
+              </li>
+              <li>
+                <code>failOnEmpty</code>
+                : 识别为空视为失败 (boolean, 默认 true)
+              </li>
+              <li>
+                <code>languageType</code>
+                : 语言参数(服务商自定义) (string, 可选)
+              </li>
+            </ul>
+
+            <h6>百度 OCR 配置</h6>
+            <ul>
+              <li>
+                <code>baiduApiKey</code>
+                : 百度 API Key (string)
+              </li>
+              <li>
+                <code>baiduSecretKey</code>
+                : 百度 Secret Key (string)
+              </li>
+              <li>
+                <code>baiduAccessToken</code>
+                : 百度 Access Token(可选)
+              </li>
+              <li>
+                <code>baiduProxyUrl</code>
+                : 百度 Proxy 地址(可选)
+              </li>
+              <li>
+                <code>baiduDetectDirection</code>
+                : 检测图像方向 (boolean)
+              </li>
+              <li>
+                <code>baiduDetectLanguage</code>
+                : 检测语言 (boolean)
+              </li>
+              <li>
+                <code>baiduParagraph</code>
+                : 返回段落信息 (boolean)
+              </li>
+              <li>
+                <code>baiduProbability</code>
+                : 返回置信度 (boolean)
+              </li>
+            </ul>
+
+            <h6>腾讯 OCR 配置</h6>
+            <ul>
+              <li>
+                <code>tencentSecretId</code>
+                : 腾讯 SecretId (string)
+              </li>
+              <li>
+                <code>tencentSecretKey</code>
+                : 腾讯 SecretKey (string)
+              </li>
+              <li>
+                <code>tencentRegion</code>
+                : 腾讯 Region(可选)
+              </li>
+              <li>
+                <code>tencentIsPdf</code>
+                : 是否为 PDF (boolean)
+              </li>
+              <li>
+                <code>tencentPdfPageNumber</code>
+                : PDF 页码 (number)
+              </li>
+              <li>
+                <code>tencentIsWords</code>
+                : 输出单字信息 (boolean)
+              </li>
+            </ul>
+
+            <p>
+              <strong>输出数据:</strong>
+              {' '}
+              <code>outputField</code>
+              (默认
+              {' '}
+              <code>ocrText</code>
+              )
+              ,
+              {' '}
+              <code>linesField</code>
+              ,
+              {' '}
+              <code>rawField</code>
+              ,
+              {' '}
+              <code>ocrProvider</code>
+            </p>
+
+            <h6>配置示例(百度)</h6>
+            <pre className={styles.codeExample}>
+              {`{
+  "capabilityId": "ocr_image",
+  "config": {
+    "provider": "baidu",
+    "baiduProxyUrl": "/api/ocr/baidu",
+    "baiduApiKey": "YOUR_API_KEY",
+    "baiduSecretKey": "YOUR_SECRET_KEY",
+    "outputField": "ocrText"
+  }
+}`}
+            </pre>
+          </div>
+
+          <div className={styles.capabilityItem}>
+            <h6>
               <code>action_mark_read</code>
               {' '}
               - 标记为已读
@@ -563,6 +695,9 @@ const RuleEngineDoc: FC = () => {
                 <code>{'{{text}}'}</code>
                 ,
                 {' '}
+                <code>{'{{chatTitle}}'}</code>
+                ,
+                {' '}
                 <code>{'{{chatId}}'}</code>
                 ,
                 {' '}
@@ -583,6 +718,9 @@ const RuleEngineDoc: FC = () => {
               <strong>输出数据:</strong>
               {' '}
               <code>repliedText</code>
+              ,
+              {' '}
+              <code>sentMessageId</code>
             </p>
           </div>
 
@@ -652,34 +790,20 @@ const RuleEngineDoc: FC = () => {
               - 发送消息到窗口
             </h6>
             <p>
-              发送新消息到指定聊天窗口,支持
+              发送新消息到指定聊天窗口, 支持
               {' '}
               <code>{'{{变量}}'}</code>
               {' '}
-              模板语法
+              模板语法。
             </p>
             <ul>
               <li>
                 <code>toChatId</code>
                 : 目标聊天ID (string, 必填)
-                <br />
-                输入目标聊天的ID
               </li>
               <li>
                 <code>template</code>
                 : 消息模板 (string, 必填)
-                <br />
-                可用变量:
-                {' '}
-                <code>{'{{text}}'}</code>
-                ,
-                {' '}
-                <code>{'{{chatId}}'}</code>
-                ,
-                {' '}
-                <code>{'{{senderId}}'}</code>
-                {' '}
-                及管道中的其他数据
               </li>
             </ul>
             <p>
@@ -689,303 +813,124 @@ const RuleEngineDoc: FC = () => {
               ,
               {' '}
               <code>sentText</code>
+              ,
+              {' '}
+              <code>sentMessageId</code>
+              {' '}
+              (用于后续等待回复)
+            </p>
+          </div>
+
+          <div className={styles.capabilityItem}>
+            <h6>
+              <code>wait_for_reply</code>
+              {' '}
+              - 等待回复 (异步)
+            </h6>
+            <p>
+              在指定聊天中等待特定消息的回复
+              <strong>(非阻塞异步能力)</strong>
+            </p>
+            <ul>
+              <li>
+                <code>chatId</code>
+                : 目标聊天ID (string, 默认当前聊天)
+              </li>
+              <li>
+                <code>messageIdField</code>
+                : 消息ID来源字段 (string, 默认 sentMessageId)
+              </li>
+              <li>
+                <code>timeout</code>
+                : 超时秒数 (number, 默认 60)
+              </li>
+              <li>
+                <code>pollInterval</code>
+                : 轮询间隔秒数 (number, 默认 5)
+              </li>
+            </ul>
+            <p>
+              <strong>输出数据:</strong>
+              {' '}
+              <code>botReplyText</code>
+              ,
+              {' '}
+              <code>botReplyMessageId</code>
             </p>
           </div>
         </section>
 
         <section className={styles.docSection}>
-          <h5>配置示例</h5>
-
-          <h6>示例 1: AI 回复"已解决"自动标记</h6>
+          <h5>全能示例：OCR 识别 + 跨群机器人查询</h5>
+          <p>此示例展示了如何将多个能力组合成一个自动化的查单工作流：</p>
           <pre className={styles.codeExample}>
             {`{
-  "id": "ai_solved_auto_mark",
-  "name": "AI完成自动清除",
+  "id": "master_ocr_query",
+  "name": "全自动 OCR 跨群查单",
   "enabled": true,
-  "trigger": {
-    "eventType": "bot_reply",
-    "senderIds": ["your_bot_id"]
-  },
+  "trigger": { "eventType": "customer_message" },
   "pipeline": [
     {
-      "id": "check_solved",
+      "id": "check_photo",
       "capabilityId": "check_message",
+      "config": { "checkHasPhoto": true },
+      "onFailure": { "stopPipeline": true }
+    },
+    {
+      "id": "ocr_step",
+      "capabilityId": "ocr_image",
+      "config": { "provider": "baidu", "setText": true }
+    },
+    {
+      "id": "extract_rrn",
+      "capabilityId": "text_processor",
       "config": {
-        "textPattern": "已解决|已处理|问题解决",
-        "textMode": "正则"
+        "extractEnabled": true,
+        "extractPattern": "RRN:?\\s*([A-Z0-9]{10,15})",
+        "outputField": "rrn"
       },
       "onFailure": { "stopPipeline": true }
     },
     {
-      "id": "mark_done",
-      "capabilityId": "action_mark_read",
-      "config": {
-        "targetMessage": "回复的原消息"
-      }
-    }
-  ]
-}`}
-          </pre>
-
-          <h6>示例 2: 关键词自动回复</h6>
-          <pre className={styles.codeExample}>
-            {`{
-  "id": "keyword_auto_reply",
-  "name": "退款自动回复",
-  "enabled": true,
-  "trigger": {
-    "eventType": "customer_message"
-  },
-  "pipeline": [
-    {
-      "id": "check_keyword",
-      "capabilityId": "check_message",
-      "config": {
-        "textPattern": "退款|退货",
-        "textMode": "正则"
-      },
-      "onFailure": { "stopPipeline": true }
-    },
-    {
-      "id": "send_reply",
-      "capabilityId": "action_auto_reply",
-      "config": {
-        "template": "您好，退款问题请提供订单号，我们会尽快处理",
-        "replyToOriginal": true,
-        "typingDelayMs": 1200
-      }
-    }
-  ]
-}`}
-          </pre>
-
-          <h6>示例 3: 未回复自动转人工(支持后续步骤)</h6>
-          <pre className={styles.codeExample}>
-            {`{
-  "id": "no_reply_auto_queue",
-  "name": "5分钟未回复自动提醒并转人工",
-  "enabled": true,
-  "trigger": {
-    "eventType": "customer_message"
-  },
-  "pipeline": [
-    {
-      "id": "schedule_check",
-      "capabilityId": "check_has_reply",
-      "config": {
-        "timeWindow": 300
-      },
-      "onSuccess": {
-        "continueNext": false
-      },
-      "onFailure": {
-        "continueNext": true
-      }
-    },
-    {
-      "id": "send_wait_message",
-      "capabilityId": "action_auto_reply",
-      "config": {
-        "template": "您的问题暂时无人回复,正在为您转接人工客服",
-        "replyToOriginal": true
-      }
-    },
-    {
-      "id": "add_to_queue",
-      "capabilityId": "action_add_queue",
-      "config": {}
-    }
-  ]
-}`}
-          </pre>
-
-          <h6>示例 4: 检测带图片的消息并回复</h6>
-          <pre className={styles.codeExample}>
-            {`{
-  "id": "photo_auto_reply",
-  "name": "图片消息自动回复",
-  "enabled": true,
-  "trigger": {
-    "eventType": "customer_message"
-  },
-  "pipeline": [
-    {
-      "id": "check_has_photo",
-      "capabilityId": "check_message",
-      "config": {
-        "checkHasPhoto": true
-      },
-      "onFailure": { "stopPipeline": true }
-    },
-    {
-      "id": "send_reply",
-      "capabilityId": "action_auto_reply",
-      "config": {
-        "template": "感谢您发送图片，我们会尽快查看",
-        "replyToOriginal": true
-      }
-    }
-  ]
-}`}
-          </pre>
-
-          <h6>示例 5: 组合检测(文本+图片)</h6>
-          <pre className={styles.codeExample}>
-            {`{
-  "id": "text_photo_combo",
-  "name": "退款+图片自动回复",
-  "enabled": true,
-  "trigger": {
-    "eventType": "customer_message"
-  },
-  "pipeline": [
-    {
-      "id": "check_combo",
-      "capabilityId": "check_message",
-      "config": {
-        "textPattern": "退款",
-        "textMode": "包含",
-        "checkHasPhoto": true
-      },
-      "onFailure": { "stopPipeline": true }
-    },
-    {
-      "id": "send_reply",
-      "capabilityId": "action_auto_reply",
-      "config": {
-        "template": "已收到您的退款申请和凭证图片，我们会在24小时内处理",
-        "replyToOriginal": true
-      }
-    }
-  ]
-}`}
-          </pre>
-
-          <h6>示例 6: 前置规则 (拦截广告并完全接管)</h6>
-          <pre className={styles.codeExample}>
-            {`{
-  "id": "spam_filter_prefilter",
-  "name": "广告拦截(前置)",
-  "enabled": true,
-  "executionPhase": "pre-filter",
-  "skipPostProcessing": true,
-  "trigger": {
-    "eventType": "any_message"
-  },
-  "pipeline": [
-    {
-      "id": "check_spam",
-      "capabilityId": "check_message",
-      "config": {
-        "textPattern": "加微信|广告|推广",
-        "textMode": "正则"
-      },
-      "onFailure": { "stopPipeline": true }
-    },
-    {
-      "id": "auto_delete",
-      "capabilityId": "action_auto_reply",
-      "config": {
-        "template": "检测到广告消息,已自动处理",
-        "replyToOriginal": false
-      }
-    }
-  ]
-}`}
-          </pre>
-
-          <h6>示例 7: executeAction 传递参数</h6>
-          <pre className={styles.codeExample}>
-            {`{
-  "id": "no_reply_with_message",
-  "name": "未回复自动提醒并转人工",
-  "enabled": true,
-  "trigger": {
-    "eventType": "customer_message"
-  },
-  "pipeline": [
-    {
-      "id": "schedule_check",
-      "capabilityId": "check_has_reply",
-      "config": {
-        "timeWindow": 300
-      },
-      "onFailure": {
-        "executeAction": {
-          "capabilityId": "action_auto_reply",
-          "config": {
-            "template": "您的问题已超过5分钟无人回复,已转人工客服处理",
-            "replyToOriginal": true
-          }
-        }
-      }
-    }
-  ]
-}`}
-          </pre>
-
-          <h6>示例 8: 转发消息到监控群</h6>
-          <pre className={styles.codeExample}>
-            {`{
-  "id": "forward_to_monitor",
-  "name": "关键词消息转发到监控群",
-  "enabled": true,
-  "trigger": {
-    "eventType": "customer_message"
-  },
-  "pipeline": [
-    {
-      "id": "check_keyword",
-      "capabilityId": "check_message",
-      "config": {
-        "textPattern": "投诉|退款|差评",
-        "textMode": "正则"
-      },
-      "onFailure": { "stopPipeline": true }
-    },
-    {
-      "id": "forward_message",
-      "capabilityId": "action_forward",
-      "config": {
-        "toChatId": "-1001234567890",
-        "dropAuthor": false,
-        "dropCaption": false
-      }
-    }
-  ]
-}`}
-          </pre>
-
-          <h6>示例 9: 发送通知到管理群</h6>
-          <pre className={styles.codeExample}>
-            {`{
-  "id": "notify_admin_group",
-  "name": "重要消息通知管理群",
-  "enabled": true,
-  "trigger": {
-    "eventType": "customer_message"
-  },
-  "pipeline": [
-    {
-      "id": "check_important",
-      "capabilityId": "check_message",
-      "config": {
-        "textPattern": "紧急|重要|加急",
-        "textMode": "正则"
-      },
-      "onFailure": { "stopPipeline": true }
-    },
-    {
-      "id": "send_notification",
+      "id": "send_to_bot",
       "capabilityId": "action_send_to",
       "config": {
-        "toChatId": "-1001234567890",
-        "template": "🚨 检测到重要消息\\n来自: {{senderId}}\\n内容: {{text}}"
+        "toChatId": "-100123456789",
+        "template": "查询单号: {{rrn}}"
+      }
+    },
+    {
+      "id": "wait_bot",
+      "capabilityId": "wait_for_reply",
+      "config": {
+        "chatId": "-100123456789",
+        "messageIdField": "sentMessageId",
+        "timeout": 60
+      }
+    },
+    {
+      "id": "reply_user",
+      "capabilityId": "action_auto_reply",
+      "config": {
+        "template": "您的订单 {{rrn}} 状态：\\n{{botReplyText}}"
       }
     }
   ]
 }`}
           </pre>
+
+          <h6>常用精简示例</h6>
+          <ul>
+            <li>
+              <strong>AI 已解决自动已读</strong>: 监听 <code>bot_reply</code>，使用 <code>check_message</code> 正则匹配关键词，最后 <code>action_mark_read</code>。
+            </li>
+            <li>
+              <strong>5分钟超时转人工</strong>: 使用 <code>check_has_reply</code> 设置 300秒，在 <code>onFailure</code> 中执行 <code>action_add_queue</code>。
+            </li>
+            <li>
+              <strong>关键词转发</strong>: <code>check_message</code> 匹配敏感词，<code>action_forward</code> 到管理群。
+            </li>
+          </ul>
         </section>
 
         <section className={styles.docSection}>
@@ -999,7 +944,12 @@ const RuleEngineDoc: FC = () => {
             <li>
               <strong>步骤延迟:</strong>
               {' '}
-              规则引擎会在每个 action 类型的步骤执行后自动随机延迟(1-10秒),用于防止 Telegram API 限流封号。
+              仅 action 步骤会有随机延迟,范围约 2-8 秒。
+              若在路由中使用
+              {' '}
+              <code>executeAction</code>
+              {' '}
+              ,动作执行前还会再叠加一次约 2-8 秒延迟。
             </li>
             <li>
               <strong>executeAction 参数:</strong>
@@ -1009,7 +959,8 @@ const RuleEngineDoc: FC = () => {
             <li>
               <strong>执行阶段:</strong>
               {' '}
-              前置规则(pre-filter)在过滤前执行,后置规则(post-filter)在过滤后执行。前置规则会处理所有消息,性能开销较大,请谨慎使用
+              三层顺序为: 前置规则(pre-filter) → 基础过滤(监听群/暂停/基础过滤器) → 后置规则(post-filter,默认)。
+              前置规则不受监听群列表限制,仅由规则 trigger 判定是否执行。
             </li>
             <li>
               <strong>跳过后续处理:</strong>
@@ -1024,7 +975,20 @@ const RuleEngineDoc: FC = () => {
             <li>
               <strong>管道中断:</strong>
               {' '}
-              onFailure.stopPipeline 默认 false,检测类能力建议设为 true
+              onSuccess/onFailure 未设置
+              {' '}
+              <code>stopPipeline</code>
+              {' '}
+              时默认继续执行下一步。
+              但若步骤抛异常且
+              {' '}
+              <code>onFailure.stopPipeline</code>
+              {' '}
+              未显式设为
+              {' '}
+              <code>false</code>
+              {' '}
+              ,引擎会中断当前规则。
             </li>
             <li>
               <strong>异步能力:</strong>
@@ -1039,7 +1003,7 @@ const RuleEngineDoc: FC = () => {
               {' '}
               <code>{'{{变量名}}'}</code>
               {' '}
-              语法,可访问 pipelineData 中的所有数据
+              语法,可访问 pipelineData 中的所有数据。缺失变量会渲染为空字符串。
             </li>
             <li>
               <strong>步骤跳转:</strong>

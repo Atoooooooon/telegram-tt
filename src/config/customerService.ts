@@ -1,10 +1,10 @@
-import type { GlobalState } from '../global/types';
 import type {
   CustomerServiceQuickReply,
 } from '../global/types/customerServiceV2';
 
 const envRedisUrl = process.env.UPSTASH_REDIS_REST_URL as string | undefined;
 const envRedisToken = process.env.UPSTASH_REDIS_REST_TOKEN as string | undefined;
+const ONCALL_MAX_MESSAGES = 100;
 
 // Customer Service Configuration
 export const CUSTOMER_SERVICE_CONFIG = {
@@ -48,8 +48,20 @@ export const CUSTOMER_SERVICE_CONFIG = {
     },
   ] satisfies readonly CustomerServiceQuickReply[],
 
-  // 客服消息的最大保存数量
-  MAX_MESSAGES_DISPLAY: 100,
+  // 客服消息的最大保存数量(兼容旧逻辑)
+  MAX_MESSAGES_DISPLAY: ONCALL_MAX_MESSAGES,
+
+  // 客服消息队列限制(按模式区分)
+  MESSAGE_QUEUE_LIMITS: {
+    oncall: {
+      maxMessages: ONCALL_MAX_MESSAGES,
+      keepMessages: ONCALL_MAX_MESSAGES,
+    },
+    assist: {
+      maxMessages: 50,
+      keepMessages: 30,
+    },
+  },
 
   // 自动刷新间隔(毫秒)
   AUTO_REFRESH_INTERVAL: 5000,

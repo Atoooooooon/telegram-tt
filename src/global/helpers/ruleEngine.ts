@@ -18,11 +18,89 @@ import { selectCustomerServiceV2Settings } from '../selectors/customerServiceV2'
 
 import { randomDelayMs, sleep } from '../../util/delays';
 
-const ACTION_STEP_DELAY_MIN_MS = 1000;
-const ACTION_STEP_DELAY_MAX_MS = 10000;
+// Delay configuration for simulating human behavior
+const ACTION_DELAY_MIN_MS = 2000;
+const ACTION_DELAY_MAX_MS = 8000;
 
-function getRandomActionStepDelayMs(): number {
-  return randomDelayMs(ACTION_STEP_DELAY_MIN_MS, ACTION_STEP_DELAY_MAX_MS);
+function getRandomStepDelayMs(isAction = false): number {
+  if (!isAction) {
+    return 0;
+  }
+
+  return randomDelayMs(ACTION_DELAY_MIN_MS, ACTION_DELAY_MAX_MS);
+}
+
+function getFirstNonEmptyString(...values: Array<string | undefined | null>) {
+  return values.find((value) => typeof value === 'string' && value.trim() !== '');
+}
+
+async function buildInitialPipelineData(
+  message: ApiMessage,
+  global: GlobalState,
+  initialPipelineData?: Record<string, any>,
+) {
+  const [
+    { selectChat, selectPeer, selectSender },
+    { getPeerTitle, getPeerFullTitle },
+    { getMessageText, getMessageStatefulContent },
+    { getMessageSummaryText },
+    { getTranslationFn },
+  ] = await Promise.all([
+    import('../selectors'),
+    import('./peers'),
+    import('./messages'),
+    import('./messageSummary'),
+    import('../../util/localization'),
+  ]);
+
+  const lang = getTranslationFn();
+  const chat = selectChat(global, message.chatId);
+  const chatPeer = selectPeer(global, message.chatId) || chat;
+  const sender = selectSender(global, message);
+  const rawText = getMessageText(message)?.text;
+  const previewText = getMessageSummaryText(lang, message, getMessageStatefulContent(global, message));
+
+  const chatTitle = getFirstNonEmptyString(
+    typeof initialPipelineData?.chatTitle === 'string' ? initialPipelineData.chatTitle : undefined,
+    typeof initialPipelineData?.chatName === 'string' ? initialPipelineData.chatName : undefined,
+    chatPeer ? getPeerTitle(lang, chatPeer) : undefined,
+    chat?.title,
+    message.chatId,
+  ) || '';
+
+  const senderName = getFirstNonEmptyString(
+    typeof initialPipelineData?.senderName === 'string' ? initialPipelineData.senderName : undefined,
+    typeof initialPipelineData?.sender === 'string' ? initialPipelineData.sender : undefined,
+    sender ? getPeerFullTitle(lang, sender) : undefined,
+    sender ? getPeerTitle(lang, sender) : undefined,
+    message.senderId,
+  ) || '';
+
+  const text = getFirstNonEmptyString(
+    typeof initialPipelineData?.text === 'string' ? initialPipelineData.text : undefined,
+    rawText,
+    previewText,
+  ) || '';
+
+  const resolvedPreviewText = getFirstNonEmptyString(
+    typeof initialPipelineData?.previewText === 'string' ? initialPipelineData.previewText : undefined,
+    previewText,
+    rawText,
+  ) || '';
+
+  return {
+    ...initialPipelineData,
+    message,
+    chatId: message.chatId,
+    chatTitle,
+    chatName: chatTitle,
+    senderId: message.senderId || '',
+    sender: senderName,
+    senderName,
+    text,
+    previewText: resolvedPreviewText,
+    executionLog: [],
+  } as Record<string, any>;
 }
 
 // Capability registry
@@ -33,7 +111,7 @@ const capabilityRegistry = new Map<string, Capability>();
  */
 type DeferredTask = {
   delay: number;
-  checkFn: () => Promise<boolean>;
+  checkFn: () => Promise<boolean | { success: boolean; data?: Record<string, any> }>;
   pipeline: PipelineStep[];
   stepIndex: number;
   message: ApiMessage;
@@ -48,78 +126,41 @@ type DeferredTask = {
 function registerDeferredTask(task: DeferredTask): void {
   setTimeout(async () => {
     try {
-      // eslint-disable-next-line no-console
-      console.log(`[RuleEngine:Async] Executing deferred task for message ${task.message.id}`);
+      logExecution(task.pipelineData, `[Async] Executing deferred task for message ${task.message.id}`);
 
       // Execute the check function to get success/failure
-      const success = await task.checkFn();
+      const checkResult = await task.checkFn();
+      const success = typeof checkResult === 'boolean' ? checkResult : checkResult.success;
+      const resultData = typeof checkResult === 'boolean' ? undefined : checkResult.data;
 
-      // eslint-disable-next-line no-console
-      console.log(`[RuleEngine:Async] Check result: ${success ? 'success' : 'failure'}`);
-
-      // Get the current step and its routing config
-      const step = task.pipeline[task.stepIndex];
+      logExecution(task.pipelineData, `[Async] Check result: ${success ? 'success' : 'failure'}`);
 
       // Get fresh global state
       const { getGlobal } = await import('../index');
       const freshGlobal = getGlobal();
 
-      // Create input for routing
-      const input: CapabilityInput = {
-        message: task.message,
-        config: step.config,
-        global: freshGlobal,
-        actions: task.actions,
-        pipelineData: task.pipelineData,
-        step,
-      };
-
-      // Handle routing based on success/failure (same logic as sync engine)
-      let nextStepIndex = task.stepIndex + 1;
-      let shouldContinue = true;
-
-      if (success) {
-        if (step.onSuccess?.executeAction) {
-          await executeAction(step.onSuccess.executeAction, input);
-        }
-
-        if (step.onSuccess?.gotoStep) {
-          const targetIndex = task.pipeline.findIndex(
-            (s) => s.id === step.onSuccess!.gotoStep,
-          );
-          if (targetIndex !== -1) {
-            nextStepIndex = targetIndex;
-          }
-        }
-
-        if (step.onSuccess?.continueNext === false) {
-          shouldContinue = false;
-        }
-      } else {
-        if (step.onFailure?.executeAction) {
-          await executeAction(step.onFailure.executeAction, input);
-        }
-
-        if (step.onFailure?.gotoStep) {
-          const targetIndex = task.pipeline.findIndex(
-            (s) => s.id === step.onFailure!.gotoStep,
-          );
-          if (targetIndex !== -1) {
-            nextStepIndex = targetIndex;
-          }
-        }
-
-        if (step.onFailure?.stopPipeline) {
-          shouldContinue = false;
-        }
+      // Update pipeline data with result data if available
+      if (resultData) {
+        Object.assign(task.pipelineData, resultData);
       }
 
-      // Continue pipeline execution if needed
-      if (shouldContinue && nextStepIndex < task.pipeline.length) {
-        // eslint-disable-next-line no-console
-        console.log(`[RuleEngine:Async] Continuing pipeline from step ${nextStepIndex + 1}`);
+      const currentStep = task.pipeline[task.stepIndex];
+      const { nextStepIndex, shouldContinue } = await handleRouting(
+        success,
+        currentStep,
+        task.pipeline,
+        task.stepIndex,
+        task.message,
+        freshGlobal,
+        task.actions,
+        task.pipelineData,
+      );
 
-        await executePipelineFromStep(
+      // Continue pipeline execution if needed
+      if (shouldContinue && nextStepIndex !== undefined && nextStepIndex < task.pipeline.length) {
+        logExecution(task.pipelineData, `[Async] Continuing pipeline from step ${nextStepIndex + 1}`);
+
+        await executePipelineInternal(
           task.pipeline,
           nextStepIndex,
           task.message,
@@ -164,7 +205,6 @@ export function isCapabilityRegistered(capabilityId: string): boolean {
 
 /**
  * Validate that every capability referenced in provided rules is registered
- * Throws early so built-in rule configs can't silently rot
  */
 export function validateRuleCapabilities(rules?: UserRule[], context: string = 'rules'): void {
   if (!rules?.length) {
@@ -209,131 +249,185 @@ export function validateRuleCapabilities(rules?: UserRule[], context: string = '
 }
 
 /**
- * Execute a single rule
+ * Log execution message to pipelineData
  */
-export async function executeRule(
-  rule: UserRule,
+function logExecution(pipelineData: Record<string, any>, message: string, stepId?: string) {
+  if (!pipelineData.executionLog) {
+    pipelineData.executionLog = [];
+  }
+  const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+  const stepInfo = stepId ? ` [Step: ${stepId}]` : '';
+  const logEntry = `[${timestamp}]${stepInfo} ${message}`;
+  pipelineData.executionLog.push(logEntry);
+  // eslint-disable-next-line no-console
+  console.log(`[RuleEngine]${stepInfo} ${message}`);
+}
+
+/**
+ * Handle routing logic after a step execution
+ */
+async function handleRouting(
+  success: boolean,
+  step: PipelineStep,
+  pipeline: PipelineStep[],
+  currentIndex: number,
   message: ApiMessage,
   global: GlobalState,
   actions: any,
-): Promise<boolean> {
-  const pipelineData: Record<string, any> = {
+  pipelineData: Record<string, any>,
+): Promise<{ nextStepIndex?: number; shouldContinue: boolean }> {
+  const routing = success ? step.onSuccess : step.onFailure;
+  let nextStepIndex = currentIndex + 1;
+  let shouldContinue = true;
+
+  const input: CapabilityInput = {
     message,
-    chatId: message.chatId,
-    senderId: message.senderId || '',
-    text: '', // Will be populated by capabilities
+    config: step.config,
+    global,
+    actions,
+    pipelineData,
+    step,
   };
 
-  // eslint-disable-next-line no-console
-  console.log(`[RuleEngine] Executing rule: ${rule.name} (${rule.id})`);
+  if (routing?.executeAction) {
+    await executeAction(routing.executeAction, input);
+  }
 
-  let currentStepIndex = 0;
+  if (routing?.gotoStep) {
+    const targetIndex = pipeline.findIndex((s) => s.id === routing.gotoStep);
+    if (targetIndex !== -1) {
+      nextStepIndex = targetIndex;
+    } else {
+      logExecution(pipelineData, `Routing error: Step "${routing.gotoStep}" not found`);
+    }
+  }
+
+  // Consistent stop logic
+  if (routing?.stopPipeline) {
+    shouldContinue = false;
+  }
+
+  return { nextStepIndex, shouldContinue };
+}
+
+/**
+ * Internal common pipeline execution logic
+ */
+async function executePipelineInternal(
+  pipeline: PipelineStep[],
+  startIndex: number,
+  message: ApiMessage,
+  global: GlobalState,
+  actions: any,
+  pipelineData: Record<string, any>,
+): Promise<{ ruleMatched: boolean; terminatedByFailure: boolean }> {
+  let currentStepIndex = startIndex;
   let ruleMatched = false;
   let terminatedByFailure = false;
 
-  while (currentStepIndex < rule.pipeline.length) {
-    const step = rule.pipeline[currentStepIndex];
+  while (currentStepIndex < pipeline.length) {
+    const step = pipeline[currentStepIndex];
+    const stepId = step.id || String(currentStepIndex + 1);
     const capability = capabilityRegistry.get(step.capabilityId);
 
     if (!capability) {
-      console.error(`[RuleEngine] Capability not found: ${step.capabilityId}`);
+      logExecution(pipelineData, `Error: Capability not found: ${step.capabilityId}`, stepId);
       terminatedByFailure = true;
       break;
     }
 
-    // eslint-disable-next-line no-console
-    console.log(`  Step ${currentStepIndex + 1}: ${capability.name}`);
+    logExecution(pipelineData, `Capability: ${capability.name}`, stepId);
 
     try {
+      // Human-like delay only for action steps that may call Telegram APIs
+      const delayMs = getRandomStepDelayMs(capability.type === 'action');
+      if (delayMs > 0) {
+        logExecution(pipelineData, `Simulating human delay: ${delayMs}ms`, stepId);
+        await sleep(delayMs);
+      }
+
+      // --- Sanity Check: Ensure message still exists in GlobalState ---
+      const { getGlobal } = await import('../index');
+      const { selectChatMessage } = await import('../selectors');
+      const freshGlobal = getGlobal();
+      const currentMessage = selectChatMessage(freshGlobal, message.chatId, message.id);
+
+      if (!currentMessage) {
+        logExecution(pipelineData, 'Abort: Message was deleted by user during processing.', stepId);
+        return { ruleMatched, terminatedByFailure: true };
+      }
+      // ------------------------------------------------------------
+
       const input: CapabilityInput = {
-        message,
+        message: currentMessage, // Use the latest version of the message
         config: step.config,
-        global,
+        global: freshGlobal,
         actions,
         pipelineData,
-        step, // Pass step for async capabilities
+        step,
       };
 
       const result: CapabilityOutput = await capability.execute(input);
 
-      // Merge output data into pipeline data
+      // Log step result
+      logExecution(pipelineData, `Step Result: ${result.success ? 'SUCCESS' : 'FAILURE'}${result.error ? ` - Error: ${result.error}` : ''}`, stepId);
+      if (result.data && Object.keys(result.data).length > 0) {
+        logExecution(pipelineData, `Step Output: ${JSON.stringify(result.data)}`, stepId);
+      }
+
+      // Merge output data
       if (result.data) {
         Object.assign(pipelineData, result.data);
       }
 
-      // Handle deferred execution (async capabilities)
+      // Handle async deferred execution
       if (result.deferred) {
-        // eslint-disable-next-line no-console
-        console.log(`[RuleEngine] Capability returned deferred task, scheduling async execution in ${result.deferred.delay}ms`);
-
-        // Register deferred task
+        logExecution(pipelineData, `Step requested deferred execution (delay: ${result.deferred.delay}ms)`);
         registerDeferredTask({
           delay: result.deferred.delay,
           checkFn: result.deferred.checkFn,
-          pipeline: rule.pipeline,
+          pipeline,
           stepIndex: currentStepIndex,
           message,
           actions,
-          pipelineData: { ...pipelineData }, // Clone to preserve state
+          pipelineData: { ...pipelineData }, // Ensure current step data is included
         });
-
-        // Sync engine stops here, deferred task will continue later
         ruleMatched = true;
         break;
       }
 
-      // Add delay after action capabilities to prevent rate limiting
-      if (capability.type === 'action') {
-        const stepDelayMs = getRandomActionStepDelayMs();
-        // eslint-disable-next-line no-console
-        console.log(`[RuleEngine] Waiting ${stepDelayMs}ms after action to prevent rate limiting`);
-        await sleep(stepDelayMs);
-      }
-
-      // Handle routing
       if (result.success) {
         ruleMatched = true;
-        if (step.onSuccess?.executeAction) {
-          await executeAction(step.onSuccess.executeAction, input);
-        }
-
-        if (step.onSuccess?.gotoStep) {
-          const targetIndex = rule.pipeline.findIndex(
-            (s) => s.id === step.onSuccess!.gotoStep,
-          );
-          if (targetIndex !== -1) {
-            currentStepIndex = targetIndex;
-            continue;
-          }
-        }
-
-        if (step.onSuccess?.continueNext === false) {
-          break;
-        }
-      } else {
-        if (step.onFailure?.executeAction) {
-          await executeAction(step.onFailure.executeAction, input);
-        }
-
-        if (step.onFailure?.gotoStep) {
-          const targetIndex = rule.pipeline.findIndex(
-            (s) => s.id === step.onFailure!.gotoStep,
-          );
-          if (targetIndex !== -1) {
-            currentStepIndex = targetIndex;
-            continue;
-          }
-        }
-
-        if (step.onFailure?.stopPipeline) {
-          terminatedByFailure = true;
-          break;
-        }
       }
 
-      currentStepIndex++;
+      // Routing
+      const { nextStepIndex, shouldContinue } = await handleRouting(
+        result.success,
+        step,
+        pipeline,
+        currentStepIndex,
+        message,
+        global,
+        actions,
+        pipelineData,
+      );
+
+      if (nextStepIndex !== undefined && nextStepIndex !== currentStepIndex + 1) {
+        const nextStep = pipeline[nextStepIndex];
+        logExecution(pipelineData, `Routing: jumping to step ${nextStepIndex + 1} (${nextStep?.id || nextStep?.capabilityId})`);
+      }
+
+      if (!shouldContinue) {
+        logExecution(pipelineData, `Pipeline requested to STOP (Reason: ${result.success ? 'Success termination' : 'Failure termination'})`);
+        if (!result.success && step.onFailure?.stopPipeline) {
+          terminatedByFailure = true;
+        }
+        break;
+      }
+
+      currentStepIndex = nextStepIndex!;
     } catch (error) {
-      console.error(`[RuleEngine] Step ${currentStepIndex + 1} failed:`, error);
+      logExecution(pipelineData, `Step failed with error: ${error instanceof Error ? error.message : String(error)}`);
       if (step.onFailure?.stopPipeline !== false) {
         terminatedByFailure = true;
         break;
@@ -342,19 +436,43 @@ export async function executeRule(
     }
   }
 
+  return { ruleMatched, terminatedByFailure };
+}
+
+/**
+ * Execute a single rule
+ */
+export async function executeRule(
+  rule: UserRule,
+  message: ApiMessage,
+  global: GlobalState,
+  actions: any,
+  initialPipelineData?: Record<string, any>,
+): Promise<boolean> {
+  const pipelineData = await buildInitialPipelineData(message, global, initialPipelineData);
+
+  logExecution(pipelineData, `Starting rule: ${rule.name} (${rule.id})`);
+
+  const { ruleMatched, terminatedByFailure } = await executePipelineInternal(
+    rule.pipeline,
+    0,
+    message,
+    global,
+    actions,
+    pipelineData,
+  );
+
+  logExecution(pipelineData, `Rule finished. Matched: ${ruleMatched}, TerminatedByFailure: ${terminatedByFailure}`);
   return ruleMatched && !terminatedByFailure;
 }
 
 /**
  * Execute an action capability
- * Supports both simple string action ID and object with config
- * Exported for use by async capabilities
  */
 export async function executeAction(
-  actionExecution: string | { capabilityId: string; config?: Record<string, any> },
+  actionExecution: ActionExecution,
   input: CapabilityInput,
 ): Promise<void> {
-  // Parse action execution config
   const actionId = typeof actionExecution === 'string'
     ? actionExecution
     : actionExecution.capabilityId;
@@ -364,32 +482,30 @@ export async function executeAction(
 
   const capability = capabilityRegistry.get(actionId);
   if (!capability || capability.type !== 'action') {
-    console.error(`[RuleEngine] Action not found: ${actionId}`);
+    logExecution(input.pipelineData, `Action error: Not found or not an action: ${actionId}`);
     return;
   }
 
   try {
-    // Merge action config with input
+    // Simulate human behavior: additional delay before actions like replying
+    const delayMs = getRandomStepDelayMs(true);
+    logExecution(input.pipelineData, `Action human delay: ${delayMs}ms before ${capability.name}`);
+    await sleep(delayMs);
+
     const actionInput: CapabilityInput = {
       ...input,
       config: actionConfig,
     };
-    await capability.execute(actionInput);
 
-    // Add delay after action to prevent rate limiting
-    const stepDelayMs = getRandomActionStepDelayMs();
-    // eslint-disable-next-line no-console
-    console.log(`[RuleEngine] Waiting ${stepDelayMs}ms after executeAction to prevent rate limiting`);
-    await sleep(stepDelayMs);
+    logExecution(input.pipelineData, `Executing action: ${capability.name}`);
+    await capability.execute(actionInput);
   } catch (error) {
-    console.error(`[RuleEngine] Action ${actionId} failed:`, error);
+    logExecution(input.pipelineData, `Action ${actionId} failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
 /**
  * Execute pipeline from a specific step index
- * Used by async capabilities to continue pipeline execution after delay
- * Exported for use by async capabilities
  */
 export async function executePipelineFromStep(
   pipeline: PipelineStep[],
@@ -399,102 +515,11 @@ export async function executePipelineFromStep(
   actions: any,
   pipelineData: Record<string, any>,
 ): Promise<void> {
-  let currentStepIndex = startIndex;
-
-  // eslint-disable-next-line no-console
-  console.log(`[RuleEngine] Continuing pipeline from step ${startIndex + 1}`);
-
-  while (currentStepIndex < pipeline.length) {
-    const step = pipeline[currentStepIndex];
-    const capability = capabilityRegistry.get(step.capabilityId);
-
-    if (!capability) {
-      console.error(`[RuleEngine] Capability not found: ${step.capabilityId}`);
-      break;
-    }
-
-    // eslint-disable-next-line no-console
-    console.log(`  Step ${currentStepIndex + 1}: ${capability.name}`);
-
-    try {
-      const input: CapabilityInput = {
-        message,
-        config: step.config,
-        global,
-        actions,
-        pipelineData,
-        step,
-      };
-
-      const result: CapabilityOutput = await capability.execute(input);
-
-      // Merge output data into pipeline data
-      if (result.data) {
-        Object.assign(pipelineData, result.data);
-      }
-
-      // Add delay after action capabilities to prevent rate limiting
-      if (capability.type === 'action') {
-        const stepDelayMs = getRandomActionStepDelayMs();
-        // eslint-disable-next-line no-console
-        console.log(`[RuleEngine] Waiting ${stepDelayMs}ms after action to prevent rate limiting`);
-        await sleep(stepDelayMs);
-      }
-
-      // Handle routing
-      if (result.success) {
-        if (step.onSuccess?.executeAction) {
-          await executeAction(step.onSuccess.executeAction, input);
-        }
-
-        if (step.onSuccess?.gotoStep) {
-          const targetIndex = pipeline.findIndex(
-            (s) => s.id === step.onSuccess!.gotoStep,
-          );
-          if (targetIndex !== -1) {
-            currentStepIndex = targetIndex;
-            continue;
-          }
-        }
-
-        if (step.onSuccess?.continueNext === false) {
-          break;
-        }
-      } else {
-        if (step.onFailure?.executeAction) {
-          await executeAction(step.onFailure.executeAction, input);
-        }
-
-        if (step.onFailure?.gotoStep) {
-          const targetIndex = pipeline.findIndex(
-            (s) => s.id === step.onFailure!.gotoStep,
-          );
-          if (targetIndex !== -1) {
-            currentStepIndex = targetIndex;
-            continue;
-          }
-        }
-
-        if (step.onFailure?.stopPipeline) {
-          break;
-        }
-      }
-
-      currentStepIndex++;
-    } catch (error) {
-      console.error(`[RuleEngine] Step ${currentStepIndex + 1} failed:`, error);
-      if (step.onFailure?.stopPipeline !== false) {
-        break;
-      }
-      currentStepIndex++;
-    }
-  }
+  await executePipelineInternal(pipeline, startIndex, message, global, actions, pipelineData);
 }
 
 /**
  * Process message with all enabled rules (main entry point)
- * @param customRules - Optional custom rule list (for phase-specific execution)
- * @returns { matched, skipPostProcessing }
  */
 export async function processMessageWithRules(
   message: ApiMessage,
@@ -502,36 +527,29 @@ export async function processMessageWithRules(
   global: GlobalState,
   actions: any,
   customRules?: UserRule[],
+  initialPipelineData?: Record<string, any>,
 ): Promise<{ matched: boolean; skipPostProcessing: boolean }> {
   const settings = selectCustomerServiceV2Settings(global);
-
-  // Use custom rules or filter enabled rules from settings
   const rules = customRules || (settings?.rules?.filter((r) => r.enabled)) || [];
+
   if (rules.length === 0) {
     return { matched: false, skipPostProcessing: false };
   }
-
-  // Rules are already sorted by priority (array order = priority)
 
   let matched = false;
   let skipPostProcessing = false;
 
   for (const rule of rules) {
-    // Check trigger conditions
     if (!checkTrigger(rule, message, eventType, global)) {
       continue;
     }
 
-    // Execute rule
     try {
-      const handled = await executeRule(rule, message, global, actions);
+      const handled = await executeRule(rule, message, global, actions, initialPipelineData);
       matched = matched || handled;
 
-      // Check if rule requests to skip post-processing
       if (handled && rule.skipPostProcessing) {
         skipPostProcessing = true;
-        // eslint-disable-next-line no-console
-        console.log(`[RuleEngine] Rule ${rule.id} requests skipPostProcessing, breaking execution`);
         break;
       }
     } catch (error) {
@@ -544,7 +562,6 @@ export async function processMessageWithRules(
 
 /**
  * Check if rule trigger conditions match
- * Independently determines message type without relying on filtering
  */
 function checkTrigger(
   rule: UserRule,
@@ -552,14 +569,10 @@ function checkTrigger(
   eventType: 'customer_message' | 'bot_reply' | 'any_message',
   global: GlobalState,
 ): boolean {
-  // Check event type
   if (rule.trigger.eventType !== 'any_message') {
-    // Independently determine if message is from bot
     const settings = selectCustomerServiceV2Settings(global);
     const isFromBot = message.senderId && settings?.filteredUserIds?.includes(message.senderId);
     const actualEventType = isFromBot ? 'bot_reply' : 'customer_message';
-
-    // Use provided eventType if available, otherwise determine independently
     const effectiveEventType = eventType === 'any_message' ? actualEventType : eventType;
 
     if (rule.trigger.eventType !== effectiveEventType) {
@@ -567,18 +580,12 @@ function checkTrigger(
     }
   }
 
-  // Check chat IDs
-  if (rule.trigger.chatIds && rule.trigger.chatIds.length > 0) {
-    if (!rule.trigger.chatIds.includes(message.chatId)) {
-      return false;
-    }
+  if (rule.trigger.chatIds?.length && !rule.trigger.chatIds.includes(message.chatId)) {
+    return false;
   }
 
-  // Check sender IDs
-  if (rule.trigger.senderIds && rule.trigger.senderIds.length > 0) {
-    if (!message.senderId || !rule.trigger.senderIds.includes(message.senderId)) {
-      return false;
-    }
+  if (rule.trigger.senderIds?.length && (!message.senderId || !rule.trigger.senderIds.includes(message.senderId))) {
+    return false;
   }
 
   return true;
