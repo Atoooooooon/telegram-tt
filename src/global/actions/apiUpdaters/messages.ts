@@ -11,6 +11,7 @@ import { MAIN_THREAD_ID } from '../../../api/types';
 
 import { SERVICE_NOTIFICATIONS_USER_ID } from '../../../config';
 import { isMonitoredChat, isFilteredUser, shouldFilterMessage } from '../../helpers/customerServiceV2';
+import { reportCustomerServiceStaffReply } from '../../helpers/customerServiceOncall';
 import { callApi } from '../../../api/gramjs';
 import { processMessageWithRules } from '../../helpers/ruleEngine';
 import { registerAllCapabilities } from '../../helpers/capabilities';
@@ -472,6 +473,17 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
         }).catch((error) => {
           console.error('[RuleEngine] Pre-filter processing failed:', error);
           // On pre-filter error, continue with normal flow
+        });
+      }
+
+      if (!isLocal && message.isOutgoing && isMonitoredChat(chatId, global) && !isActionMessage(newMessage)) {
+        reportCustomerServiceStaffReply({
+          chatId,
+          messageId: newMessage.id,
+          createdAt: typeof newMessage.date === 'number' ? newMessage.date * 1000 : Date.now(),
+          staffUserId: newMessage.senderId || global.currentUserId || undefined,
+          text: getMessageText(newMessage)?.text,
+          previewText: getMessageText(newMessage)?.text,
         });
       }
 

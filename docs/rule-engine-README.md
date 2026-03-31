@@ -2,6 +2,10 @@
 
 本目录包含客服规则引擎的完整技术文档。
 
+对于“过滤后的有用消息如何保证一定被处理”这一问题,另见补充文档:
+
+- [客服 OnCall 保障方案](./customer-service-oncall-guarantee.md)
+
 ---
 
 ## 📚 文档列表
@@ -67,6 +71,27 @@ registerCapability({
 - 能力 Schema 与输出字段定义
 - 跨群查询、OCR 等典型场景 Recipe
 - JSON 配置生成的最佳实践
+
+---
+
+### 4. [客服 OnCall 保障方案](./customer-service-oncall-guarantee.md)
+
+**适合人群**: 技术负责人、值班流程设计者、客服系统维护者
+
+**内容概览**:
+- 明确 Web 端继续作为后台降噪工具的定位
+- 不改现有过滤策略,专注过滤后的有用消息保障
+- 从 Message Queue 升级到 Case Queue 的建模建议
+- Node 服务承载事件驱动升级与 Telegram Bot 通知
+- “稍等 / 有效回复 / 已解决”分类与 deadlineVersion 机制
+- 按阶段逐步改造现有 `customerServiceV2` 与 `server/` 的建议
+
+**快速预览**:
+```
+目标: 任何一条通过过滤的有用消息,要么被明确接手,要么被系统自动升级
+核心能力: case、事件驱动 deadline、回复分类、Bot 最高级别群提醒
+实施策略: 保留现有 messages 队列,新增 Node 服务保障层
+```
 
 ---
 

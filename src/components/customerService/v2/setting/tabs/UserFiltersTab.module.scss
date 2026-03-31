@@ -95,6 +95,12 @@
   color: var(--color-text-secondary);
 }
 
+.resultId,
+.userId {
+  user-select: text !important;
+  cursor: text;
+}
+
 .searchOverlay {
   position: fixed;
   inset: 0;

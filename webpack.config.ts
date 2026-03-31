@@ -36,6 +36,7 @@ process.env.BASE_URL = process.env.BASE_URL || PRODUCTION_URL;
 const {
   BASE_URL,
   APP_TITLE = DEFAULT_APP_TITLE,
+  PROXY_PORT = '8787',
   UPSTASH_REDIS_REST_URL,
   UPSTASH_REDIS_REST_TOKEN,
 } = process.env;
@@ -82,6 +83,13 @@ export default function createConfig(
       host: '0.0.0.0',
       allowedHosts: 'all',
       hot: false,
+      proxy: [
+        {
+          context: ['/api/ocr', '/api/oncall'],
+          target: `http://127.0.0.1:${PROXY_PORT}`,
+          changeOrigin: true,
+        },
+      ],
       client: {
         overlay: false,
       },
