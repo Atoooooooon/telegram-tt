@@ -1,4 +1,5 @@
 import { parseBody, readBody, sendJson } from '../lib/http.mjs';
+import { sanitizeOncallCaseForResponse } from '../lib/oncall-service.mjs';
 
 function toNumber(value) {
   const parsed = Number(value);
@@ -41,8 +42,11 @@ export default {
       text: typeof payload.text === 'string' ? payload.text : undefined,
       previewText: typeof payload.previewText === 'string' ? payload.previewText : undefined,
       kind: typeof payload.kind === 'string' ? payload.kind : undefined,
+      oncallConfig: payload.oncallConfig && typeof payload.oncallConfig === 'object'
+        ? payload.oncallConfig
+        : undefined,
     });
 
-    sendJson(res, 200, { ok: true, case: result.caseRecord }, allowOrigin, allowHeaders);
+    sendJson(res, 200, { ok: true, case: sanitizeOncallCaseForResponse(result.caseRecord) }, allowOrigin, allowHeaders);
   },
 };

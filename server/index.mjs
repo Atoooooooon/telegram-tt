@@ -5,8 +5,9 @@ import http from 'http';
 import { sendJson, setCorsHeaders } from './lib/http.mjs';
 import { createOncallService } from './lib/oncall-service.mjs';
 import baiduOcrRoute from './routes/baidu-ocr.mjs';
+import customerServiceCloudConfigGetRoute from './routes/customer-service-cloud-config-get.mjs';
+import customerServiceCloudConfigPostRoute from './routes/customer-service-cloud-config-post.mjs';
 import oncallCasesRoute from './routes/oncall-cases.mjs';
-import oncallConfigRoute from './routes/oncall-config.mjs';
 import oncallStaffReplyRoute from './routes/oncall-staff-reply.mjs';
 import oncallUsefulMessageRoute from './routes/oncall-useful-message.mjs';
 
@@ -17,7 +18,14 @@ const MAX_BODY_BYTES = Number(process.env.PROXY_MAX_BODY_BYTES || process.env.OC
 const LOG_ENABLED = process.env.PROXY_LOG === '1' || process.env.OCR_LOG === '1';
 
 const oncallService = await createOncallService(log);
-const routes = [baiduOcrRoute, oncallUsefulMessageRoute, oncallStaffReplyRoute, oncallCasesRoute, oncallConfigRoute];
+const routes = [
+  baiduOcrRoute,
+  customerServiceCloudConfigGetRoute,
+  customerServiceCloudConfigPostRoute,
+  oncallUsefulMessageRoute,
+  oncallStaffReplyRoute,
+  oncallCasesRoute,
+];
 
 function log(message, extra) {
   if (!LOG_ENABLED) return;

@@ -1,7 +1,6 @@
 import { OncallStore } from './oncall-store.mjs';
 import { TelegramBotClient } from './telegram-bot.mjs';
-import { OncallConfigProvider } from './oncall-config.mjs';
-import { getDevRedis } from './dev-redis.mjs';
+import { getDefaultOncallConfig, normalizeOncallConfig } from './oncall-config.mjs';
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const NON_TEXT_PLACEHOLDER = '[non-text message]';
@@ -203,6 +202,7 @@ function applyUsefulMessageEvent(state, payload, config, now) {
   caseRecord.highestAlertSentAt = undefined;
   caseRecord.escalationLevel = 0;
   caseRecord.priority = 'normal';
+  caseRecord.oncallConfig = config;
 
   if (caseRecord.status === 'resolved' || caseRecord.status === 'expired') {
     caseRecord.status = 'reopened';
@@ -238,6 +238,7 @@ function applyStaffReplyEvent(state, payload, config, now) {
 
   const createdAt = payload.createdAt || now;
   const kind = payload.kind || classifyStaffReply(payload.text, config);
+  caseRecord.oncallConfig = config;
 
   caseRecord.staffMessageIds = appendUnique(caseRecord.staffMessageIds, payload.messageId);
   caseRecord.updatedAt = createdAt;
@@ -271,7 +272,7 @@ function applyStaffReplyEvent(state, payload, config, now) {
   };
 }
 
-function applyDeadlineEvent(state, payload, config, now) {
+function applyDeadlineEvent(state, payload, now) {
   const caseRecord = state.casesById[payload.caseId];
   if (!caseRecord || caseRecord.deadlineVersion !== payload.deadlineVersion) {
     return {
@@ -279,6 +280,8 @@ function applyDeadlineEvent(state, payload, config, now) {
       caseRecord,
     };
   }
+
+  const config = caseRecord.oncallConfig || getDefaultOncallConfig();
 
   const nextEscalateAt = computeNextEscalateAt(caseRecord, config);
   if (!nextEscalateAt) {
@@ -342,13 +345,22 @@ function applyDeadlineEvent(state, payload, config, now) {
   };
 }
 
+export function sanitizeOncallCaseForResponse(caseRecord) {
+  if (!caseRecord) {
+    return caseRecord;
+  }
+
+  const { oncallConfig: _oncallConfig, ...rest } = caseRecord;
+  return rest;
+}
+
 export class OncallService {
-  constructor({ configProvider, log }) {
-    this.configProvider = configProvider;
+  constructor({ log }) {
     this.log = log;
     this.store = new OncallStore(undefined, log);
     this.botClient = new TelegramBotClient(log);
     this.timersByCaseId = new Map();
+    this.defaultConfig = getDefaultOncallConfig();
   }
 
   async init() {
@@ -356,7 +368,7 @@ export class OncallService {
   }
 
   async ingestUsefulMessage(payload) {
-    const config = await this.configProvider.getConfig();
+    const config = normalizeOncallConfig(payload.oncallConfig, this.defaultConfig);
     const now = getNow();
     const result = await this.store.mutate((state) => (
       applyUsefulMessageEvent(state, payload, config, now)
@@ -377,7 +389,7 @@ export class OncallService {
   }
 
   async reportStaffReply(payload) {
-    const config = await this.configProvider.getConfig();
+    const config = normalizeOncallConfig(payload.oncallConfig, this.defaultConfig);
     const now = getNow();
     const result = await this.store.mutate((state) => (
       applyStaffReplyEvent(state, payload, config, now)
@@ -398,10 +410,9 @@ export class OncallService {
   }
 
   async handleDeadlineReached(caseId, deadlineVersion) {
-    const config = await this.configProvider.getConfig();
     const now = getNow();
     const result = await this.store.mutate((state) => (
-      applyDeadlineEvent(state, { caseId, deadlineVersion }, config, now)
+      applyDeadlineEvent(state, { caseId, deadlineVersion }, now)
     ));
 
     if (result.caseRecord) {
@@ -418,7 +429,8 @@ export class OncallService {
 
     if (result.alertText) {
       try {
-        await this.botClient.sendAlert(config, result.alertText);
+        const alertConfig = result.caseRecord?.oncallConfig || this.defaultConfig;
+        await this.botClient.sendAlert(alertConfig, result.alertText);
       } catch (error) {
         this.log('Oncall highest escalation alert failed', error);
       }
@@ -429,21 +441,14 @@ export class OncallService {
     return this.store.read((state) => {
       const cases = Object.values(state.casesById || {});
       if (!chatId) {
-        return cases;
+        return cases.map(sanitizeOncallCaseForResponse);
       }
 
-      return cases.filter((caseRecord) => caseRecord.chatId === chatId);
+      return cases
+        .filter((caseRecord) => caseRecord.chatId === chatId)
+        .map(sanitizeOncallCaseForResponse);
     });
   }
-
-  async getResolvedConfig(options) {
-    return this.configProvider.getConfig(options);
-  }
-
-  getConfigKey() {
-    return this.configProvider.getConfigKey();
-  }
-
   syncCaseSchedule(caseRecord) {
     this.clearCaseSchedule(caseRecord.id);
 
@@ -484,10 +489,7 @@ export class OncallService {
 }
 
 export async function createOncallService(log) {
-  const redis = await getDevRedis(log);
-  const configProvider = new OncallConfigProvider(redis, log);
   const service = new OncallService({
-    configProvider,
     log,
   });
 

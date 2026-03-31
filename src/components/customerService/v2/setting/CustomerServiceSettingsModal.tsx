@@ -4,12 +4,14 @@ import { getActions, withGlobal } from '../../../../global';
 
 import type { ApiChat, ApiChatFullInfo } from '../../../../api/types';
 import type {
+  CustomerServiceOncallSettings,
   CustomerServiceQuickReply,
   UserRule,
 } from '../../../../global/types/customerServiceV2';
 
 import { CUSTOMER_SERVICE_CONFIG } from '../../../../config/customerService';
 import {
+  normalizeCustomerServiceOncallSettings,
   normalizeCustomerServiceQuickReplies,
 } from '../../../../global/helpers/customerServiceV2Settings';
 import { selectCustomerServiceV2Settings } from '../../../../global/selectors/customerServiceV2';
@@ -30,6 +32,7 @@ import MessageFiltersTab from './tabs/MessageFiltersTab';
 import QuickRepliesTab from './tabs/QuickRepliesTab';
 import UserFiltersTab from './tabs/UserFiltersTab';
 import RuleEngineTab from './tabs/RuleEngineTab';
+import OncallGuaranteeTab from './tabs/OncallGuaranteeTab';
 import CustomerServiceCloudSyncModal from './CustomerServiceCloudSyncModal';
 
 import styles from './CustomerServiceSettingsModal.module.scss';
@@ -53,6 +56,7 @@ type StateProps = {
     quickReplies?: CustomerServiceQuickReply[];
     quickReplyPanelGlobal?: boolean;
     rules?: UserRule[];
+    oncall?: CustomerServiceOncallSettings;
   };
 };
 
@@ -65,6 +69,7 @@ type FilterSettings = {
   quickReplies: CustomerServiceQuickReply[];
   quickReplyPanelGlobal: boolean;
   rules: UserRule[];
+  oncall: CustomerServiceOncallSettings;
 };
 
 type SavedSettings = StateProps['savedSettings'];
@@ -77,6 +82,7 @@ type NormalizedSettings = {
   quickReplies: CustomerServiceQuickReply[];
   quickReplyPanelGlobal: boolean;
   rules: UserRule[];
+  oncall: CustomerServiceOncallSettings;
 };
 
 const buildFilterSettings = (saved?: SavedSettings): FilterSettings => ({
@@ -96,6 +102,7 @@ const buildFilterSettings = (saved?: SavedSettings): FilterSettings => ({
   rules: (saved?.rules && saved.rules.length
     ? saved.rules.map((rule) => JSON.parse(JSON.stringify(rule)))
     : []) as UserRule[],
+  oncall: normalizeCustomerServiceOncallSettings(saved?.oncall),
 });
 
 const buildNormalizedSettings = (settings: FilterSettings): NormalizedSettings => ({
@@ -110,6 +117,7 @@ const buildNormalizedSettings = (settings: FilterSettings): NormalizedSettings =
   quickReplies: normalizeCustomerServiceQuickReplies(settings.quickReplies),
   quickReplyPanelGlobal: Boolean(settings.quickReplyPanelGlobal),
   rules: settings.rules?.length ? JSON.parse(JSON.stringify(settings.rules)) : [],
+  oncall: normalizeCustomerServiceOncallSettings(settings.oncall),
 });
 
 const buildNormalizedSavedSettings = (saved?: SavedSettings): NormalizedSettings | undefined => {
@@ -128,6 +136,7 @@ const buildNormalizedSavedSettings = (saved?: SavedSettings): NormalizedSettings
     quickReplies: normalizeCustomerServiceQuickReplies(saved.quickReplies ?? []),
     quickReplyPanelGlobal: Boolean(saved.quickReplyPanelGlobal),
     rules: saved.rules?.length ? JSON.parse(JSON.stringify(saved.rules)) : [],
+    oncall: normalizeCustomerServiceOncallSettings(saved.oncall),
   };
 };
 
@@ -165,10 +174,7 @@ const CustomerServiceSettingsModal = ({
 
   const lang = useLang();
 
-  const hasCloudSync = Boolean(
-    CUSTOMER_SERVICE_CONFIG.CLOUD_SYNC_REDIS_URL
-    && CUSTOMER_SERVICE_CONFIG.CLOUD_SYNC_REDIS_TOKEN,
-  );
+  const hasCloudSync = Boolean(CUSTOMER_SERVICE_CONFIG.CLOUD_SYNC_ENABLED);
 
   const [activeTab, setActiveTab] = useState(0);
   const [settings, setSettings] = useState<FilterSettings>(buildFilterSettings(savedSettings));
@@ -255,6 +261,13 @@ const CustomerServiceSettingsModal = ({
     }));
   });
 
+  const handleOncallChange = useLastCallback((nextOncall: CustomerServiceOncallSettings) => {
+    updateSettings((prev) => ({
+      ...prev,
+      oncall: normalizeCustomerServiceOncallSettings(nextOncall),
+    }));
+  });
+
   const handleClose = useLastCallback(() => {
     setActiveTab(0);
     setHasInitialized(false);
@@ -310,6 +323,7 @@ const CustomerServiceSettingsModal = ({
     { title: lang('CustomerServiceMessageFilters') },
     { title: lang('CustomerServiceQuickReplies') },
     { title: lang('CustomerServiceRuleEngine') },
+    { title: lang('CustomerServiceOncallGuarantee') },
   ]), [lang]);
 
   if (!isOpen) {
@@ -373,6 +387,12 @@ const CustomerServiceSettingsModal = ({
             <RuleEngineTab
               rules={settings.rules}
               onRulesChange={handleRulesChange}
+            />
+          )}
+          {activeTab === 5 && (
+            <OncallGuaranteeTab
+              oncall={settings.oncall}
+              onChange={handleOncallChange}
             />
           )}
         </div>

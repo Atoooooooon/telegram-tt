@@ -1,3 +1,5 @@
+import type { CustomerServiceOncallSettings } from '../types/customerServiceV2';
+
 type CustomerServiceUsefulMessagePayload = {
   chatId: string;
   messageId: number;
@@ -7,6 +9,7 @@ type CustomerServiceUsefulMessagePayload = {
   senderName?: string;
   text?: string;
   previewText?: string;
+  oncallConfig?: CustomerServiceOncallSettings;
 };
 
 type CustomerServiceStaffReplyPayload = {
@@ -17,6 +20,7 @@ type CustomerServiceStaffReplyPayload = {
   text?: string;
   previewText?: string;
   kind?: string;
+  oncallConfig?: CustomerServiceOncallSettings;
 };
 
 function logOncallSyncDebug(message: string, extra?: unknown) {

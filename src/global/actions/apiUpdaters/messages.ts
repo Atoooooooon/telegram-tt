@@ -370,13 +370,14 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
         }
       }
 
+      const currentTabId = getCurrentTabId();
+      const customerServiceV2 = selectCustomerServiceV2State(global, currentTabId);
+
       // Add message to customer service if it passes all filters and not from current user
       if (!isLocal && !message.isOutgoing) {
         const messageText = getMessageText(newMessage);
 
         // 检查该聊天是否被暂停监听（仅在辅助模式下）
-        const currentTabId = getCurrentTabId();
-        const customerServiceV2 = selectCustomerServiceV2State(global, currentTabId);
         const isAssistMode = customerServiceV2?.settings?.mode === 'assist';
         const isPaused = isAssistMode && customerServiceV2?.pausedChats?.[chatId];
 
@@ -476,7 +477,13 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
         });
       }
 
-      if (!isLocal && message.isOutgoing && isMonitoredChat(chatId, global) && !isActionMessage(newMessage)) {
+      if (
+        !isLocal
+        && message.isOutgoing
+        && isMonitoredChat(chatId, global)
+        && !isActionMessage(newMessage)
+        && customerServiceV2?.settings?.oncall?.enabled
+      ) {
         reportCustomerServiceStaffReply({
           chatId,
           messageId: newMessage.id,
@@ -484,6 +491,7 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
           staffUserId: newMessage.senderId || global.currentUserId || undefined,
           text: getMessageText(newMessage)?.text,
           previewText: getMessageText(newMessage)?.text,
+          oncallConfig: customerServiceV2.settings.oncall,
         });
       }
 

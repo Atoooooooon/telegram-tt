@@ -1,5 +1,3 @@
-import { REDIS_CACHE_TTL_MS, REDIS_KEYS } from './redis-keys.mjs';
-
 const DEFAULT_FIRST_RESPONSE_TIMEOUT_MS = 5 * 60 * 1000;
 const DEFAULT_HIGHEST_ESCALATION_TIMEOUT_MS = 10 * 60 * 1000;
 const DEFAULT_HOLDING_REPLY_GRACE_TIMEOUT_MS = 15 * 60 * 1000;
@@ -35,13 +33,10 @@ function toNumber(value, fallback) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 function toStringList(value, fallback) {
   if (Array.isArray(value)) {
-    return value.map((item) => String(item).trim()).filter(Boolean);
+    const normalized = value.map((item) => String(item).trim()).filter(Boolean);
+    return normalized.length ? normalized : [...fallback];
   }
 
   if (typeof value === 'string' && value.trim()) {
@@ -51,141 +46,113 @@ function toStringList(value, fallback) {
   return [...fallback];
 }
 
-function buildPatterns(sources) {
-  return sources.map((source) => new RegExp(escapeRegExp(source), 'i'));
+function parseRegexSource(source) {
+  const trimmed = String(source || '').trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  if (trimmed.startsWith('/')) {
+    const lastSlashIndex = trimmed.lastIndexOf('/');
+    if (lastSlashIndex > 0) {
+      const pattern = trimmed.slice(1, lastSlashIndex);
+      const flags = trimmed.slice(lastSlashIndex + 1) || 'i';
+      return new RegExp(pattern, flags);
+    }
+  }
+
+  return new RegExp(trimmed, 'i');
 }
 
-const DEFAULT_ONCALL_CONFIG = {
-  firstResponseTimeoutMs: DEFAULT_FIRST_RESPONSE_TIMEOUT_MS,
-  highestEscalationTimeoutMs: DEFAULT_HIGHEST_ESCALATION_TIMEOUT_MS,
-  holdingReplyGraceTimeoutMs: DEFAULT_HOLDING_REPLY_GRACE_TIMEOUT_MS,
-  reminderCooldownMs: DEFAULT_REMINDER_COOLDOWN_MS,
-  telegramBotToken: '',
-  telegramAlertChatId: '',
-  telegramAlertThreadId: '',
-  holdingReplyPatternSources: [...DEFAULT_HOLDING_PATTERNS],
-  resolveReplyPatternSources: [...DEFAULT_RESOLVE_PATTERNS],
-};
+function buildPatterns(sources) {
+  return sources.reduce((result, source) => {
+    try {
+      const pattern = parseRegexSource(source);
+      if (pattern) {
+        result.push(pattern);
+      }
+    } catch (error) {
+      // Ignore invalid regex entries to keep the guarantee flow available.
+    }
 
-function normalizeOncallConfig(rawConfig) {
-  const safeConfig = rawConfig && typeof rawConfig === 'object' ? rawConfig : {};
-  const holdingReplyPatternSources = toStringList(
-    safeConfig.holdingReplyPatterns ?? safeConfig.holdingReplyPatternSources,
-    DEFAULT_HOLDING_PATTERNS,
-  );
-  const resolveReplyPatternSources = toStringList(
-    safeConfig.resolveReplyPatterns ?? safeConfig.resolveReplyPatternSources,
-    DEFAULT_RESOLVE_PATTERNS,
-  );
+    return result;
+  }, []);
+}
 
+export function getDefaultOncallConfig() {
   return {
+    enabled: false,
     firstResponseTimeoutMs: toNumber(
-      safeConfig.firstResponseTimeoutMs,
+      process.env.ONCALL_FIRST_RESPONSE_TIMEOUT_MS,
       DEFAULT_FIRST_RESPONSE_TIMEOUT_MS,
     ),
     highestEscalationTimeoutMs: toNumber(
-      safeConfig.highestEscalationTimeoutMs,
+      process.env.ONCALL_HIGHEST_ESCALATION_TIMEOUT_MS,
       DEFAULT_HIGHEST_ESCALATION_TIMEOUT_MS,
     ),
     holdingReplyGraceTimeoutMs: toNumber(
-      safeConfig.holdingReplyGraceTimeoutMs,
+      process.env.ONCALL_HOLDING_REPLY_GRACE_TIMEOUT_MS,
       DEFAULT_HOLDING_REPLY_GRACE_TIMEOUT_MS,
     ),
     reminderCooldownMs: toNumber(
-      safeConfig.reminderCooldownMs,
+      process.env.ONCALL_REMINDER_COOLDOWN_MS,
       DEFAULT_REMINDER_COOLDOWN_MS,
     ),
-    telegramBotToken: typeof safeConfig.telegramBotToken === 'string' ? safeConfig.telegramBotToken.trim() : '',
-    telegramAlertChatId: typeof safeConfig.telegramAlertChatId === 'string' ? safeConfig.telegramAlertChatId.trim() : '',
-    telegramAlertThreadId: typeof safeConfig.telegramAlertThreadId === 'string' ? safeConfig.telegramAlertThreadId.trim() : '',
+    telegramBotToken: typeof process.env.ONCALL_TELEGRAM_BOT_TOKEN === 'string'
+      ? process.env.ONCALL_TELEGRAM_BOT_TOKEN.trim()
+      : '',
+    telegramAlertChatId: '',
+    telegramAlertThreadId: '',
+    holdingReplyPatternSources: toStringList(
+      process.env.ONCALL_HOLDING_REPLY_PATTERNS,
+      DEFAULT_HOLDING_PATTERNS,
+    ),
+    resolveReplyPatternSources: toStringList(
+      process.env.ONCALL_RESOLVE_REPLY_PATTERNS,
+      DEFAULT_RESOLVE_PATTERNS,
+    ),
+  };
+}
+
+export function normalizeOncallConfig(rawConfig, baseConfig = getDefaultOncallConfig()) {
+  const safeConfig = rawConfig && typeof rawConfig === 'object' ? rawConfig : {};
+  const holdingReplyPatternSources = toStringList(
+    safeConfig.holdingReplyPatterns ?? safeConfig.holdingReplyPatternSources,
+    baseConfig.holdingReplyPatternSources,
+  );
+  const resolveReplyPatternSources = toStringList(
+    safeConfig.resolveReplyPatterns ?? safeConfig.resolveReplyPatternSources,
+    baseConfig.resolveReplyPatternSources,
+  );
+
+  return {
+    enabled: Boolean(safeConfig.enabled),
+    firstResponseTimeoutMs: toNumber(
+      safeConfig.firstResponseTimeoutMs,
+      baseConfig.firstResponseTimeoutMs,
+    ),
+    highestEscalationTimeoutMs: toNumber(
+      safeConfig.highestEscalationTimeoutMs,
+      baseConfig.highestEscalationTimeoutMs,
+    ),
+    holdingReplyGraceTimeoutMs: toNumber(
+      safeConfig.holdingReplyGraceTimeoutMs,
+      baseConfig.holdingReplyGraceTimeoutMs,
+    ),
+    reminderCooldownMs: toNumber(
+      safeConfig.reminderCooldownMs,
+      baseConfig.reminderCooldownMs,
+    ),
+    telegramBotToken: baseConfig.telegramBotToken || '',
+    telegramAlertChatId: typeof safeConfig.telegramAlertChatId === 'string'
+      ? safeConfig.telegramAlertChatId.trim()
+      : '',
+    telegramAlertThreadId: typeof safeConfig.telegramAlertThreadId === 'string'
+      ? safeConfig.telegramAlertThreadId.trim()
+      : '',
     holdingReplyPatternSources,
     resolveReplyPatternSources,
     holdingReplyPatterns: buildPatterns(holdingReplyPatternSources),
     resolveReplyPatterns: buildPatterns(resolveReplyPatternSources),
   };
-}
-
-function parseRedisConfig(rawValue) {
-  if (!rawValue) {
-    return undefined;
-  }
-
-  if (typeof rawValue === 'string') {
-    return JSON.parse(rawValue);
-  }
-
-  if (typeof rawValue === 'object') {
-    return rawValue;
-  }
-
-  return undefined;
-}
-
-function maskToken(token) {
-  if (!token) {
-    return '';
-  }
-
-  if (token.length <= 10) {
-    return `${token.slice(0, 2)}***${token.slice(-2)}`;
-  }
-
-  return `${token.slice(0, 5)}***${token.slice(-4)}`;
-}
-
-export function sanitizeOncallConfigForResponse(config) {
-  return {
-    firstResponseTimeoutMs: config.firstResponseTimeoutMs,
-    highestEscalationTimeoutMs: config.highestEscalationTimeoutMs,
-    holdingReplyGraceTimeoutMs: config.holdingReplyGraceTimeoutMs,
-    reminderCooldownMs: config.reminderCooldownMs,
-    telegramBotTokenMasked: maskToken(config.telegramBotToken),
-    telegramAlertChatId: config.telegramAlertChatId,
-    telegramAlertThreadId: config.telegramAlertThreadId,
-    holdingReplyPatterns: config.holdingReplyPatternSources,
-    resolveReplyPatterns: config.resolveReplyPatternSources,
-  };
-}
-
-export class OncallConfigProvider {
-  constructor(redis, log) {
-    this.redis = redis;
-    this.log = log;
-    this.cacheKey = REDIS_KEYS.ONCALL_CONFIG;
-    this.cacheTtlMs = REDIS_CACHE_TTL_MS.ONCALL_CONFIG;
-    this.cachedConfig = normalizeOncallConfig(DEFAULT_ONCALL_CONFIG);
-    this.lastLoadedAt = 0;
-  }
-
-  async getConfig(options) {
-    const force = Boolean(options?.force);
-    const now = Date.now();
-
-    if (!force && this.lastLoadedAt && now - this.lastLoadedAt < this.cacheTtlMs) {
-      return this.cachedConfig;
-    }
-
-    if (!this.redis) {
-      this.cachedConfig = normalizeOncallConfig(DEFAULT_ONCALL_CONFIG);
-      this.lastLoadedAt = now;
-      return this.cachedConfig;
-    }
-
-    try {
-      const rawValue = await this.redis.get(this.cacheKey);
-      const parsed = parseRedisConfig(rawValue);
-      this.cachedConfig = normalizeOncallConfig(parsed || DEFAULT_ONCALL_CONFIG);
-      this.lastLoadedAt = now;
-      return this.cachedConfig;
-    } catch (error) {
-      this.log('Oncall Redis config load failed, using defaults', error);
-      this.cachedConfig = normalizeOncallConfig(DEFAULT_ONCALL_CONFIG);
-      this.lastLoadedAt = now;
-      return this.cachedConfig;
-    }
-  }
-
-  getConfigKey() {
-    return this.cacheKey;
-  }
 }

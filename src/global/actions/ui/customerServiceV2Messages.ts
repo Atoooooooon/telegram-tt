@@ -140,15 +140,18 @@ addActionHandler('addToCustomerServiceV2', (global, actions, payload): ActionRet
       nextGlobal = pauseCustomerServiceChat(nextGlobal, chatId, message.id);
     }
 
-    reportCustomerServiceUsefulMessage({
-      chatId,
-      messageId: message.id,
-      createdAt: typeof message.date === 'number' ? message.date * 1000 : Date.now(),
-      chatTitle: chat?.title,
-      senderId: message.senderId,
-      text: getMessageText(message)?.text,
-      previewText: getMessageText(message)?.text,
-    });
+    if (settings.oncall?.enabled) {
+      reportCustomerServiceUsefulMessage({
+        chatId,
+        messageId: message.id,
+        createdAt: typeof message.date === 'number' ? message.date * 1000 : Date.now(),
+        chatTitle: chat?.title,
+        senderId: message.senderId,
+        text: getMessageText(message)?.text,
+        previewText: getMessageText(message)?.text,
+        oncallConfig: settings.oncall,
+      });
+    }
 
     return nextGlobal;
   } catch (error) {

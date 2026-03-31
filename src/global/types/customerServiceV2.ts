@@ -9,6 +9,18 @@ export type CustomerServiceQuickReply = {
   englishText?: string;
 };
 
+export type CustomerServiceOncallSettings = {
+  enabled?: boolean;
+  telegramAlertChatId?: string;
+  telegramAlertThreadId?: string;
+  firstResponseTimeoutMs?: number;
+  highestEscalationTimeoutMs?: number;
+  holdingReplyGraceTimeoutMs?: number;
+  reminderCooldownMs?: number;
+  holdingReplyPatterns?: string[];
+  resolveReplyPatterns?: string[];
+};
+
 /**
  * Virtual ChatId constant for Customer Service V2
  * This represents the Customer Service view as a virtual chat in the message list
@@ -40,6 +52,9 @@ export type CustomerServiceSettings = {
 
   /** Rule engine: User-configured rules */
   rules?: UserRule[];
+
+  /** Personal oncall guarantee settings */
+  oncall?: CustomerServiceOncallSettings;
 };
 
 /**
