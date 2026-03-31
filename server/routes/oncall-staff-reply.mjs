@@ -37,6 +37,7 @@ export default {
     const result = await oncallService.reportStaffReply({
       chatId: payload.chatId,
       messageId,
+      replyToMessageId: toNumber(payload.replyToMessageId),
       createdAt: toNumber(payload.createdAt),
       staffUserId: typeof payload.staffUserId === 'string' ? payload.staffUserId : undefined,
       text: typeof payload.text === 'string' ? payload.text : undefined,

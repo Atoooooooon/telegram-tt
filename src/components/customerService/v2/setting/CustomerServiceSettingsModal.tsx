@@ -3,6 +3,7 @@ import { memo, useEffect, useMemo, useState } from '../../../../lib/teact/teact'
 import { getActions, withGlobal } from '../../../../global';
 
 import type { ApiChat, ApiChatFullInfo } from '../../../../api/types';
+import type { TopicsInfo } from '../../../../types';
 import type {
   CustomerServiceOncallSettings,
   CustomerServiceQuickReply,
@@ -41,6 +42,7 @@ type StateProps = {
   isOpen?: boolean;
   chats: Record<string, ApiChat>;
   chatFullInfos: Record<string, ApiChatFullInfo>;
+  topicsInfoByChatId: Record<string, TopicsInfo>;
   users: Record<string, any>;
   chatFolders: Record<number, any>;
   orderedFolderIds?: number[];
@@ -159,6 +161,7 @@ const CustomerServiceSettingsModal = ({
   isOpen,
   chats,
   chatFullInfos,
+  topicsInfoByChatId,
   users,
   chatFolders,
   orderedFolderIds,
@@ -170,6 +173,7 @@ const CustomerServiceSettingsModal = ({
     saveCustomerServiceV2Settings,
     exportCustomerServiceV2Settings,
     importCustomerServiceV2Settings,
+    loadTopics,
   } = getActions();
 
   const lang = useLang();
@@ -392,6 +396,9 @@ const CustomerServiceSettingsModal = ({
           {activeTab === 5 && (
             <OncallGuaranteeTab
               oncall={settings.oncall}
+              chats={chats}
+              topicsInfoByChatId={topicsInfoByChatId}
+              onLoadTopics={loadTopics}
               onChange={handleOncallChange}
             />
           )}
@@ -492,6 +499,7 @@ export default memo(withGlobal((global): StateProps => {
   const tabId = getCurrentTabId();
   const chats = global.chats.byId;
   const chatFullInfos = global.chats.fullInfoById;
+  const topicsInfoByChatId = global.chats.topicsInfoById;
   const users = global.users.byId;
   const {
     byId: chatFolders,
@@ -504,6 +512,7 @@ export default memo(withGlobal((global): StateProps => {
     isOpen: tabState.isCustomerServiceV2SettingsOpen,
     chats,
     chatFullInfos: chatFullInfos || {},
+    topicsInfoByChatId: topicsInfoByChatId || {},
     users,
     chatFolders: chatFolders || {},
     orderedFolderIds,

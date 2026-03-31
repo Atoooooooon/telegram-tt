@@ -731,9 +731,14 @@ const RuleEngineDoc: FC = () => {
               - 添加到客服队列
             </h6>
             <p>手动添加消息到客服队列</p>
-            <p>
-              <em>无需配置参数</em>
-            </p>
+            <ul>
+              <li>
+                <code>syncToOncall</code>
+                : 是否同步加入消息保障 (boolean, 默认 false)
+                <br />
+                关闭时仅加入前端客服队列; 开启时会同时上报后端消息保障链路
+              </li>
+            </ul>
             <p>
               <strong>输出数据:</strong>
               {' '}
@@ -925,7 +930,7 @@ const RuleEngineDoc: FC = () => {
               <strong>AI 已解决自动已读</strong>: 监听 <code>bot_reply</code>，使用 <code>check_message</code> 正则匹配关键词，最后 <code>action_mark_read</code>。
             </li>
             <li>
-              <strong>5分钟超时转人工</strong>: 使用 <code>check_has_reply</code> 设置 300秒，在 <code>onFailure</code> 中执行 <code>action_add_queue</code>。
+              <strong>5分钟超时转人工</strong>: 使用 <code>check_has_reply</code> 设置 300秒，在 <code>onFailure</code> 中执行 <code>action_add_queue</code>；如需同时进入后端保障，可设置 <code>syncToOncall: true</code>。
             </li>
             <li>
               <strong>关键词转发</strong>: <code>check_message</code> 匹配敏感词，<code>action_forward</code> 到管理群。

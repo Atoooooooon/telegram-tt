@@ -11,7 +11,7 @@ import { MAIN_THREAD_ID } from '../../../api/types';
 
 import { SERVICE_NOTIFICATIONS_USER_ID } from '../../../config';
 import { isMonitoredChat, isFilteredUser, shouldFilterMessage } from '../../helpers/customerServiceV2';
-import { reportCustomerServiceStaffReply } from '../../helpers/customerServiceOncall';
+import { reportCustomerServiceStaffReply, reportCustomerServiceUsefulMessage } from '../../helpers/customerServiceOncall';
 import { callApi } from '../../../api/gramjs';
 import { processMessageWithRules } from '../../helpers/ruleEngine';
 import { registerAllCapabilities } from '../../helpers/capabilities';
@@ -372,9 +372,17 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
 
       const currentTabId = getCurrentTabId();
       const customerServiceV2 = selectCustomerServiceV2State(global, currentTabId);
+      const oncallSettings = customerServiceV2?.settings?.oncall;
+      const oncallStaffIds = oncallSettings?.staffIds || [];
+      const isConfiguredOncallStaff = Boolean(
+        oncallSettings?.enabled
+        && !message.isOutgoing
+        && newMessage.senderId
+        && oncallStaffIds.includes(String(newMessage.senderId)),
+      );
 
       // Add message to customer service if it passes all filters and not from current user
-      if (!isLocal && !message.isOutgoing) {
+      if (!isLocal && !message.isOutgoing && !isConfiguredOncallStaff) {
         const messageText = getMessageText(newMessage);
 
         // 检查该聊天是否被暂停监听（仅在辅助模式下）
@@ -419,14 +427,13 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
             return;
           }
 
-          // 如果暂停监听，直接跳过
-          if (isPaused) {
-            console.log("Chat monitoring paused for:", chatId, "message:", message.id, "ignored (assist mode)");
-            return;
-          }
-
           const isFiltered = shouldFilterMessage(chatId, message.senderId, messageText, global);
           if (isFiltered) {
+            if (isPaused) {
+              console.log("Chat monitoring paused for filtered message:", chatId, "message:", message.id, "ignored (assist mode)");
+              return;
+            }
+
             // 消息被基础过滤器过滤掉（用户被屏蔽或内容匹配过滤正则）
             console.log("Message filtered by basic filters:", message.id, "in chat:", chatId);
 
@@ -461,6 +468,24 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
           postFilterPromise.then(({ matched: handledByRules }) => {
             // If no rules handled the message, add to queue (legacy behavior)
             if (!handledByRules) {
+              if (settings?.oncall?.enabled) {
+                reportCustomerServiceUsefulMessage({
+                  chatId,
+                  messageId: newMessage.id,
+                  createdAt: typeof newMessage.date === 'number' ? newMessage.date * 1000 : Date.now(),
+                  chatTitle: chat?.title,
+                  senderId: newMessage.senderId,
+                  text: messageText?.text,
+                  previewText: messageText?.text,
+                  oncallConfig: settings.oncall,
+                });
+              }
+
+              if (isPaused) {
+                console.log("Chat monitoring paused for useful message:", chatId, "message:", message.id, "reported to oncall only");
+                return;
+              }
+
               console.log("No rules matched, adding to customer service queue:", message.id);
               actions.addToCustomerServiceV2({ message: newMessage, chatId, tabId: currentTabId });
             } else {
@@ -468,6 +493,24 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
             }
           }).catch((error) => {
             console.error('[RuleEngine] Post-filter processing failed:', error);
+            if (settings?.oncall?.enabled) {
+              reportCustomerServiceUsefulMessage({
+                chatId,
+                messageId: newMessage.id,
+                createdAt: typeof newMessage.date === 'number' ? newMessage.date * 1000 : Date.now(),
+                chatTitle: chat?.title,
+                senderId: newMessage.senderId,
+                text: messageText?.text,
+                previewText: messageText?.text,
+                oncallConfig: settings.oncall,
+              });
+            }
+
+            if (isPaused) {
+              console.log("Chat monitoring paused after post-filter error:", chatId, "message:", message.id, "reported to oncall only");
+              return;
+            }
+
             // On error, fallback to adding to queue
             actions.addToCustomerServiceV2({ message: newMessage, chatId, tabId: currentTabId });
           });
@@ -479,19 +522,20 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
 
       if (
         !isLocal
-        && message.isOutgoing
+        && (message.isOutgoing || isConfiguredOncallStaff)
         && isMonitoredChat(chatId, global)
         && !isActionMessage(newMessage)
-        && customerServiceV2?.settings?.oncall?.enabled
+        && oncallSettings?.enabled
       ) {
         reportCustomerServiceStaffReply({
           chatId,
           messageId: newMessage.id,
+          replyToMessageId: replyInfo?.replyToMsgId,
           createdAt: typeof newMessage.date === 'number' ? newMessage.date * 1000 : Date.now(),
           staffUserId: newMessage.senderId || global.currentUserId || undefined,
           text: getMessageText(newMessage)?.text,
           previewText: getMessageText(newMessage)?.text,
-          oncallConfig: customerServiceV2.settings.oncall,
+          oncallConfig: oncallSettings,
         });
       }
 

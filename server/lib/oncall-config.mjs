@@ -2,6 +2,7 @@ const DEFAULT_FIRST_RESPONSE_TIMEOUT_MS = 5 * 60 * 1000;
 const DEFAULT_HIGHEST_ESCALATION_TIMEOUT_MS = 10 * 60 * 1000;
 const DEFAULT_HOLDING_REPLY_GRACE_TIMEOUT_MS = 15 * 60 * 1000;
 const DEFAULT_REMINDER_COOLDOWN_MS = 5 * 60 * 1000;
+const DEFAULT_STAFF_IDS = [];
 const DEFAULT_HOLDING_PATTERNS = [
   '稍等',
   '我看下',
@@ -98,11 +99,21 @@ export function getDefaultOncallConfig() {
       process.env.ONCALL_REMINDER_COOLDOWN_MS,
       DEFAULT_REMINDER_COOLDOWN_MS,
     ),
+    staffIds: toStringList(
+      process.env.ONCALL_STAFF_IDS,
+      DEFAULT_STAFF_IDS,
+    ),
     telegramBotToken: typeof process.env.ONCALL_TELEGRAM_BOT_TOKEN === 'string'
       ? process.env.ONCALL_TELEGRAM_BOT_TOKEN.trim()
       : '',
-    telegramAlertChatId: '',
-    telegramAlertThreadId: '',
+    newAlertChatId: '',
+    newAlertThreadId: '',
+    holdingAlertChatId: '',
+    holdingAlertThreadId: '',
+    highestAlertChatId: '',
+    highestAlertThreadId: '',
+    resolvedAlertChatId: '',
+    resolvedAlertThreadId: '',
     holdingReplyPatternSources: toStringList(
       process.env.ONCALL_HOLDING_REPLY_PATTERNS,
       DEFAULT_HOLDING_PATTERNS,
@@ -143,12 +154,34 @@ export function normalizeOncallConfig(rawConfig, baseConfig = getDefaultOncallCo
       safeConfig.reminderCooldownMs,
       baseConfig.reminderCooldownMs,
     ),
+    staffIds: toStringList(
+      safeConfig.staffIds,
+      baseConfig.staffIds,
+    ),
     telegramBotToken: baseConfig.telegramBotToken || '',
-    telegramAlertChatId: typeof safeConfig.telegramAlertChatId === 'string'
-      ? safeConfig.telegramAlertChatId.trim()
+    newAlertChatId: typeof safeConfig.newAlertChatId === 'string'
+      ? safeConfig.newAlertChatId.trim()
       : '',
-    telegramAlertThreadId: typeof safeConfig.telegramAlertThreadId === 'string'
-      ? safeConfig.telegramAlertThreadId.trim()
+    newAlertThreadId: typeof safeConfig.newAlertThreadId === 'string'
+      ? safeConfig.newAlertThreadId.trim()
+      : '',
+    holdingAlertChatId: typeof safeConfig.holdingAlertChatId === 'string'
+      ? safeConfig.holdingAlertChatId.trim()
+      : '',
+    holdingAlertThreadId: typeof safeConfig.holdingAlertThreadId === 'string'
+      ? safeConfig.holdingAlertThreadId.trim()
+      : '',
+    highestAlertChatId: typeof safeConfig.highestAlertChatId === 'string'
+      ? safeConfig.highestAlertChatId.trim()
+      : '',
+    highestAlertThreadId: typeof safeConfig.highestAlertThreadId === 'string'
+      ? safeConfig.highestAlertThreadId.trim()
+      : '',
+    resolvedAlertChatId: typeof safeConfig.resolvedAlertChatId === 'string'
+      ? safeConfig.resolvedAlertChatId.trim()
+      : '',
+    resolvedAlertThreadId: typeof safeConfig.resolvedAlertThreadId === 'string'
+      ? safeConfig.resolvedAlertThreadId.trim()
       : '',
     holdingReplyPatternSources,
     resolveReplyPatternSources,

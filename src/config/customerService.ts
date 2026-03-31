@@ -73,6 +73,15 @@ export const CUSTOMER_SERVICE_CONFIG = {
 
   ONCALL_DEFAULTS: {
     enabled: false,
+    staffIds: [] as string[],
+    newAlertChatId: '',
+    newAlertThreadId: '',
+    holdingAlertChatId: '',
+    holdingAlertThreadId: '',
+    highestAlertChatId: '',
+    highestAlertThreadId: '',
+    resolvedAlertChatId: '',
+    resolvedAlertThreadId: '',
     firstResponseTimeoutMs: 5 * 60 * 1000,
     highestEscalationTimeoutMs: 10 * 60 * 1000,
     holdingReplyGraceTimeoutMs: 15 * 60 * 1000,

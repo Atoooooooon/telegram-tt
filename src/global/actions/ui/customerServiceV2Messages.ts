@@ -6,8 +6,6 @@ import { MAIN_THREAD_ID } from '../../../api/types';
 import { CUSTOMER_SERVICE_CONFIG } from '../../../config/customerService';
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
 import { callApi } from '../../../api/gramjs';
-import { getMessageText } from '../../helpers/messages';
-import { reportCustomerServiceUsefulMessage } from '../../helpers/customerServiceOncall';
 import { loadCustomerServiceV2SettingsFromStorage } from '../../helpers/customerServiceV2Settings';
 import { addActionHandler, getGlobal, setGlobal } from '../../index';
 import { selectChat } from '../../selectors';
@@ -138,19 +136,6 @@ addActionHandler('addToCustomerServiceV2', (global, actions, payload): ActionRet
 
     if (settings.mode === 'assist') {
       nextGlobal = pauseCustomerServiceChat(nextGlobal, chatId, message.id);
-    }
-
-    if (settings.oncall?.enabled) {
-      reportCustomerServiceUsefulMessage({
-        chatId,
-        messageId: message.id,
-        createdAt: typeof message.date === 'number' ? message.date * 1000 : Date.now(),
-        chatTitle: chat?.title,
-        senderId: message.senderId,
-        text: getMessageText(message)?.text,
-        previewText: getMessageText(message)?.text,
-        oncallConfig: settings.oncall,
-      });
     }
 
     return nextGlobal;

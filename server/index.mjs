@@ -7,6 +7,7 @@ import { createOncallService } from './lib/oncall-service.mjs';
 import baiduOcrRoute from './routes/baidu-ocr.mjs';
 import customerServiceCloudConfigGetRoute from './routes/customer-service-cloud-config-get.mjs';
 import customerServiceCloudConfigPostRoute from './routes/customer-service-cloud-config-post.mjs';
+import oncallCaseStatusRoute from './routes/oncall-case-status.mjs';
 import oncallCasesRoute from './routes/oncall-cases.mjs';
 import oncallStaffReplyRoute from './routes/oncall-staff-reply.mjs';
 import oncallUsefulMessageRoute from './routes/oncall-useful-message.mjs';
@@ -24,6 +25,7 @@ const routes = [
   customerServiceCloudConfigPostRoute,
   oncallUsefulMessageRoute,
   oncallStaffReplyRoute,
+  oncallCaseStatusRoute,
   oncallCasesRoute,
 ];
 

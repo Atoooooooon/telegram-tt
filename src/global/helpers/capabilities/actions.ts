@@ -251,7 +251,9 @@ export const actionAutoReplyCapability: Capability = {
         if ('id' in result && typeof result.id === 'number') {
           sentMessageId = result.id;
         } else if ('updates' in result && Array.isArray(result.updates)) {
-          const idUpdate = result.updates.find((u: any) => 'id' in u && typeof u.id === 'number');
+          const idUpdate = result.updates.find(
+            (update): update is typeof update & { id: number } => ('id' in update && typeof update.id === 'number'),
+          );
           if (idUpdate) sentMessageId = idUpdate.id;
         } else if ('messageId' in result) {
           sentMessageId = (result as any).messageId;
@@ -293,14 +295,58 @@ export const actionAddQueueCapability: Capability = {
   type: 'action',
   description: '添加消息到客服队列',
 
-  configSchema: {},
+  configSchema: {
+    syncToOncall: {
+      type: 'boolean',
+      label: '同步加入消息保障',
+      default: false,
+    },
+  },
 
-  async execute({ message, actions }) {
+  async execute({ message, actions, config, global }) {
     try {
       await actions.addToCustomerServiceV2({
         message,
         chatId: message.chatId,
       });
+
+      if (config.syncToOncall) {
+        const [
+          { getCurrentTabId },
+          { selectCustomerServiceV2Settings },
+          { selectChat },
+          { getMessageText },
+          { loadCustomerServiceV2SettingsFromStorage },
+          { reportCustomerServiceUsefulMessage },
+        ] = await Promise.all([
+          import('../../../util/establishMultitabRole'),
+          import('../../selectors/customerServiceV2'),
+          import('../../selectors'),
+          import('../messages'),
+          import('../customerServiceV2Settings'),
+          import('../customerServiceOncall'),
+        ]);
+
+        const settings = selectCustomerServiceV2Settings(global, getCurrentTabId())
+          || loadCustomerServiceV2SettingsFromStorage();
+        const oncallSettings = settings?.oncall;
+
+        if (oncallSettings?.enabled) {
+          const chat = selectChat(global, message.chatId);
+          const messageText = getMessageText(message);
+
+          reportCustomerServiceUsefulMessage({
+            chatId: message.chatId,
+            messageId: message.id,
+            createdAt: typeof message.date === 'number' ? message.date * 1000 : Date.now(),
+            chatTitle: chat?.title,
+            senderId: message.senderId,
+            text: messageText?.text,
+            previewText: messageText?.text,
+            oncallConfig: oncallSettings,
+          });
+        }
+      }
 
       return {
         success: true,
@@ -481,7 +527,9 @@ export const actionSendToCapability: Capability = {
         if ('id' in result && typeof result.id === 'number') {
           sentMessageId = result.id;
         } else if ('updates' in result && Array.isArray(result.updates)) {
-          const idUpdate = result.updates.find((u: any) => 'id' in u && typeof u.id === 'number');
+          const idUpdate = result.updates.find(
+            (update): update is typeof update & { id: number } => ('id' in update && typeof update.id === 'number'),
+          );
           if (idUpdate) sentMessageId = idUpdate.id;
         } else if ('messageId' in result) {
           sentMessageId = (result as any).messageId;

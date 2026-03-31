@@ -317,13 +317,29 @@
   align-items: flex-start;
   gap: 0.5rem;
   flex-direction: column;
+  min-width: 0;
+}
+
+.actionButtons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.actionMessages {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
 }
 
 .copyButton {
   align-self: flex-start;
 }
 
-.inviteButton {
+.inviteButton,
+.removeButton {
   min-width: 6rem;
 }
 

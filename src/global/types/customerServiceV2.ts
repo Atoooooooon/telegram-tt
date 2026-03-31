@@ -11,8 +11,15 @@ export type CustomerServiceQuickReply = {
 
 export type CustomerServiceOncallSettings = {
   enabled?: boolean;
-  telegramAlertChatId?: string;
-  telegramAlertThreadId?: string;
+  staffIds?: string[];
+  newAlertChatId?: string;
+  newAlertThreadId?: string;
+  holdingAlertChatId?: string;
+  holdingAlertThreadId?: string;
+  highestAlertChatId?: string;
+  highestAlertThreadId?: string;
+  resolvedAlertChatId?: string;
+  resolvedAlertThreadId?: string;
   firstResponseTimeoutMs?: number;
   highestEscalationTimeoutMs?: number;
   holdingReplyGraceTimeoutMs?: number;

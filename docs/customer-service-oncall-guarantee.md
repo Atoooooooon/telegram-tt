@@ -322,6 +322,12 @@ reopened -> acked / processing
 - 新消息优先并入已有 case
 - 不把每条消息都独立当成一个待办
 
+当前实现补充说明:
+
+- 当前后端仍按 `chatId` 维护单一当前 case
+- 若同一 chat 距离上一次真实互动已超过固定空闲窗口,后续有效消息会切成新的 case
+- 当前空闲窗口为代码内固定值 `5 分钟`
+
 这样可以减少队列膨胀,也更符合 oncall 的处理方式。
 
 ### 8.2 Ack 机制
@@ -431,6 +437,13 @@ type CustomerServiceSlaSettings = {
 4. 若工作人员执行 `resolve` 或发送 `resolve_reply`:
    - 停止升级链路
    - case 进入 `resolved`
+
+当前实现补充说明:
+
+- 显式 `ack / processing` 已作为 case 状态动作接入后端
+- 但它们当前只表达“有人接手”,不会取消“客户侧无人有效回复”的升级计时
+- 只有 `real_reply` 或 `resolve / resolve_reply` 会真正停止现有无人回复升级链路
+- `staffIds` 可由 oncall 配置直接提供; 未配置时默认仅识别当前账号自己发出的消息为 staff reply
 
 ### 8.6 事件驱动升级引擎
 
@@ -567,6 +580,12 @@ Bot 消息建议包含:
 3. Node 服务按 `chatId` 创建或更新 case
 4. Node 服务根据事件重算升级 deadline
 5. 到达最高级别时由 Bot 发群通知
+
+当前实现补充说明:
+
+- `assist` 模式下的 `pause` 仍然只负责保护前端自动已读与消息队列
+- 只要消息通过基础过滤并被判定为有效消息,即使当前 chat 已被 `pause`,也仍会上报到后端保障链路
+- 因此“辅助模式降噪”和“后端消息保障”现在是并行分支,不再互相阻断
 
 工作人员操作也建议上报到 Node 服务:
 

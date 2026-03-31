@@ -378,7 +378,7 @@ export type Capability = {
 |-------|------|------|---------|
 | `action_mark_read` | 标记已读 | 从客服队列移除消息 | `targetMessage`: 当前消息/回复的原消息 |
 | `action_auto_reply` | 自动回复 | 发送自动回复消息 | `template`: 回复模板(支持变量) |
-| `action_add_queue` | 添加到队列 | 添加消息到客服队列 | 无 |
+| `action_add_queue` | 添加到队列 | 添加消息到客服队列 | `syncToOncall`: 是否同时同步到后端消息保障 |
 | `action_notify` | 发送通知 | 向客服人员发送通知 | `message`: 通知内容模板 |
 
 ### 5.3 能力实现示例

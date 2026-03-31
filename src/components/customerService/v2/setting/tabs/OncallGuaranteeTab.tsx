@@ -1,13 +1,17 @@
 import type { FC } from '../../../../../lib/teact/teact';
+import type React from '../../../../../lib/teact/teact';
 import { memo } from '../../../../../lib/teact/teact';
 
+import type { ApiChat } from '../../../../../api/types';
 import type { CustomerServiceOncallSettings } from '../../../../../global/types/customerServiceV2';
+import type { TopicsInfo } from '../../../../../types';
 
 import useLang from '../../../../../hooks/useLang';
 import useLastCallback from '../../../../../hooks/useLastCallback';
 
 import Icon from '../../../../common/icons/Icon';
 import InputText from '../../../../ui/InputText';
+import Select from '../../../../ui/Select';
 import Switcher from '../../../../ui/Switcher';
 import TextArea from '../../../../ui/TextArea';
 
@@ -16,7 +20,20 @@ import styles from './OncallGuaranteeTab.module.scss';
 
 type Props = {
   oncall?: CustomerServiceOncallSettings;
+  chats: Record<string, ApiChat>;
+  topicsInfoByChatId: Record<string, TopicsInfo>;
+  onLoadTopics: (payload: { chatId: string; force?: boolean }) => void;
   onChange: (next: CustomerServiceOncallSettings) => void;
+};
+
+type AlertStage = 'new' | 'holding' | 'highest' | 'resolved';
+
+type StageOption = {
+  stage: AlertStage;
+  chatKey: keyof CustomerServiceOncallSettings;
+  threadKey: keyof CustomerServiceOncallSettings;
+  label: string;
+  description: string;
 };
 
 function stringifyPatterns(patterns?: string[]) {
@@ -30,9 +47,58 @@ function parsePatterns(value: string) {
     .filter(Boolean);
 }
 
-const OncallGuaranteeTab: FC<Props> = ({ oncall, onChange }) => {
+const OncallGuaranteeTab: FC<Props> = ({
+  oncall,
+  chats,
+  topicsInfoByChatId,
+  onLoadTopics,
+  onChange,
+}) => {
   const lang = useLang();
   const config = oncall || {};
+  const chatOptions = Object.values(chats)
+    .filter((chat) => (
+      chat
+      && !chat.isForbidden
+      && !chat.isRestricted
+      && (
+        chat.type === 'chatTypeBasicGroup'
+        || chat.type === 'chatTypeSuperGroup'
+        || chat.type === 'chatTypeChannel'
+      )
+    ))
+    .sort((left, right) => left.title.localeCompare(right.title, 'zh-CN'));
+
+  const stageOptions: StageOption[] = [
+    {
+      stage: 'new',
+      chatKey: 'newAlertChatId',
+      threadKey: 'newAlertThreadId',
+      label: lang('CustomerServiceOncallStageNew'),
+      description: lang('CustomerServiceOncallStageNewHint'),
+    },
+    {
+      stage: 'holding',
+      chatKey: 'holdingAlertChatId',
+      threadKey: 'holdingAlertThreadId',
+      label: lang('CustomerServiceOncallStageHolding'),
+      description: lang('CustomerServiceOncallStageHoldingHint'),
+    },
+    {
+      stage: 'highest',
+      chatKey: 'highestAlertChatId',
+      threadKey: 'highestAlertThreadId',
+      label: lang('CustomerServiceOncallStageHighest'),
+      description: lang('CustomerServiceOncallStageHighestHint'),
+    },
+    {
+      stage: 'resolved',
+      chatKey: 'resolvedAlertChatId',
+      threadKey: 'resolvedAlertThreadId',
+      label: lang('CustomerServiceOncallStageResolved'),
+      description: lang('CustomerServiceOncallStageResolvedHint'),
+    },
+  ];
 
   const updateField = useLastCallback((
     key: keyof CustomerServiceOncallSettings,
@@ -58,6 +124,30 @@ const OncallGuaranteeTab: FC<Props> = ({ oncall, onChange }) => {
 
     const parsed = Number(value);
     updateField(key, Number.isFinite(parsed) && parsed >= 0 ? parsed : 0);
+  });
+
+  const handleChatTargetChange = useLastCallback((
+    chatKey: keyof CustomerServiceOncallSettings,
+    threadKey: keyof CustomerServiceOncallSettings,
+  ) => (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextChatId = e.currentTarget.value || undefined;
+    const nextChat = nextChatId ? chats[nextChatId] : undefined;
+
+    if (nextChatId && nextChat?.isForum && !topicsInfoByChatId[nextChatId]) {
+      onLoadTopics({ chatId: nextChatId, force: true });
+    }
+
+    onChange({
+      ...config,
+      [chatKey]: nextChatId,
+      [threadKey]: undefined,
+    });
+  });
+
+  const handleThreadTargetChange = useLastCallback((
+    threadKey: keyof CustomerServiceOncallSettings,
+  ) => (e: React.ChangeEvent<HTMLSelectElement>) => {
+    updateField(threadKey, e.currentTarget.value || undefined);
   });
 
   return (
@@ -97,23 +187,73 @@ const OncallGuaranteeTab: FC<Props> = ({ oncall, onChange }) => {
       <div className={styles.sectionBlock}>
         <div className={styles.sectionTitle}>
           <Icon name="lock" />
-          <span>{lang('CustomerServiceOncallSectionTarget')}</span>
+          <span>{lang('CustomerServiceOncallSectionTargets')}</span>
         </div>
-        <div className={styles.formGrid}>
-          <InputText
-            value={config.telegramAlertChatId || ''}
-            onChange={(e) => updateField('telegramAlertChatId', e.currentTarget.value)}
-            label={lang('CustomerServiceOncallAlertChatId')}
-            placeholder={lang('CustomerServiceOncallAlertChatPlaceholder')}
-            className={styles.textField}
-          />
-          <InputText
-            value={config.telegramAlertThreadId || ''}
-            onChange={(e) => updateField('telegramAlertThreadId', e.currentTarget.value)}
-            label={lang('CustomerServiceOncallAlertThreadId')}
-            placeholder={lang('CustomerServiceOncallOptionalPlaceholder')}
-            className={styles.textField}
-          />
+        <div className={styles.stageRouteList}>
+          {stageOptions.map(({ stage, chatKey, threadKey, label, description }) => {
+            const selectedChatId = config[chatKey] as string | undefined;
+            const selectedThreadId = config[threadKey] as string | undefined;
+            const selectedChat = selectedChatId ? chats[selectedChatId] : undefined;
+            const topicsById = selectedChatId ? topicsInfoByChatId[selectedChatId]?.topicsById : undefined;
+            const topicOptions = topicsById
+              ? Object.values(topicsById).sort((left, right) => left.title.localeCompare(right.title, 'zh-CN'))
+              : [];
+            const isTopicSelectable = Boolean(selectedChat?.isForum && topicOptions.length);
+
+            return (
+              <div key={stage} className={styles.stageRouteCard}>
+                <div className={styles.stageRouteHeader}>
+                  <div className={styles.stageRouteLabel}>{label}</div>
+                  <div className={styles.stageRouteDescription}>{description}</div>
+                </div>
+                <div className={styles.formGrid}>
+                  <Select
+                    id={`oncall-stage-chat-${stage}`}
+                    value={selectedChatId || ''}
+                    label={lang('CustomerServiceOncallAlertGroup')}
+                    hasArrow
+                    onChange={handleChatTargetChange(chatKey, threadKey)}
+                  >
+                    <option value="">{lang('CustomerServiceOncallTargetDisabled')}</option>
+                    {chatOptions.map((chat) => (
+                      <option key={chat.id} value={chat.id}>
+                        {chat.isForum ? `[Forum] ${chat.title}` : chat.title}
+                      </option>
+                    ))}
+                  </Select>
+                  <Select
+                    id={`oncall-stage-thread-${stage}`}
+                    value={selectedThreadId || ''}
+                    label={lang('CustomerServiceOncallAlertTopic')}
+                    hasArrow
+                    onChange={handleThreadTargetChange(threadKey)}
+                  >
+                    <option value="">{lang('CustomerServiceOncallTopicDisabled')}</option>
+                    {isTopicSelectable && topicOptions.map((topic) => (
+                      <option key={topic.id} value={String(topic.id)}>
+                        {topic.title}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                {selectedChat && !selectedChat.isForum && (
+                  <div className={styles.stageRouteHint}>
+                    {lang('CustomerServiceOncallTopicUnavailableHint')}
+                  </div>
+                )}
+                {selectedChat?.isForum && !topicOptions.length && (
+                  <div className={styles.stageRouteHint}>
+                    {lang('CustomerServiceOncallTopicLoadHint')}
+                  </div>
+                )}
+                {selectedChat?.isForum && topicOptions.length > 0 && !selectedThreadId && (
+                  <div className={styles.stageRouteHint}>
+                    {lang('CustomerServiceOncallTopicRequiredHint')}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 

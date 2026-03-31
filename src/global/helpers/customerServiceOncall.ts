@@ -15,6 +15,7 @@ type CustomerServiceUsefulMessagePayload = {
 type CustomerServiceStaffReplyPayload = {
   chatId: string;
   messageId: number;
+  replyToMessageId?: number;
   createdAt?: number;
   staffUserId?: string;
   text?: string;

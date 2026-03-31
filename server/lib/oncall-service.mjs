@@ -4,6 +4,13 @@ import { getDefaultOncallConfig, normalizeOncallConfig } from './oncall-config.m
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const NON_TEXT_PLACEHOLDER = '[non-text message]';
+const CASE_SPLIT_IDLE_MS = 5 * 60 * 1000;
+const ONCALL_NOTIFICATION_STAGES = {
+  NEW: 'new',
+  HOLDING: 'holding',
+  HIGHEST: 'highest',
+  RESOLVED: 'resolved',
+};
 
 function appendUnique(list, value) {
   if (!Array.isArray(list)) {
@@ -82,9 +89,73 @@ function computeNextEscalateAt(caseRecord, config) {
   return undefined;
 }
 
-function buildAlertMessage(caseRecord) {
+function getNotificationStage(caseRecord) {
+  if (caseRecord.status === 'expired') {
+    return undefined;
+  }
+
+  if (caseRecord.status === 'resolved') {
+    return ONCALL_NOTIFICATION_STAGES.RESOLVED;
+  }
+
+  if (caseRecord.escalationLevel >= 2) {
+    return ONCALL_NOTIFICATION_STAGES.HIGHEST;
+  }
+
+  if (hasHoldingReply(caseRecord)) {
+    return ONCALL_NOTIFICATION_STAGES.HOLDING;
+  }
+
+  if (!hasEffectiveReply(caseRecord)) {
+    return ONCALL_NOTIFICATION_STAGES.NEW;
+  }
+
+  return undefined;
+}
+
+function buildStageTarget(chatId, threadId) {
+  const normalizedChatId = typeof chatId === 'string' ? chatId.trim() : '';
+  const normalizedThreadId = typeof threadId === 'string' ? threadId.trim() : '';
+
+  if (!normalizedChatId) {
+    return undefined;
+  }
+
+  return {
+    chatId: normalizedChatId,
+    threadId: normalizedThreadId || undefined,
+  };
+}
+
+function getStageTarget(config, stage) {
+  if (stage === ONCALL_NOTIFICATION_STAGES.NEW) {
+    return buildStageTarget(config.newAlertChatId, config.newAlertThreadId);
+  }
+
+  if (stage === ONCALL_NOTIFICATION_STAGES.HOLDING) {
+    return buildStageTarget(config.holdingAlertChatId, config.holdingAlertThreadId);
+  }
+
+  if (stage === ONCALL_NOTIFICATION_STAGES.HIGHEST) {
+    return buildStageTarget(config.highestAlertChatId, config.highestAlertThreadId);
+  }
+
+  if (stage === ONCALL_NOTIFICATION_STAGES.RESOLVED) {
+    return buildStageTarget(config.resolvedAlertChatId, config.resolvedAlertThreadId);
+  }
+
+  return undefined;
+}
+
+function buildNotificationMessage(caseRecord, stage) {
+  const stageTitles = {
+    [ONCALL_NOTIFICATION_STAGES.NEW]: '[OnCall New Case]',
+    [ONCALL_NOTIFICATION_STAGES.HOLDING]: '[OnCall Waiting Reply]',
+    [ONCALL_NOTIFICATION_STAGES.HIGHEST]: '[OnCall Highest Escalation]',
+    [ONCALL_NOTIFICATION_STAGES.RESOLVED]: '[OnCall Resolved]',
+  };
   const lines = [
-    '[OnCall Highest Escalation]',
+    stageTitles[stage] || '[OnCall Case]',
     `caseId: ${caseRecord.id}`,
     `chatId: ${caseRecord.chatId}`,
   ];
@@ -166,6 +237,10 @@ function ensureCaseForChat(state, payload, now) {
     deadlineVersion: 0,
     lastAlertAt: undefined,
     highestAlertSentAt: undefined,
+    notificationStage: undefined,
+    notificationChatId: undefined,
+    notificationThreadId: undefined,
+    notificationMessageId: undefined,
   };
 
   state.caseIdByChatId[payload.chatId] = nextCase.id;
@@ -174,7 +249,64 @@ function ensureCaseForChat(state, payload, now) {
   return nextCase;
 }
 
+function getLastCaseInteractionAt(caseRecord) {
+  return [
+    caseRecord.reopenedAt,
+    caseRecord.resolvedAt,
+    caseRecord.processingAt,
+    caseRecord.ackedAt,
+    caseRecord.lastStaffReplyAt,
+    caseRecord.lastHoldingReplyAt,
+    caseRecord.lastCustomerMessageAt,
+    caseRecord.createdAt,
+  ].reduce((latest, value) => (typeof value === 'number' && value > latest ? value : latest), 0);
+}
+
+function shouldStartNewCase(existingCase, eventAt) {
+  if (!existingCase) {
+    return false;
+  }
+
+  const lastInteractionAt = getLastCaseInteractionAt(existingCase);
+  return Boolean(lastInteractionAt && eventAt - lastInteractionAt >= CASE_SPLIT_IDLE_MS);
+}
+
+function rotateChatCase(state, payload, now) {
+  const eventAt = payload.createdAt || now;
+  const existingCaseId = state.caseIdByChatId[payload.chatId];
+  const existingCase = existingCaseId ? state.casesById[existingCaseId] : undefined;
+
+  if (!existingCase || !shouldStartNewCase(existingCase, eventAt)) {
+    return existingCase;
+  }
+
+  if (existingCase.status !== 'resolved' && existingCase.status !== 'expired') {
+    const config = existingCase.oncallConfig || getDefaultOncallConfig();
+    existingCase.status = 'expired';
+    existingCase.updatedAt = eventAt;
+    existingCase.nextEscalateAt = undefined;
+    existingCase.deadlineVersion += 1;
+    existingCase.oncallConfig = config;
+  }
+
+  delete state.caseIdByChatId[payload.chatId];
+  return undefined;
+}
+
+function findCaseByMessageId(state, chatId, messageId) {
+  if (!messageId) {
+    return undefined;
+  }
+
+  return Object.values(state.casesById).find((caseRecord) => (
+    caseRecord.chatId === chatId
+    && Array.isArray(caseRecord.messageIds)
+    && caseRecord.messageIds.includes(messageId)
+  ));
+}
+
 function applyUsefulMessageEvent(state, payload, config, now) {
+  const staleCaseRecord = rotateChatCase(state, payload, now);
   const caseRecord = ensureCaseForChat(state, payload, now);
 
   if (caseRecord.messageIds.includes(payload.messageId)) {
@@ -216,20 +348,22 @@ function applyUsefulMessageEvent(state, payload, config, now) {
 
   return {
     caseRecord,
+    staleCaseRecord,
     changed: true,
   };
 }
 
 function applyStaffReplyEvent(state, payload, config, now) {
-  const caseId = state.caseIdByChatId[payload.chatId];
-  if (!caseId) {
+  const replyTargetCase = findCaseByMessageId(state, payload.chatId, payload.replyToMessageId);
+  const fallbackCaseId = state.caseIdByChatId[payload.chatId];
+  const caseRecord = replyTargetCase || (fallbackCaseId ? state.casesById[fallbackCaseId] : undefined);
+  if (!caseRecord) {
     return {
       changed: false,
     };
   }
 
-  const caseRecord = state.casesById[caseId];
-  if (!caseRecord || caseRecord.staffMessageIds.includes(payload.messageId)) {
+  if (caseRecord.staffMessageIds.includes(payload.messageId)) {
     return {
       caseRecord,
       changed: false,
@@ -331,13 +465,65 @@ function applyDeadlineEvent(state, payload, now) {
 
     if (canSend) {
       caseRecord.highestAlertSentAt = now;
-      return {
-        changed: true,
-        caseRecord,
-        alertText: buildAlertMessage(caseRecord),
-      };
     }
   }
+
+  return {
+    changed: true,
+    caseRecord,
+  };
+}
+
+function applyCaseStatusEvent(state, payload, now) {
+  const caseRecord = state.casesById[payload.caseId];
+  if (!caseRecord) {
+    return {
+      changed: false,
+      error: 'case_not_found',
+    };
+  }
+
+  if (caseRecord.status === 'resolved' || caseRecord.status === 'expired') {
+    return {
+      changed: false,
+      caseRecord,
+      error: 'case_not_active',
+    };
+  }
+
+  const nextStatus = payload.status;
+  const updatedAt = payload.createdAt || now;
+  const ownerUserId = payload.userId || caseRecord.ownerUserId;
+
+  caseRecord.updatedAt = updatedAt;
+  caseRecord.ownerUserId = ownerUserId;
+  caseRecord.lastEffectiveResponderId = ownerUserId || caseRecord.lastEffectiveResponderId;
+
+  if (nextStatus === 'acked') {
+    caseRecord.status = 'acked';
+    caseRecord.ackedAt = caseRecord.ackedAt || updatedAt;
+  } else if (nextStatus === 'processing') {
+    caseRecord.status = 'processing';
+    caseRecord.ackedAt = caseRecord.ackedAt || updatedAt;
+    caseRecord.processingAt = updatedAt;
+  } else if (nextStatus === 'resolved') {
+    caseRecord.status = 'resolved';
+    caseRecord.ackedAt = caseRecord.ackedAt || updatedAt;
+    caseRecord.processingAt = caseRecord.processingAt || updatedAt;
+    caseRecord.resolvedAt = updatedAt;
+  } else {
+    return {
+      changed: false,
+      caseRecord,
+      error: 'unsupported_status',
+    };
+  }
+
+  const config = caseRecord.oncallConfig || getDefaultOncallConfig();
+  caseRecord.nextEscalateAt = nextStatus === 'resolved'
+    ? undefined
+    : computeNextEscalateAt(caseRecord, config);
+  caseRecord.deadlineVersion += 1;
 
   return {
     changed: true,
@@ -382,7 +568,12 @@ export class OncallService {
         nextEscalateAt: result.caseRecord.nextEscalateAt,
         escalationLevel: result.caseRecord.escalationLevel,
       });
+      if (result.staleCaseRecord) {
+        this.syncCaseSchedule(result.staleCaseRecord);
+        await this.syncCaseNotification(result.staleCaseRecord);
+      }
       this.syncCaseSchedule(result.caseRecord);
+      await this.syncCaseNotification(result.caseRecord);
     }
 
     return result;
@@ -404,6 +595,7 @@ export class OncallService {
         escalationLevel: result.caseRecord.escalationLevel,
       });
       this.syncCaseSchedule(result.caseRecord);
+      await this.syncCaseNotification(result.caseRecord);
     }
 
     return result;
@@ -422,18 +614,9 @@ export class OncallService {
         status: result.caseRecord.status,
         nextEscalateAt: result.caseRecord.nextEscalateAt,
         escalationLevel: result.caseRecord.escalationLevel,
-        alert: Boolean(result.alertText),
       });
       this.syncCaseSchedule(result.caseRecord);
-    }
-
-    if (result.alertText) {
-      try {
-        const alertConfig = result.caseRecord?.oncallConfig || this.defaultConfig;
-        await this.botClient.sendAlert(alertConfig, result.alertText);
-      } catch (error) {
-        this.log('Oncall highest escalation alert failed', error);
-      }
+      await this.syncCaseNotification(result.caseRecord);
     }
   }
 
@@ -449,6 +632,105 @@ export class OncallService {
         .map(sanitizeOncallCaseForResponse);
     });
   }
+
+  async updateCaseStatus(payload) {
+    const now = getNow();
+    const result = await this.store.mutate((state) => (
+      applyCaseStatusEvent(state, payload, now)
+    ));
+
+    if (result.caseRecord) {
+      this.log('Oncall case status updated', {
+        caseId: payload.caseId,
+        status: result.caseRecord.status,
+        nextEscalateAt: result.caseRecord.nextEscalateAt,
+        escalationLevel: result.caseRecord.escalationLevel,
+        error: result.error,
+      });
+      this.syncCaseSchedule(result.caseRecord);
+      await this.syncCaseNotification(result.caseRecord);
+    }
+
+    return result;
+  }
+
+  async setCaseNotification(caseId, nextState) {
+    await this.store.mutate((state) => {
+      const caseRecord = state.casesById[caseId];
+      if (!caseRecord) {
+        return undefined;
+      }
+
+      caseRecord.notificationStage = nextState?.stage;
+      caseRecord.notificationChatId = nextState?.chatId;
+      caseRecord.notificationThreadId = nextState?.threadId;
+      caseRecord.notificationMessageId = nextState?.messageId;
+      return undefined;
+    });
+  }
+
+  async syncCaseNotification(caseRecord) {
+    if (!caseRecord) {
+      return;
+    }
+
+    const config = caseRecord.oncallConfig || this.defaultConfig;
+    const nextStage = getNotificationStage(caseRecord);
+    const nextTarget = nextStage ? getStageTarget(config, nextStage) : undefined;
+    const currentTargetConfig = (
+      caseRecord.notificationChatId
+        ? {
+          telegramBotToken: config.telegramBotToken,
+          telegramAlertChatId: caseRecord.notificationChatId,
+          telegramAlertThreadId: caseRecord.notificationThreadId,
+        }
+        : undefined
+    );
+    const sameStage = nextStage === caseRecord.notificationStage;
+    const sameChat = (nextTarget?.chatId || '') === (caseRecord.notificationChatId || '');
+    const sameThread = (nextTarget?.threadId || '') === (caseRecord.notificationThreadId || '');
+
+    if (!nextStage || !nextTarget?.chatId) {
+      if (currentTargetConfig && caseRecord.notificationMessageId) {
+        await this.botClient.deleteMessage(currentTargetConfig, caseRecord.notificationMessageId);
+      }
+
+      if (caseRecord.notificationMessageId || caseRecord.notificationChatId) {
+        await this.setCaseNotification(caseRecord.id, undefined);
+      }
+      return;
+    }
+
+    if (sameStage && sameChat && sameThread && caseRecord.notificationMessageId) {
+      return;
+    }
+
+    const nextBotConfig = {
+      telegramBotToken: config.telegramBotToken,
+      telegramAlertChatId: nextTarget.chatId,
+      telegramAlertThreadId: nextTarget.threadId,
+    };
+    const sendResult = await this.botClient.sendAlert(
+      nextBotConfig,
+      buildNotificationMessage(caseRecord, nextStage),
+    );
+
+    if (!sendResult?.ok || !sendResult.messageId) {
+      return;
+    }
+
+    if (currentTargetConfig && caseRecord.notificationMessageId) {
+      await this.botClient.deleteMessage(currentTargetConfig, caseRecord.notificationMessageId);
+    }
+
+    await this.setCaseNotification(caseRecord.id, {
+      stage: nextStage,
+      chatId: nextTarget.chatId,
+      threadId: nextTarget.threadId || '',
+      messageId: sendResult.messageId,
+    });
+  }
+
   syncCaseSchedule(caseRecord) {
     this.clearCaseSchedule(caseRecord.id);
 

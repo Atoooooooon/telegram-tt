@@ -101,8 +101,18 @@ export function normalizeCustomerServiceOncallSettings(raw: unknown): CustomerSe
 
   return {
     enabled: Boolean(source.enabled),
-    telegramAlertChatId: toTrimmedString(source.telegramAlertChatId),
-    telegramAlertThreadId: toTrimmedString(source.telegramAlertThreadId),
+    staffIds: normalizeStringArray(
+      source.staffIds,
+      defaults.staffIds,
+    ),
+    newAlertChatId: toTrimmedString(source.newAlertChatId),
+    newAlertThreadId: toTrimmedString(source.newAlertThreadId),
+    holdingAlertChatId: toTrimmedString(source.holdingAlertChatId),
+    holdingAlertThreadId: toTrimmedString(source.holdingAlertThreadId),
+    highestAlertChatId: toTrimmedString(source.highestAlertChatId),
+    highestAlertThreadId: toTrimmedString(source.highestAlertThreadId),
+    resolvedAlertChatId: toTrimmedString(source.resolvedAlertChatId),
+    resolvedAlertThreadId: toTrimmedString(source.resolvedAlertThreadId),
     firstResponseTimeoutMs: toNonNegativeNumber(
       source.firstResponseTimeoutMs,
       defaults.firstResponseTimeoutMs,
