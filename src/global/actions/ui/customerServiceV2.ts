@@ -14,19 +14,23 @@
  * - customerServiceV2Helpers.ts - Shared utilities
  */
 
+// Import side-effect modules to register their action handlers
+import './customerServiceV2Messages';
+import './customerServiceV2Cloud';
+
 import type { ActionReturnType } from '../../types';
 import type { CustomerServiceSettings, CustomerServiceV2State } from '../../types/customerServiceV2';
 
-import { CUSTOMER_SERVICE_CONFIG } from '../../../config/customerService';
 import { EDITABLE_INPUT_ID } from '../../../config';
+import { CUSTOMER_SERVICE_CONFIG } from '../../../config/customerService';
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
 import { getTranslationFn } from '../../../util/localization';
+import { loadCustomerServiceCloudSyncPreference } from '../../helpers/customerServiceCloudSyncPreference';
 import {
   loadCustomerServiceV2SettingsFromStorage,
   normalizeCustomerServiceQuickReplies,
   saveCustomerServiceV2SettingsToStorage,
 } from '../../helpers/customerServiceV2Settings';
-import { loadCustomerServiceCloudSyncPreference } from '../../helpers/customerServiceCloudSyncPreference';
 import { addActionHandler } from '../../index';
 import { updateTabState } from '../../reducers/tabs';
 import { selectChat, selectCurrentMessageList, selectTabState } from '../../selectors';
@@ -34,19 +38,14 @@ import {
   selectCustomerServiceV2Settings,
   selectCustomerServiceV2State,
 } from '../../selectors/customerServiceV2';
-
 import {
   ensureCustomerServiceV2State,
   getDefaultCustomerServiceV2Settings,
   normalizeSettingsForSave,
-  pauseCustomerServiceChat,
   ownersMatch,
+  pauseCustomerServiceChat,
   syncCustomerServiceV2StateAcrossTabs,
 } from './customerServiceV2Helpers';
-
-// Import side-effect modules to register their action handlers
-import './customerServiceV2Messages';
-import './customerServiceV2Cloud';
 
 let hasScheduledCustomerServiceAutoCloudSync = false;
 let isCheckingPausedChatsStatus = false;
@@ -280,6 +279,7 @@ addActionHandler('toggleCustomerServiceV2Mode', (global, actions, payload): Acti
     ),
     quickReplyPanelGlobal: Boolean(existingSettings.quickReplyPanelGlobal),
     rules: existingSettings.rules,
+    knownChats: existingSettings.knownChats,
   };
 
   const normalized = normalizeSettingsForSave(updatedSettings);

@@ -357,6 +357,10 @@ export interface LangPair {
   'CustomerServiceOncallStageHighestHint': undefined;
   'CustomerServiceOncallStageResolved': undefined;
   'CustomerServiceOncallStageResolvedHint': undefined;
+  'CustomerServiceOncallSectionStaff': undefined;
+  'CustomerServiceOncallStaffHint': undefined;
+  'CustomerServiceOncallNoStaff': undefined;
+  'CustomerServiceOncallRemoveStaff': undefined;
   'CustomerServiceOncallSectionTimeouts': undefined;
   'CustomerServiceOncallFirstResponseTimeout': undefined;
   'CustomerServiceOncallHighestEscalationTimeout': undefined;

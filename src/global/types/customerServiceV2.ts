@@ -1,4 +1,4 @@
-import type { ApiMessage } from '../../api/types';
+import type { ApiChat, ApiMessage } from '../../api/types';
 import type { GlobalState } from './index';
 
 export type CustomerServiceQuickReplyMode = 'send' | 'insert';
@@ -26,6 +26,13 @@ export type CustomerServiceOncallSettings = {
   reminderCooldownMs?: number;
   holdingReplyPatterns?: string[];
   resolveReplyPatterns?: string[];
+};
+
+export type CustomerServiceKnownChat = {
+  id: string;
+  title: string;
+  type?: ApiChat['type'];
+  isForum?: boolean;
 };
 
 /**
@@ -62,6 +69,9 @@ export type CustomerServiceSettings = {
 
   /** Personal oncall guarantee settings */
   oncall?: CustomerServiceOncallSettings;
+
+  /** Cached chat metadata for settings display/search when dialogs are not loaded locally */
+  knownChats?: Record<string, CustomerServiceKnownChat>;
 };
 
 /**
@@ -146,16 +156,14 @@ export type CapabilityType = 'checker' | 'extractor' | 'action';
 /**
  * Configuration schema for capability parameters
  */
-export type CapabilityConfigSchema = {
-  [key: string]: {
-    type: 'string' | 'number' | 'boolean' | 'select' | 'textarea';
-    label: string;
-    default?: any;
-    options?: string[];
-    placeholder?: string;
-    required?: boolean;
-  };
-};
+export type CapabilityConfigSchema = Record<string, {
+  type: 'string' | 'number' | 'boolean' | 'select' | 'textarea';
+  label: string;
+  default?: any;
+  options?: string[];
+  placeholder?: string;
+  required?: boolean;
+}>;
 
 /**
  * Capability execution input

@@ -2,12 +2,13 @@ import type { GlobalState } from '../../types';
 import type { CustomerServiceSettings, CustomerServiceV2State } from '../../types/customerServiceV2';
 
 import { CUSTOMER_SERVICE_CONFIG } from '../../../config/customerService';
-import { selectChat } from '../../selectors';
 import {
+  normalizeCustomerServiceKnownChats,
   normalizeCustomerServiceOncallSettings,
   normalizeCustomerServiceQuickReplies,
 } from '../../helpers/customerServiceV2Settings';
 import { updateTabState } from '../../reducers/tabs';
+import { selectChat } from '../../selectors';
 
 export function ownersMatch(left?: string, right?: string): boolean {
   if (!left || !right) {
@@ -79,6 +80,7 @@ export function mapCustomerServiceConfigToSettings(
     quickReplyPanelGlobal: false,
     rules: undefined,
     oncall: normalizeCustomerServiceOncallSettings(config.ONCALL_DEFAULTS),
+    knownChats: undefined,
   };
 }
 
@@ -123,6 +125,7 @@ export function normalizeSettingsForSave(settings: CustomerServiceSettings): Cus
     quickReplyPanelGlobal: Boolean(settings.quickReplyPanelGlobal),
     rules: settings.rules,
     oncall: normalizeCustomerServiceOncallSettings(settings.oncall),
+    knownChats: normalizeCustomerServiceKnownChats(settings.knownChats),
   };
 }
 

@@ -4,7 +4,9 @@ import {
 } from '../../../../../lib/teact/teact';
 
 import type { ApiChat, ApiChatFullInfo } from '../../../../../api/types';
+import type { CustomerServiceKnownChat } from '../../../../../global/types/customerServiceV2';
 
+import { buildCustomerServiceChatOptions } from '../../../../../global/helpers/customerServiceV2Settings';
 import buildClassName from '../../../../../util/buildClassName';
 import { getChatFolderIds } from '../../../../../util/folderManager';
 
@@ -24,10 +26,16 @@ type Props = {
   chatFolders: Record<number, any>;
   orderedFolderIds?: number[];
   monitoredChatIds: string[];
+  knownChats?: Record<string, CustomerServiceKnownChat>;
   onChange: (next: string[]) => void;
 };
 
 const DEFAULT_TAG_OPTION = '-1';
+const EMPTY_CHATS: Record<string, ApiChat> = {};
+const EMPTY_CHAT_FOLDERS: Record<number, any> = {};
+const EMPTY_CHAT_FULL_INFOS: Record<string, ApiChatFullInfo> = {};
+const EMPTY_MONITORED_CHAT_IDS: string[] = [];
+const EMPTY_KNOWN_CHATS: Record<string, CustomerServiceKnownChat> = {};
 
 const GroupFiltersTab: FC<Props> = ({
   chats,
@@ -35,6 +43,7 @@ const GroupFiltersTab: FC<Props> = ({
   chatFolders,
   orderedFolderIds,
   monitoredChatIds,
+  knownChats,
   onChange,
 }) => {
   const lang = useLang();
@@ -43,10 +52,11 @@ const GroupFiltersTab: FC<Props> = ({
   const [groupSearchQuery, setGroupSearchQuery] = useState('');
   const [isAllSelected, setIsAllSelected] = useState(false);
 
-  const safeChats = chats || {};
-  const safeChatFolders = chatFolders || {};
-  const safeMonitoredChatIds = monitoredChatIds || [];
-  const safeChatFullInfos = chatFullInfos || {};
+  const safeChats = chats || EMPTY_CHATS;
+  const safeChatFolders = chatFolders || EMPTY_CHAT_FOLDERS;
+  const safeMonitoredChatIds = monitoredChatIds || EMPTY_MONITORED_CHAT_IDS;
+  const safeChatFullInfos = chatFullInfos || EMPTY_CHAT_FULL_INFOS;
+  const safeKnownChats = knownChats || EMPTY_KNOWN_CHATS;
 
   const migratedLegacyChatIds = useMemo(() => {
     const legacyIds = new Set<string>();
@@ -68,7 +78,11 @@ const GroupFiltersTab: FC<Props> = ({
   }, [safeChats, safeChatFullInfos]);
 
   const allGroupChats = useMemo(() => {
-    return Object.values(safeChats).filter((chat) => {
+    return buildCustomerServiceChatOptions({
+      chats: safeChats,
+      knownChats: safeKnownChats,
+      referencedChatIds: safeMonitoredChatIds,
+    }).filter((chat) => {
       if (!chat || chat.isNotJoined) {
         return false;
       }
@@ -87,9 +101,9 @@ const GroupFiltersTab: FC<Props> = ({
 
       return false;
     });
-  }, [safeChats, migratedLegacyChatIds]);
+  }, [safeChats, safeKnownChats, safeMonitoredChatIds, migratedLegacyChatIds]);
 
- const tagOptions = useMemo(() => {
+  const tagOptions = useMemo(() => {
     const options = [{
       value: DEFAULT_TAG_OPTION,
       text: lang('CustomerServiceAllTags'),
@@ -183,9 +197,9 @@ const GroupFiltersTab: FC<Props> = ({
     setGroupSearchQuery(e.currentTarget.value);
   };
 
-const handleClearGroupSearch = () => {
-  setGroupSearchQuery('');
-};
+  const handleClearGroupSearch = () => {
+    setGroupSearchQuery('');
+  };
 
   const handleChatToggle = (chatId: string, isChecked: boolean) => {
     if (isChecked) {

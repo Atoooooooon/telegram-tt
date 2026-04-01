@@ -1,17 +1,18 @@
-import type React from '../../../../lib/teact/teact';
 import { memo, useEffect, useMemo, useState } from '../../../../lib/teact/teact';
 import { getActions, withGlobal } from '../../../../global';
 
 import type { ApiChat, ApiChatFullInfo } from '../../../../api/types';
-import type { TopicsInfo } from '../../../../types';
 import type {
+  CustomerServiceKnownChat,
   CustomerServiceOncallSettings,
   CustomerServiceQuickReply,
   UserRule,
 } from '../../../../global/types/customerServiceV2';
+import type { TopicsInfo } from '../../../../types';
 
 import { CUSTOMER_SERVICE_CONFIG } from '../../../../config/customerService';
 import {
+  buildCustomerServiceKnownChats,
   normalizeCustomerServiceOncallSettings,
   normalizeCustomerServiceQuickReplies,
 } from '../../../../global/helpers/customerServiceV2Settings';
@@ -27,14 +28,13 @@ import Button from '../../../ui/Button';
 import Checkbox from '../../../ui/Checkbox';
 import Modal from '../../../ui/Modal';
 import TabList from '../../../ui/TabList';
-
+import CustomerServiceCloudSyncModal from './CustomerServiceCloudSyncModal';
 import GroupFiltersTab from './tabs/GroupFiltersTab';
 import MessageFiltersTab from './tabs/MessageFiltersTab';
-import QuickRepliesTab from './tabs/QuickRepliesTab';
-import UserFiltersTab from './tabs/UserFiltersTab';
-import RuleEngineTab from './tabs/RuleEngineTab';
 import OncallGuaranteeTab from './tabs/OncallGuaranteeTab';
-import CustomerServiceCloudSyncModal from './CustomerServiceCloudSyncModal';
+import QuickRepliesTab from './tabs/QuickRepliesTab';
+import RuleEngineTab from './tabs/RuleEngineTab';
+import UserFiltersTab from './tabs/UserFiltersTab';
 
 import styles from './CustomerServiceSettingsModal.module.scss';
 
@@ -59,6 +59,7 @@ type StateProps = {
     quickReplyPanelGlobal?: boolean;
     rules?: UserRule[];
     oncall?: CustomerServiceOncallSettings;
+    knownChats?: Record<string, CustomerServiceKnownChat>;
   };
 };
 
@@ -72,6 +73,7 @@ type FilterSettings = {
   quickReplyPanelGlobal: boolean;
   rules: UserRule[];
   oncall: CustomerServiceOncallSettings;
+  knownChats?: Record<string, CustomerServiceKnownChat>;
 };
 
 type SavedSettings = StateProps['savedSettings'];
@@ -85,6 +87,7 @@ type NormalizedSettings = {
   quickReplyPanelGlobal: boolean;
   rules: UserRule[];
   oncall: CustomerServiceOncallSettings;
+  knownChats?: Record<string, CustomerServiceKnownChat>;
 };
 
 const buildFilterSettings = (saved?: SavedSettings): FilterSettings => ({
@@ -105,22 +108,36 @@ const buildFilterSettings = (saved?: SavedSettings): FilterSettings => ({
     ? saved.rules.map((rule) => JSON.parse(JSON.stringify(rule)))
     : []) as UserRule[],
   oncall: normalizeCustomerServiceOncallSettings(saved?.oncall),
+  knownChats: saved?.knownChats ? JSON.parse(JSON.stringify(saved.knownChats)) : undefined,
 });
 
-const buildNormalizedSettings = (settings: FilterSettings): NormalizedSettings => ({
-  monitoredChatIds: [...settings.monitoredChatIds],
-  filteredUserIds: [...settings.filteredUserIds],
-  regexFilters: settings.regexFilters.map((regex) => ({
-    source: regex.source,
-    flags: regex.flags,
-  })),
-  mode: settings.mode === 'assist' ? 'assist' : 'oncall',
-  autoRead: Boolean(settings.autoRead),
-  quickReplies: normalizeCustomerServiceQuickReplies(settings.quickReplies),
-  quickReplyPanelGlobal: Boolean(settings.quickReplyPanelGlobal),
-  rules: settings.rules?.length ? JSON.parse(JSON.stringify(settings.rules)) : [],
-  oncall: normalizeCustomerServiceOncallSettings(settings.oncall),
-});
+const buildNormalizedSettings = (
+  settings: FilterSettings,
+  chats: Record<string, ApiChat>,
+): NormalizedSettings => {
+  const oncall = normalizeCustomerServiceOncallSettings(settings.oncall);
+
+  return {
+    monitoredChatIds: [...settings.monitoredChatIds],
+    filteredUserIds: [...settings.filteredUserIds],
+    regexFilters: settings.regexFilters.map((regex) => ({
+      source: regex.source,
+      flags: regex.flags,
+    })),
+    mode: settings.mode === 'assist' ? 'assist' : 'oncall',
+    autoRead: Boolean(settings.autoRead),
+    quickReplies: normalizeCustomerServiceQuickReplies(settings.quickReplies),
+    quickReplyPanelGlobal: Boolean(settings.quickReplyPanelGlobal),
+    rules: settings.rules?.length ? JSON.parse(JSON.stringify(settings.rules)) : [],
+    oncall,
+    knownChats: buildCustomerServiceKnownChats({
+      existing: settings.knownChats,
+      chats,
+      monitoredChatIds: settings.monitoredChatIds,
+      oncall,
+    }),
+  };
+};
 
 const buildNormalizedSavedSettings = (saved?: SavedSettings): NormalizedSettings | undefined => {
   if (!saved) {
@@ -139,6 +156,7 @@ const buildNormalizedSavedSettings = (saved?: SavedSettings): NormalizedSettings
     quickReplyPanelGlobal: Boolean(saved.quickReplyPanelGlobal),
     rules: saved.rules?.length ? JSON.parse(JSON.stringify(saved.rules)) : [],
     oncall: normalizeCustomerServiceOncallSettings(saved.oncall),
+    knownChats: saved.knownChats ? JSON.parse(JSON.stringify(saved.knownChats)) : undefined,
   };
 };
 
@@ -181,7 +199,7 @@ const CustomerServiceSettingsModal = ({
   const hasCloudSync = Boolean(CUSTOMER_SERVICE_CONFIG.CLOUD_SYNC_ENABLED);
 
   const [activeTab, setActiveTab] = useState(0);
-  const [settings, setSettings] = useState<FilterSettings>(buildFilterSettings(savedSettings));
+  const [settings, setSettings] = useState<FilterSettings>(() => buildFilterSettings(savedSettings));
   const [hasInitialized, setHasInitialized] = useState(false);
   const [isCloudSyncOpen, setIsCloudSyncOpen] = useState(false);
 
@@ -192,16 +210,16 @@ const CustomerServiceSettingsModal = ({
       return;
     }
 
-    if (hasInitialized) {
+    if (savedSettings) {
+      setSettings(buildFilterSettings(savedSettings));
+      setHasInitialized(true);
       return;
     }
 
-    if (savedSettings) {
-      setSettings(buildFilterSettings(savedSettings));
-    } else {
+    if (!hasInitialized) {
       setSettings(buildFilterSettings());
+      setHasInitialized(true);
     }
-    setHasInitialized(true);
   }, [isOpen, savedSettings, hasInitialized]);
 
   useEffect(() => {
@@ -279,7 +297,7 @@ const CustomerServiceSettingsModal = ({
   });
 
   const handleSave = useLastCallback(() => {
-    const normalizedSettings = buildNormalizedSettings(settings);
+    const normalizedSettings = buildNormalizedSettings(settings, chats);
     const previousNormalized = buildNormalizedSavedSettings(savedSettings);
     const skipCloudSync = previousNormalized
       ? isOnlyRuleEnabledChanged(previousNormalized, normalizedSettings)
@@ -353,131 +371,134 @@ const CustomerServiceSettingsModal = ({
           </div>
         )}
       >
-      <div className={styles.settingsModal}>
-        <div className={styles.content}>
-          {activeTab === 0 && (
-            <GroupFiltersTab
-              chats={chats}
-              chatFullInfos={chatFullInfos}
-              chatFolders={chatFolders}
-              orderedFolderIds={orderedFolderIds}
-              monitoredChatIds={settings.monitoredChatIds}
-              onChange={handleMonitoredChatIdsChange}
-            />
-          )}
-          {activeTab === 1 && (
-            <UserFiltersTab
-              users={users}
-              chats={chats}
-              filteredUserIds={settings.filteredUserIds}
-              onChange={handleFilteredUserIdsChange}
-            />
-          )}
-          {activeTab === 2 && (
-            <MessageFiltersTab
-              regexFilters={settings.regexFilters}
-              onChange={handleRegexFiltersChange}
-            />
-          )}
-          {activeTab === 3 && (
-            <QuickRepliesTab
-              quickReplies={settings.quickReplies}
-              quickReplyPanelGlobal={settings.quickReplyPanelGlobal}
-              onQuickRepliesChange={handleQuickRepliesChange}
-              onToggleGlobal={handleQuickReplyPanelGlobalChange}
-            />
-          )}
-          {activeTab === 4 && (
-            <RuleEngineTab
-              rules={settings.rules}
-              onRulesChange={handleRulesChange}
-            />
-          )}
-          {activeTab === 5 && (
-            <OncallGuaranteeTab
-              oncall={settings.oncall}
-              chats={chats}
-              topicsInfoByChatId={topicsInfoByChatId}
-              onLoadTopics={loadTopics}
-              onChange={handleOncallChange}
-            />
-          )}
-        </div>
-
-        <div className={styles.footer}>
-          <div className={styles.leftSection}>
-            <Checkbox
-              label={lang('CustomerServiceAutoRead')}
-              className={styles.autoReadCheckbox}
-              checked={Boolean(settings.autoRead)}
-              onChange={(e) => handleAutoReadChange(e.currentTarget.checked)}
-            />
+        <div className={styles.settingsModal}>
+          <div className={styles.content}>
+            {activeTab === 0 && (
+              <GroupFiltersTab
+                chats={chats}
+                chatFullInfos={chatFullInfos}
+                chatFolders={chatFolders}
+                orderedFolderIds={orderedFolderIds}
+                monitoredChatIds={settings.monitoredChatIds}
+                knownChats={settings.knownChats}
+                onChange={handleMonitoredChatIdsChange}
+              />
+            )}
+            {activeTab === 1 && (
+              <UserFiltersTab
+                users={users}
+                chats={chats}
+                filteredUserIds={settings.filteredUserIds}
+                onChange={handleFilteredUserIdsChange}
+              />
+            )}
+            {activeTab === 2 && (
+              <MessageFiltersTab
+                regexFilters={settings.regexFilters}
+                onChange={handleRegexFiltersChange}
+              />
+            )}
+            {activeTab === 3 && (
+              <QuickRepliesTab
+                quickReplies={settings.quickReplies}
+                quickReplyPanelGlobal={settings.quickReplyPanelGlobal}
+                onQuickRepliesChange={handleQuickRepliesChange}
+                onToggleGlobal={handleQuickReplyPanelGlobalChange}
+              />
+            )}
+            {activeTab === 4 && (
+              <RuleEngineTab
+                rules={settings.rules}
+                onRulesChange={handleRulesChange}
+              />
+            )}
+            {activeTab === 5 && (
+              <OncallGuaranteeTab
+                oncall={settings.oncall}
+                users={users}
+                chats={chats}
+                knownChats={settings.knownChats}
+                topicsInfoByChatId={topicsInfoByChatId}
+                onLoadTopics={loadTopics}
+                onChange={handleOncallChange}
+              />
+            )}
           </div>
 
-          <div className={styles.rightSection}>
-            <Button
-              size="smaller"
-              color="translucent"
-              style="width: 5rem !important;"
-              onClick={handleExportSettings}
-              ariaLabel={lang('CustomerServiceExportDescription')}
-            >
-              <Icon name="download" />
-              导出
-            </Button>
-            <Button
-              size="smaller"
-              color="translucent"
-              style="width: 5rem !important;"
-              onClick={handleImportSettings}
-              ariaLabel={lang('CustomerServiceImportDescription')}
-            >
-              <Icon name="open-in-new-tab" />
-              导入
-            </Button>
-            {hasCloudSync && (
+          <div className={styles.footer}>
+            <div className={styles.leftSection}>
+              <Checkbox
+                label={lang('CustomerServiceAutoRead')}
+                className={styles.autoReadCheckbox}
+                checked={Boolean(settings.autoRead)}
+                onChange={(e) => handleAutoReadChange(e.currentTarget.checked)}
+              />
+            </div>
+
+            <div className={styles.rightSection}>
               <Button
                 size="smaller"
                 color="translucent"
                 style="width: 5rem !important;"
-                onClick={() => setIsCloudSyncOpen(true)}
-                ariaLabel="云端同步"
+                onClick={handleExportSettings}
+                ariaLabel={lang('CustomerServiceExportDescription')}
               >
-                <Icon name="cloud-download" />
-                云端
+                <Icon name="download" />
+                导出
               </Button>
-            )}
-            <Button
-              size="smaller"
-              color="translucent"
-              style="width: 5rem !important;"
-              onClick={handleReset}
-              ariaLabel={lang('CustomerServiceResetSettings')}
-            >
-              <Icon name="reload" />
-              重置
-            </Button>
-            <Button
-              size="smaller"
-              color="translucent"
-              style="width: 5rem !important;"
-              onClick={handleClose}
-            >
-              <Icon name="close" />
-              取消
-            </Button>
-            <Button
-              size="smaller"
-              color="primary"
-              style="width: 5rem !important;"
-              onClick={handleSave}
-            >
-              <Icon name="check" />
-              保存
-            </Button>
+              <Button
+                size="smaller"
+                color="translucent"
+                style="width: 5rem !important;"
+                onClick={handleImportSettings}
+                ariaLabel={lang('CustomerServiceImportDescription')}
+              >
+                <Icon name="open-in-new-tab" />
+                导入
+              </Button>
+              {hasCloudSync && (
+                <Button
+                  size="smaller"
+                  color="translucent"
+                  style="width: 5rem !important;"
+                  onClick={() => setIsCloudSyncOpen(true)}
+                  ariaLabel="云端同步"
+                >
+                  <Icon name="cloud-download" />
+                  云端
+                </Button>
+              )}
+              <Button
+                size="smaller"
+                color="translucent"
+                style="width: 5rem !important;"
+                onClick={handleReset}
+                ariaLabel={lang('CustomerServiceResetSettings')}
+              >
+                <Icon name="reload" />
+                重置
+              </Button>
+              <Button
+                size="smaller"
+                color="translucent"
+                style="width: 5rem !important;"
+                onClick={handleClose}
+              >
+                <Icon name="close" />
+                取消
+              </Button>
+              <Button
+                size="smaller"
+                color="primary"
+                style="width: 5rem !important;"
+                onClick={handleSave}
+              >
+                <Icon name="check" />
+                保存
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
       </Modal>
       {hasCloudSync && (
         <CustomerServiceCloudSyncModal
