@@ -415,10 +415,6 @@
 "CustomerServiceOncallStageHighestHint" = "超时升级到最高级别时迁移到这里。";
 "CustomerServiceOncallStageResolved" = "归档";
 "CustomerServiceOncallStageResolvedHint" = "处理结束后发送归档消息到这里。";
-"CustomerServiceOncallSectionStaff" = "工作人员";
-"CustomerServiceOncallStaffHint" = "这里维护会被识别为工作人员回复的账号；留空时默认仅识别当前账号自己发出的消息。";
-"CustomerServiceOncallNoStaff" = "尚未配置工作人员，当前仅识别自己发送的消息。";
-"CustomerServiceOncallRemoveStaff" = "移除工作人员";
 "CustomerServiceOncallSectionTimeouts" = "超时参数";
 "CustomerServiceOncallFirstResponseTimeout" = "首次无人响应超时(ms)";
 "CustomerServiceOncallHighestEscalationTimeout" = "最高级升级超时(ms)";
