@@ -81,6 +81,12 @@ function toTrimmedString(value: unknown): string | undefined {
   return trimmed || undefined;
 }
 
+function toNumericString(value: unknown): string | undefined {
+  const str = toTrimmedString(value);
+  if (!str) return undefined;
+  return /^\d+$/.test(str) ? str : undefined;
+}
+
 function toNonNegativeNumber(value: unknown, fallback: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
@@ -106,13 +112,13 @@ export function normalizeCustomerServiceOncallSettings(raw: unknown): CustomerSe
       defaults.staffIds,
     ),
     newAlertChatId: toTrimmedString(source.newAlertChatId),
-    newAlertThreadId: toTrimmedString(source.newAlertThreadId),
+    newAlertThreadId: toNumericString(source.newAlertThreadId),
     holdingAlertChatId: toTrimmedString(source.holdingAlertChatId),
-    holdingAlertThreadId: toTrimmedString(source.holdingAlertThreadId),
+    holdingAlertThreadId: toNumericString(source.holdingAlertThreadId),
     highestAlertChatId: toTrimmedString(source.highestAlertChatId),
-    highestAlertThreadId: toTrimmedString(source.highestAlertThreadId),
+    highestAlertThreadId: toNumericString(source.highestAlertThreadId),
     resolvedAlertChatId: toTrimmedString(source.resolvedAlertChatId),
-    resolvedAlertThreadId: toTrimmedString(source.resolvedAlertThreadId),
+    resolvedAlertThreadId: toNumericString(source.resolvedAlertThreadId),
     firstResponseTimeoutMs: toNonNegativeNumber(
       source.firstResponseTimeoutMs,
       defaults.firstResponseTimeoutMs,

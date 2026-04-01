@@ -1,6 +1,6 @@
 import type { FC } from '../../../../../lib/teact/teact';
 import type React from '../../../../../lib/teact/teact';
-import { memo } from '../../../../../lib/teact/teact';
+import { memo, useEffect } from '../../../../../lib/teact/teact';
 
 import type { ApiChat } from '../../../../../api/types';
 import type { CustomerServiceOncallSettings } from '../../../../../global/types/customerServiceV2';
@@ -56,6 +56,30 @@ const OncallGuaranteeTab: FC<Props> = ({
 }) => {
   const lang = useLang();
   const config = oncall || {};
+
+  // On mount, auto-load topics for any forum chats that are already configured
+  // (onLoadTopics is normally only called when the user picks a chat, so it's
+  // never triggered when the modal opens with pre-existing settings).
+  useEffect(() => {
+    const alertChatIds = [
+      config.newAlertChatId,
+      config.holdingAlertChatId,
+      config.highestAlertChatId,
+      config.resolvedAlertChatId,
+    ].filter((id): id is string => Boolean(id));
+
+    const seen = new Set<string>();
+    for (const chatId of alertChatIds) {
+      if (seen.has(chatId)) continue;
+      seen.add(chatId);
+      const chat = chats[chatId];
+      if (chat?.isForum && !topicsInfoByChatId[chatId]) {
+        onLoadTopics({ chatId });
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const chatOptions = Object.values(chats)
     .filter((chat) => (
       chat
