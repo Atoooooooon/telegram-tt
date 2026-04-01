@@ -1,11 +1,10 @@
-import type { CustomerServiceSettings, CustomerServiceV2State } from '../../types/customerServiceV2';
+import type { CustomerServiceSettings } from '../../types/customerServiceV2';
 
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
 import { getTranslationFn } from '../../../util/localization';
 import { fetchCustomerServiceCloudConfig, uploadCustomerServiceCloudConfig } from '../../../api/customerServiceSync';
 import {
   loadCustomerServiceV2SettingsFromStorage,
-  normalizeCustomerServiceQuickReplies,
   saveCustomerServiceV2SettingsToStorage,
 } from '../../helpers/customerServiceV2Settings';
 import {
@@ -15,7 +14,6 @@ import {
   updateCustomerServiceCloudSyncPreferenceForToken,
 } from '../../helpers/customerServiceCloudSyncPreference';
 import { addActionHandler, getGlobal, setGlobal } from '../../index';
-import { selectCustomerServiceV2State } from '../../selectors/customerServiceV2';
 
 import {
   ensureCustomerServiceV2State,
@@ -23,7 +21,7 @@ import {
   logCustomerServiceCloudSyncDebug,
   normalizeSettingsForSave,
   ownersMatch,
-  syncCustomerServiceV2StateAcrossTabs,
+  updateCustomerServiceV2State,
 } from './customerServiceV2Helpers';
 
 addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload): Promise<void> => {
@@ -46,12 +44,11 @@ addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload):
   }
 
   let currentGlobal = global;
-  const baseState = ensureCustomerServiceV2State(selectCustomerServiceV2State(currentGlobal, tabId));
   const currentUserId = currentGlobal.currentUserId ? String(currentGlobal.currentUserId) : undefined;
 
   const getLocalSettings = () => (
     localSettings
-    || baseState.settings
+    || currentGlobal.customerServiceV2?.settings
     || loadCustomerServiceV2SettingsFromStorage()
     || getDefaultCustomerServiceV2Settings()
   );
@@ -79,12 +76,10 @@ addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload):
     const normalized = normalizeSettingsForSave(nextSettings);
     saveCustomerServiceV2SettingsToStorage(normalized);
 
-    const nextState: CustomerServiceV2State = {
-      ...baseState,
+    currentGlobal = updateCustomerServiceV2State(currentGlobal, {
+      ...ensureCustomerServiceV2State(currentGlobal.customerServiceV2),
       settings: normalized,
-    };
-
-    currentGlobal = syncCustomerServiceV2StateAcrossTabs(currentGlobal, nextState);
+    });
 
     setGlobal(currentGlobal);
     updatePreferenceMetadata(normalized, meta);
@@ -211,7 +206,6 @@ addActionHandler('autoSyncCustomerServiceV2Cloud', async (global, actions, paylo
   }
 
   let currentGlobal = global;
-  const baseState = ensureCustomerServiceV2State(selectCustomerServiceV2State(currentGlobal, tabId));
   const currentUserId = currentGlobal.currentUserId ? String(currentGlobal.currentUserId) : undefined;
   const translate = getTranslationFn();
 
@@ -233,14 +227,10 @@ addActionHandler('autoSyncCustomerServiceV2Cloud', async (global, actions, paylo
     saveCustomerServiceV2SettingsToStorage(normalized);
 
     currentGlobal = getGlobal();
-    const refreshedState = ensureCustomerServiceV2State(selectCustomerServiceV2State(currentGlobal, tabId));
-
-    const nextState: CustomerServiceV2State = {
-      ...refreshedState,
+    currentGlobal = updateCustomerServiceV2State(currentGlobal, {
+      ...ensureCustomerServiceV2State(currentGlobal.customerServiceV2),
       settings: normalized,
-    };
-
-    currentGlobal = syncCustomerServiceV2StateAcrossTabs(currentGlobal, nextState);
+    });
     setGlobal(currentGlobal);
 
     updateCustomerServiceCloudSyncPreferenceForToken(trimmedToken, (prev) => ({
@@ -313,10 +303,6 @@ addActionHandler('autoSyncCustomerServiceV2Cloud', async (global, actions, paylo
           token: maskCloudSyncToken(trimmedToken),
           remoteVersion,
         });
-        actions.showNotification({
-          message: translate('CustomerServiceCloudSyncNoChange'),
-          tabId,
-        });
       }
       return;
     }
@@ -340,10 +326,6 @@ addActionHandler('autoSyncCustomerServiceV2Cloud', async (global, actions, paylo
     logCustomerServiceCloudSyncDebug('autoSync:noChangeOwner', {
       token: maskCloudSyncToken(trimmedToken),
       remoteVersion,
-    });
-    actions.showNotification({
-      message: translate('CustomerServiceCloudSyncNoChange'),
-      tabId,
     });
   } catch (error) {
     logCustomerServiceCloudSyncDebug('autoSync:error', {

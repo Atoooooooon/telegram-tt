@@ -15,7 +15,7 @@
  */
 
 import type { ActionReturnType } from '../../types';
-import type { CustomerServiceSettings, CustomerServiceV2State } from '../../types/customerServiceV2';
+import type { CustomerServiceSettings } from '../../types/customerServiceV2';
 
 import { CUSTOMER_SERVICE_CONFIG } from '../../../config/customerService';
 import { EDITABLE_INPUT_ID } from '../../../config';
@@ -29,19 +29,16 @@ import {
 import { loadCustomerServiceCloudSyncPreference } from '../../helpers/customerServiceCloudSyncPreference';
 import { addActionHandler } from '../../index';
 import { updateTabState } from '../../reducers/tabs';
-import { selectChat, selectCurrentMessageList, selectTabState } from '../../selectors';
-import {
-  selectCustomerServiceV2Settings,
-  selectCustomerServiceV2State,
-} from '../../selectors/customerServiceV2';
+import { selectChat, selectCurrentMessageList } from '../../selectors';
+import { selectCustomerServiceV2Settings } from '../../selectors/customerServiceV2';
 
 import {
   ensureCustomerServiceV2State,
   getDefaultCustomerServiceV2Settings,
   normalizeSettingsForSave,
-  pauseCustomerServiceChat,
   ownersMatch,
-  syncCustomerServiceV2StateAcrossTabs,
+  pauseCustomerServiceChat,
+  updateCustomerServiceV2State,
 } from './customerServiceV2Helpers';
 
 // Import side-effect modules to register their action handlers
@@ -58,20 +55,9 @@ let isCheckingPausedChatsStatus = false;
 addActionHandler('setCustomerServiceV2Context', (global, actions, payload): ActionReturnType => {
   const { chatId, messageId, tabId = getCurrentTabId() } = payload;
 
-  const cs = selectCustomerServiceV2State(global, tabId);
-  const baseState = ensureCustomerServiceV2State(cs);
-
-  const nextState: CustomerServiceV2State = {
-    ...baseState,
-    currentContextChatId: chatId,
-    currentContextMessageId: messageId,
-  };
-
   return updateTabState(
     global,
-    {
-      customerServiceV2: nextState,
-    },
+    { customerServiceV2Context: { currentContextChatId: chatId, currentContextMessageId: messageId } },
     tabId,
   );
 });
@@ -89,20 +75,13 @@ addActionHandler('pauseCustomerServiceV2Chat', (global, actions, payload): Actio
  * Resume chat in assist mode
  */
 addActionHandler('resumeCustomerServiceV2Chat', (global, actions, payload): ActionReturnType => {
-  const { chatId, tabId = getCurrentTabId() } = payload;
+  const { chatId } = payload;
 
-  const cs = selectCustomerServiceV2State(global, tabId);
-  const baseState = ensureCustomerServiceV2State(cs);
-
-  const pausedChats = { ...(baseState.pausedChats || {}) };
+  const cs = ensureCustomerServiceV2State(global.customerServiceV2);
+  const pausedChats = { ...(cs.pausedChats || {}) };
   delete pausedChats[chatId];
 
-  const nextState: CustomerServiceV2State = {
-    ...baseState,
-    pausedChats,
-  };
-
-  return syncCustomerServiceV2StateAcrossTabs(global, nextState);
+  return updateCustomerServiceV2State(global, { ...cs, pausedChats });
 });
 
 /**
@@ -112,45 +91,33 @@ addActionHandler('resumeCustomerServiceV2Chat', (global, actions, payload): Acti
 addActionHandler('initCustomerServiceV2', (global, actions, payload): ActionReturnType => {
   const { tabId = getCurrentTabId() } = payload || {};
 
-  const tabState = selectTabState(global, tabId);
-
   if (!hasScheduledCustomerServiceAutoCloudSync) {
     hasScheduledCustomerServiceAutoCloudSync = true;
     void actions.autoSyncCustomerServiceV2Cloud({ tabId });
-    // Run auto-sync again shortly after initial boot to ensure state/user data is ready
     setTimeout(() => {
       void actions.autoSyncCustomerServiceV2Cloud({ tabId });
     }, 2000);
   }
 
-  // Only initialize if not already present
-  if (!tabState.customerServiceV2) {
+  if (!global.customerServiceV2) {
     const settings = loadCustomerServiceV2SettingsFromStorage() || undefined;
-    const initialState: CustomerServiceV2State = {
-      messages: [],
-      messagesByChatId: {},
-      lastSyncTimestamp: Date.now(),
-      messageCount: 0,
-      ...(settings ? { settings } : {}),
-    };
-
-    return updateTabState(
-      global,
-      {
-        customerServiceV2: initialState,
+    return {
+      ...global,
+      customerServiceV2: {
+        messages: [],
+        messagesByChatId: {},
+        lastSyncTimestamp: Date.now(),
+        messageCount: 0,
+        settings,
       },
-      tabId,
-    );
+    };
   }
 
   return global;
 });
 
 addActionHandler('initializeCustomerServiceV2Settings', (global, actions, payload): ActionReturnType => {
-  const { tabId = getCurrentTabId() } = payload || {};
-  const cs = selectCustomerServiceV2State(global, tabId);
-
-  if (cs?.settings) {
+  if (global.customerServiceV2?.settings) {
     return global;
   }
 
@@ -159,19 +126,10 @@ addActionHandler('initializeCustomerServiceV2Settings', (global, actions, payloa
     return global;
   }
 
-  const baseState = ensureCustomerServiceV2State(cs);
-  const nextState: CustomerServiceV2State = {
-    ...baseState,
+  return updateCustomerServiceV2State(global, {
+    ...ensureCustomerServiceV2State(global.customerServiceV2),
     settings: storedSettings,
-  };
-
-  return updateTabState(
-    global,
-    {
-      customerServiceV2: nextState,
-    },
-    tabId,
-  );
+  });
 });
 
 addActionHandler('openCustomerServiceV2Settings', (global, actions, payload): ActionReturnType => {
@@ -256,18 +214,15 @@ addActionHandler('closeCustomerServiceV2Settings', (global, actions, payload): A
 });
 
 addActionHandler('toggleCustomerServiceV2Mode', (global, actions, payload): ActionReturnType => {
-  const { tabId = getCurrentTabId() } = payload || {};
+  const cs = ensureCustomerServiceV2State(global.customerServiceV2);
 
-  const cs = selectCustomerServiceV2State(global, tabId);
-  const baseState = ensureCustomerServiceV2State(cs);
-
-  const existingSettings = baseState.settings
+  const existingSettings = cs.settings
     || loadCustomerServiceV2SettingsFromStorage()
     || getDefaultCustomerServiceV2Settings();
 
   const nextMode: CustomerServiceSettings['mode'] = existingSettings.mode === 'assist' ? 'oncall' : 'assist';
 
-  const updatedSettings: CustomerServiceSettings = {
+  const normalized = normalizeSettingsForSave({
     monitoredChatIds: existingSettings.monitoredChatIds || [],
     filteredUserIds: existingSettings.filteredUserIds || [],
     regexFilters: existingSettings.regexFilters || [],
@@ -280,30 +235,23 @@ addActionHandler('toggleCustomerServiceV2Mode', (global, actions, payload): Acti
     ),
     quickReplyPanelGlobal: Boolean(existingSettings.quickReplyPanelGlobal),
     rules: existingSettings.rules,
-  };
-
-  const normalized = normalizeSettingsForSave(updatedSettings);
+  });
   saveCustomerServiceV2SettingsToStorage(normalized);
 
-  const nextState: CustomerServiceV2State = {
-    ...baseState,
+  return updateCustomerServiceV2State(global, {
+    ...cs,
     settings: normalized,
-    pausedChats: nextMode === 'assist' ? baseState.pausedChats : undefined,
-  };
-
-  return syncCustomerServiceV2StateAcrossTabs(global, nextState);
+    pausedChats: nextMode === 'assist' ? cs.pausedChats : undefined,
+  });
 });
 
 addActionHandler('checkPausedChatsStatusV2', (global, actions, payload): ActionReturnType => {
-  // Prevent re-entry to avoid infinite recursion
   if (isCheckingPausedChatsStatus) {
     return global;
   }
 
-  const { tabId = getCurrentTabId() } = payload || {};
-  const cs = selectCustomerServiceV2State(global, tabId);
-
-  if (!cs?.pausedChats || !cs.settings || cs.settings.mode !== 'assist') {
+  const cs = global.customerServiceV2;
+  if (!cs?.pausedChats || cs.settings?.mode !== 'assist') {
     return global;
   }
 
@@ -312,13 +260,11 @@ addActionHandler('checkPausedChatsStatusV2', (global, actions, payload): ActionR
   try {
     const updatedPausedChats = { ...cs.pausedChats };
     let hasChanges = false;
-    const pausedChatIds = Object.keys(cs.pausedChats);
 
-    for (let i = 0; i < pausedChatIds.length; i += 1) {
-      const chatId = pausedChatIds[i];
+    for (const chatId of Object.keys(cs.pausedChats)) {
       const pauseInfo = cs.pausedChats[chatId];
 
-      if (!pauseInfo) {
+      if (!pauseInfo?.lastMessageId) {
         delete updatedPausedChats[chatId];
         hasChanges = true;
         continue;
@@ -329,14 +275,9 @@ addActionHandler('checkPausedChatsStatusV2', (global, actions, payload): ActionR
         continue;
       }
 
-      const lastTrackedMessageId = pauseInfo.lastMessageId;
-      if (!lastTrackedMessageId) {
-        delete updatedPausedChats[chatId];
-        hasChanges = true;
-        continue;
-      }
-
-      const isRead = Boolean(chat.lastReadInboxMessageId && chat.lastReadInboxMessageId >= lastTrackedMessageId);
+      const isRead = Boolean(
+        chat.lastReadInboxMessageId && chat.lastReadInboxMessageId >= pauseInfo.lastMessageId,
+      );
       const hasUnread = chat.unreadCount && chat.unreadCount > 0;
 
       if (isRead || !hasUnread) {
@@ -349,14 +290,10 @@ addActionHandler('checkPausedChatsStatusV2', (global, actions, payload): ActionR
       return global;
     }
 
-    const nextState: CustomerServiceV2State = {
+    return updateCustomerServiceV2State(global, {
       ...cs,
       pausedChats: Object.keys(updatedPausedChats).length ? updatedPausedChats : undefined,
-    };
-
-    // Use updateTabState directly to avoid triggering cross-tab sync
-    // which would cause infinite recursion through apiUpdaters
-    return updateTabState(global, { customerServiceV2: nextState }, tabId);
+    });
   } finally {
     isCheckingPausedChatsStatus = false;
   }
@@ -365,18 +302,13 @@ addActionHandler('checkPausedChatsStatusV2', (global, actions, payload): ActionR
 addActionHandler('saveCustomerServiceV2Settings', (global, actions, payload): ActionReturnType => {
   const { settings, tabId = getCurrentTabId(), skipCloudSync = false } = payload;
 
-  const cs = selectCustomerServiceV2State(global, tabId);
   const normalized = normalizeSettingsForSave(settings);
-
   saveCustomerServiceV2SettingsToStorage(normalized);
 
-  const baseState = ensureCustomerServiceV2State(cs);
-  const nextState: CustomerServiceV2State = {
-    ...baseState,
+  const nextGlobal = updateCustomerServiceV2State(global, {
+    ...ensureCustomerServiceV2State(global.customerServiceV2),
     settings: normalized,
-  };
-
-  const nextGlobal = syncCustomerServiceV2StateAcrossTabs(global, nextState);
+  });
 
   // After saving locally, if current user is the owner of a managed cloud token,
   // upload the latest settings in the background.
@@ -413,8 +345,7 @@ addActionHandler('saveCustomerServiceV2Settings', (global, actions, payload): Ac
 });
 
 addActionHandler('exportCustomerServiceV2Settings', (global, actions, payload): ActionReturnType => {
-  const { tabId = getCurrentTabId() } = payload || {};
-  const settings = selectCustomerServiceV2Settings(global, tabId);
+  const settings = selectCustomerServiceV2Settings(global);
 
   if (!settings) {
     return global;

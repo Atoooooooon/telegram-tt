@@ -7,7 +7,6 @@ import {
   normalizeCustomerServiceOncallSettings,
   normalizeCustomerServiceQuickReplies,
 } from '../../helpers/customerServiceV2Settings';
-import { updateTabState } from '../../reducers/tabs';
 
 export function ownersMatch(left?: string, right?: string): boolean {
   if (!left || !right) {
@@ -24,16 +23,19 @@ export function ownersMatch(left?: string, right?: string): boolean {
 }
 
 export function ensureCustomerServiceV2State(state?: CustomerServiceV2State): CustomerServiceV2State {
-  if (state) {
-    return state;
-  }
-
-  return {
+  return state ?? {
     messages: [],
     messagesByChatId: {},
     lastSyncTimestamp: Date.now(),
     messageCount: 0,
   };
+}
+
+export function updateCustomerServiceV2State<T extends GlobalState>(
+  global: T,
+  nextState: CustomerServiceV2State,
+): T {
+  return { ...global, customerServiceV2: nextState };
 }
 
 export function logCustomerServiceCloudSyncDebug(...args: unknown[]) {
@@ -86,29 +88,6 @@ export function getDefaultCustomerServiceV2Settings(): CustomerServiceSettings {
   return mapCustomerServiceConfigToSettings();
 }
 
-export function syncCustomerServiceV2StateAcrossTabs(
-  global: GlobalState,
-  nextState: CustomerServiceV2State,
-): GlobalState {
-  const nextByTabId = { ...global.byTabId };
-
-  Object.values(global.byTabId).forEach((tabState) => {
-    nextByTabId[tabState.id] = {
-      ...tabState,
-      customerServiceV2: {
-        ...nextState,
-        currentContextChatId: tabState.customerServiceV2?.currentContextChatId,
-        currentContextMessageId: tabState.customerServiceV2?.currentContextMessageId,
-      },
-    };
-  });
-
-  return {
-    ...global,
-    byTabId: nextByTabId,
-  };
-}
-
 export function normalizeSettingsForSave(settings: CustomerServiceSettings): CustomerServiceSettings {
   return {
     monitoredChatIds: settings.monitoredChatIds || [],
@@ -130,46 +109,39 @@ type PauseOptions = {
   pausedAt?: number;
 };
 
-export function pauseCustomerServiceChat(
-  global: GlobalState,
+export function pauseCustomerServiceChat<T extends GlobalState>(
+  global: T,
   chatId: string,
   messageId: number,
   options?: PauseOptions,
-): GlobalState {
+): T {
   if (!messageId) {
     return global;
   }
 
-  let nextGlobal = global;
-  const pausedAt = options?.pausedAt ?? Date.now();
+  const cs = global.customerServiceV2;
+  if (!cs || cs.settings?.mode !== 'assist') {
+    return global;
+  }
 
-  Object.values(nextGlobal.byTabId).forEach(({ id: tabId, customerServiceV2 }) => {
-    if (!customerServiceV2 || customerServiceV2.settings?.mode !== 'assist') {
-      return;
-    }
+  const previousEntry = cs.pausedChats?.[chatId];
+  if (previousEntry && previousEntry.lastMessageId >= messageId) {
+    return global;
+  }
 
-    const previousEntry = customerServiceV2.pausedChats?.[chatId];
-    if (previousEntry && previousEntry.lastMessageId >= messageId) {
-      return;
-    }
-
-    const pausedChats = {
-      ...(customerServiceV2.pausedChats || {}),
-      [chatId]: {
-        pausedAt,
-        lastMessageId: messageId,
+  return {
+    ...global,
+    customerServiceV2: {
+      ...cs,
+      pausedChats: {
+        ...(cs.pausedChats || {}),
+        [chatId]: {
+          pausedAt: options?.pausedAt ?? Date.now(),
+          lastMessageId: messageId,
+        },
       },
-    };
-
-    nextGlobal = updateTabState(nextGlobal, {
-      customerServiceV2: {
-        ...customerServiceV2,
-        pausedChats,
-      },
-    }, tabId);
-  });
-
-  return nextGlobal;
+    },
+  };
 }
 
 type ResumePausedOptions = {
@@ -177,41 +149,39 @@ type ResumePausedOptions = {
   hasUnread?: boolean;
 };
 
-export function resumeCustomerServicePausedChat(
-  global: GlobalState,
+export function resumeCustomerServicePausedChat<T extends GlobalState>(
+  global: T,
   chatId: string,
   options?: ResumePausedOptions,
-): GlobalState {
-  let nextGlobal = global;
+): T {
+  const cs = global.customerServiceV2;
+  if (!cs?.pausedChats || cs.settings?.mode !== 'assist') {
+    return global;
+  }
 
-  const chat = selectChat(nextGlobal, chatId);
+  const chat = selectChat(global, chatId);
   const effectiveLastRead = options?.lastReadInboxMessageId ?? chat?.lastReadInboxMessageId ?? 0;
   const hasUnread = options?.hasUnread ?? Boolean(chat?.unreadCount && chat.unreadCount > 0);
 
   if (!effectiveLastRead && hasUnread) {
-    return nextGlobal;
+    return global;
   }
 
-  Object.values(nextGlobal.byTabId).forEach(({ id: tabId, customerServiceV2 }) => {
-    if (!customerServiceV2?.pausedChats || customerServiceV2.settings?.mode !== 'assist') {
-      return;
-    }
+  const pauseInfo = cs.pausedChats[chatId];
+  if (!pauseInfo?.lastMessageId) {
+    return global;
+  }
 
-    const pauseInfo = customerServiceV2.pausedChats[chatId];
-    if (!pauseInfo?.lastMessageId) {
-      return;
-    }
+  if ((effectiveLastRead && effectiveLastRead >= pauseInfo.lastMessageId) || !hasUnread) {
+    const { [chatId]: _removed, ...remainingPaused } = cs.pausedChats;
+    return {
+      ...global,
+      customerServiceV2: {
+        ...cs,
+        pausedChats: Object.keys(remainingPaused).length ? remainingPaused : undefined,
+      },
+    };
+  }
 
-    if ((effectiveLastRead && effectiveLastRead >= pauseInfo.lastMessageId) || !hasUnread) {
-      const { [chatId]: _removed, ...remainingPaused } = customerServiceV2.pausedChats;
-      nextGlobal = updateTabState(nextGlobal, {
-        customerServiceV2: {
-          ...customerServiceV2,
-          pausedChats: Object.keys(remainingPaused).length ? remainingPaused : undefined,
-        },
-      }, tabId);
-    }
-  });
-
-  return nextGlobal;
+  return global;
 }

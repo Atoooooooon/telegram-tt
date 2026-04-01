@@ -505,7 +505,7 @@ export default memo(withGlobal((global): StateProps => {
     byId: chatFolders,
     orderedIds: orderedFolderIds,
   } = global.chatFolders || {};
-  const savedSettings = selectCustomerServiceV2Settings(global, tabId);
+  const savedSettings = selectCustomerServiceV2Settings(global);
   const tabState = selectTabState(global, tabId);
 
   return {

@@ -9,13 +9,12 @@ import { callApi } from '../../../api/gramjs';
 import { loadCustomerServiceV2SettingsFromStorage } from '../../helpers/customerServiceV2Settings';
 import { addActionHandler, getGlobal, setGlobal } from '../../index';
 import { selectChat } from '../../selectors';
-import { selectCustomerServiceV2State } from '../../selectors/customerServiceV2';
 
 import {
   ensureCustomerServiceV2State,
   getDefaultCustomerServiceV2Settings,
   pauseCustomerServiceChat,
-  syncCustomerServiceV2StateAcrossTabs,
+  updateCustomerServiceV2State,
 } from './customerServiceV2Helpers';
 
 /**
@@ -26,8 +25,7 @@ addActionHandler('addToCustomerServiceV2', (global, actions, payload): ActionRet
   const { message, chatId, tabId = getCurrentTabId() } = payload;
 
   try {
-    const cs = selectCustomerServiceV2State(global, tabId);
-    const baseState = ensureCustomerServiceV2State(cs);
+    const baseState = ensureCustomerServiceV2State(global.customerServiceV2);
 
     let messages = baseState.messages;
 
@@ -132,7 +130,7 @@ addActionHandler('addToCustomerServiceV2', (global, actions, payload): ActionRet
       settings,
     };
 
-    let nextGlobal = syncCustomerServiceV2StateAcrossTabs(global, nextState);
+    let nextGlobal = updateCustomerServiceV2State(global, nextState);
 
     if (settings.mode === 'assist') {
       nextGlobal = pauseCustomerServiceChat(nextGlobal, chatId, message.id);
@@ -157,7 +155,6 @@ addActionHandler('removeFromCustomerServiceV2', async (global, actions, payload)
   const { chatId, messageId, tabId = getCurrentTabId() } = payload;
 
   try {
-    // Mark as read in original chat
     const chat = selectChat(global, chatId);
     if (chat) {
       await callApi('markMessageListRead', {
@@ -167,10 +164,8 @@ addActionHandler('removeFromCustomerServiceV2', async (global, actions, payload)
       });
     }
 
-    // Remove from CS state
     global = getGlobal();
-    const cs = selectCustomerServiceV2State(global, tabId);
-    const baseState = ensureCustomerServiceV2State(cs);
+    const baseState = ensureCustomerServiceV2State(global.customerServiceV2);
     const messages = baseState.messages.filter(
       (msg) => !(msg.chatId === chatId && msg.id === messageId),
     );
@@ -197,11 +192,10 @@ addActionHandler('removeFromCustomerServiceV2', async (global, actions, payload)
       nextState.pausedChats = pausedChats;
     }
 
-    global = syncCustomerServiceV2StateAcrossTabs(global, nextState);
+    global = updateCustomerServiceV2State(global, nextState);
 
     setGlobal(global);
 
-    // Show confirmation
     actions.showNotification({
       message: 'CustomerServiceMessageRemoved',
       tabId,
@@ -219,11 +213,10 @@ addActionHandler('removeFromCustomerServiceV2', async (global, actions, payload)
  * Used for bulk delete sync
  */
 addActionHandler('removeCustomerServiceV2Messages', (global, actions, payload): ActionReturnType => {
-  const { messageIds, chatId, tabId = getCurrentTabId() } = payload;
+  const { messageIds, chatId } = payload;
 
   try {
-    const cs = selectCustomerServiceV2State(global, tabId);
-    const baseState = ensureCustomerServiceV2State(cs);
+    const baseState = ensureCustomerServiceV2State(global.customerServiceV2);
 
     // Filter out deleted messages
     const messages = baseState.messages.filter((msg) => {
@@ -267,7 +260,7 @@ addActionHandler('removeCustomerServiceV2Messages', (global, actions, payload): 
       nextState.pausedChats = updatedPaused;
     }
 
-    return syncCustomerServiceV2StateAcrossTabs(global, nextState);
+    return updateCustomerServiceV2State(global, nextState);
   } catch (error) {
     return global;
   }
@@ -278,11 +271,10 @@ addActionHandler('removeCustomerServiceV2Messages', (global, actions, payload): 
  * Handles edits
  */
 addActionHandler('syncCustomerServiceV2Message', (global, actions, payload): ActionReturnType => {
-  const { message, tabId = getCurrentTabId() } = payload;
+  const { message } = payload;
 
   try {
-    const cs = selectCustomerServiceV2State(global, tabId);
-    const baseState = ensureCustomerServiceV2State(cs);
+    const baseState = ensureCustomerServiceV2State(global.customerServiceV2);
 
     // Find and update message
     const messages = baseState.messages.map((msg) => (
@@ -304,7 +296,7 @@ addActionHandler('syncCustomerServiceV2Message', (global, actions, payload): Act
       lastSyncTimestamp: Date.now(),
     };
 
-    return syncCustomerServiceV2StateAcrossTabs(global, nextState);
+    return updateCustomerServiceV2State(global, nextState);
   } catch (error) {
     return global;
   }
@@ -314,10 +306,9 @@ addActionHandler('syncCustomerServiceV2Message', (global, actions, payload): Act
  * Clear all Customer Service V2 messages
  */
 addActionHandler('clearCustomerServiceV2Messages', async (global, actions, payload): Promise<void> => {
-  const { tabId = getCurrentTabId(), shouldMarkRead } = payload || {};
+  const { shouldMarkRead } = payload || {};
 
-  const cs = selectCustomerServiceV2State(global, tabId);
-  const baseState = ensureCustomerServiceV2State(cs);
+  const baseState = ensureCustomerServiceV2State(global.customerServiceV2);
 
   const resolvedShouldMarkRead = shouldMarkRead === true;
 
@@ -353,7 +344,7 @@ addActionHandler('clearCustomerServiceV2Messages', async (global, actions, paylo
     lastSyncTimestamp: Date.now(),
   };
 
-  global = syncCustomerServiceV2StateAcrossTabs(global, nextState);
+  global = updateCustomerServiceV2State(global, nextState);
 
   setGlobal(global);
 

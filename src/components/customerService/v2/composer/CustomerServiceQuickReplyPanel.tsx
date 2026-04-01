@@ -774,7 +774,7 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
 export default memo(withGlobal<OwnProps>(
   (global): StateProps => {
     const tabId = getCurrentTabId();
-    const settings = selectCustomerServiceV2Settings(global, tabId);
+    const settings = selectCustomerServiceV2Settings(global);
     const quickReplies = normalizeCustomerServiceQuickReplies(
       settings?.quickReplies && settings.quickReplies.length
         ? settings.quickReplies

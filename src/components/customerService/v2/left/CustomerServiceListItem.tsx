@@ -117,7 +117,7 @@ const CustomerServiceListItem: FC<OwnProps & StateProps> = ({
 export default memo(
   withGlobal<OwnProps>((global): StateProps => {
     const tabId = getCurrentTabId();
-    const messageCount = selectCustomerServiceV2MessageCount(global, tabId);
+    const messageCount = selectCustomerServiceV2MessageCount(global);
     const isActive = selectIsCustomerServiceV2Open(global, tabId);
 
     return {

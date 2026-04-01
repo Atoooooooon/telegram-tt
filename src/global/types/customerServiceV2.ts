@@ -75,34 +75,26 @@ export type PausedChat = {
 };
 
 /**
- * Customer Service V2 State
+ * Customer Service V2 State — shared across all tabs, lives in global (not byTabId)
  * Ephemeral design - no persistence to IndexedDB
  * Bounded in-memory FIFO queue with mode-specific limits
  */
 export type CustomerServiceV2State = {
-  /** Flat array of all CS messages */
   messages: ApiMessage[];
-
-  /** Multi-chat lookup map for efficient message display */
   messagesByChatId: Record<string, ApiMessage[]>;
-
-  /** Shared settings with V1 */
   settings?: CustomerServiceSettings;
-
-  /** Phase 2: Currently open context panel chat ID */
-  currentContextChatId?: string;
-
-  /** Phase 2: Highlighted message in context view */
-  currentContextMessageId?: number;
-
-  /** V1 compatibility: Paused chats for assist mode */
   pausedChats?: Record<string, PausedChat>;
-
-  /** Last sync timestamp */
   lastSyncTimestamp: number;
-
-  /** Cached message count for badge performance */
   messageCount: number;
+};
+
+/**
+ * Per-tab UI context for Customer Service V2
+ * Tracks which message is currently focused in each browser tab
+ */
+export type CustomerServiceV2Context = {
+  currentContextChatId?: string;
+  currentContextMessageId?: number;
 };
 
 /**
