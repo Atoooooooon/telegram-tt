@@ -450,8 +450,8 @@
 "CustomerServiceNoFilteredUsers" = "暂无过滤用户";
 "CustomerServiceNoFilteredMessages" = "暂无消息过滤规则";
 "CustomerServiceRegexExamples" = "常用示例";
-"CustomerServiceSaveSettings" = "保存设置";
-"CustomerServiceResetSettings" = "重置设置";
+"CustomerServiceSaveSettings" = "保存";
+"CustomerServiceResetSettings" = "重置";
 "CustomerServiceCancel" = "取消";
 "Settings" = "Settings";
 "SettingsDisableNightTheme" = "Disable night mode";

@@ -25,6 +25,7 @@ import {
 } from './customerServiceV2Helpers';
 
 addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload): Promise<void> => {
+  const translate = getTranslationFn();
   const {
     token,
     tabId = getCurrentTabId(),
@@ -94,7 +95,7 @@ addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload):
   try {
     if (operation === 'upload') {
       if (!currentUserId) {
-        throw new Error('当前用户未登录，无法上传配置');
+        throw new Error(translate('CustomerServiceCloudSyncNotLoggedIn'));
       }
 
       const normalizedLocal = normalizeSettingsForSave(getLocalSettings());
@@ -121,7 +122,7 @@ addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload):
       if (!cloud) {
         const fetched = await fetchCustomerServiceCloudConfig(trimmedToken, currentUserId);
         if (!fetched?.settings) {
-          throw new Error('云端未找到配置');
+          throw new Error(translate('CustomerServiceCloudSyncConfigNotFound'));
         }
 
         cloud = {
@@ -169,7 +170,7 @@ addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload):
     }
 
     if (!currentUserId) {
-      throw new Error('当前用户未登录，无法创建云端配置');
+      throw new Error(translate('CustomerServiceCloudSyncNotLoggedIn'));
     }
 
     const normalizedLocal = normalizeSettingsForSave(getLocalSettings());

@@ -59,7 +59,6 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
   const [isHovering, setIsHovering] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
-  const debugStateRef = useRef<Record<string, unknown>>({});
 
   const panelRef = useRef<HTMLDivElement>();
   const panelPositionRef = useRef<PanelPosition | undefined>();
@@ -632,69 +631,7 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
     };
   }, [updatePanelPosition]);
 
-  useEffect(() => {
-    const snapshot = {
-      panelEnabled: isPanelEnabled,
-      globalEnabled: isGlobalEnabled,
-      activationAllowed: isActivationAllowed,
-      hasQuickReplies,
-      quickRepliesCount: quickReplies.length,
-      isInputFocused,
-      isHovering,
-      isVisible,
-      isDragging,
-      isResizing,
-      panelPosition,
-    };
-
-    if (typeof window !== 'undefined') {
-      (window as any).__tgCustomerServiceQuickReplyDebug = snapshot;
-    }
-
-    // eslint-disable-next-line no-console
-    console.info('[CustomerServiceQuickReplyPanel]', snapshot);
-  }, [
-    hasQuickReplies,
-    isDragging,
-    isHovering,
-    isInputFocused,
-    isPanelEnabled,
-    isGlobalEnabled,
-    isActivationAllowed,
-    isVisible,
-    isResizing,
-    panelPosition,
-    quickReplies,
-  ]);
-
-  useEffect(() => {
-    if (!isVisible || !panelRef.current) {
-      return;
-    }
-
-    const rect = panelRef.current.getBoundingClientRect();
-    // eslint-disable-next-line no-console
-    console.info('[CustomerServiceQuickReplyPanel] panel DOM rect', rect);
-  }, [isVisible, panelPosition]);
-
   if (!isVisible || !panelPosition) {
-    if (DEBUG) {
-      debugStateRef.current = {
-        isPanelEnabled,
-        isGlobalEnabled,
-        isActivationAllowed,
-        hasQuickReplies,
-        quickReplies: quickReplies.length,
-        isInputFocused,
-        isHovering,
-        isDragging,
-        isResizing,
-        panelPosition,
-      };
-
-      (window as any).__tgCustomerServiceQuickReplyDebug = debugStateRef.current;
-    }
-
     return undefined;
   }
 

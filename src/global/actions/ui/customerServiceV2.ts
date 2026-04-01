@@ -45,7 +45,6 @@ import {
 import './customerServiceV2Messages';
 import './customerServiceV2Cloud';
 
-let hasScheduledCustomerServiceAutoCloudSync = false;
 let isCheckingPausedChatsStatus = false;
 
 /**
@@ -91,16 +90,14 @@ addActionHandler('resumeCustomerServiceV2Chat', (global, actions, payload): Acti
 addActionHandler('initCustomerServiceV2', (global, actions, payload): ActionReturnType => {
   const { tabId = getCurrentTabId() } = payload || {};
 
-  if (!hasScheduledCustomerServiceAutoCloudSync) {
-    hasScheduledCustomerServiceAutoCloudSync = true;
+  if (!global.customerServiceV2) {
+    const settings = loadCustomerServiceV2SettingsFromStorage() || undefined;
+
     void actions.autoSyncCustomerServiceV2Cloud({ tabId });
     setTimeout(() => {
       void actions.autoSyncCustomerServiceV2Cloud({ tabId });
     }, 2000);
-  }
 
-  if (!global.customerServiceV2) {
-    const settings = loadCustomerServiceV2SettingsFromStorage() || undefined;
     return {
       ...global,
       customerServiceV2: {

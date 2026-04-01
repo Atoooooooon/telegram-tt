@@ -418,62 +418,62 @@ const CustomerServiceSettingsModal = ({
             <Button
               size="smaller"
               color="translucent"
-              style="width: 5rem !important;"
+              className={styles.footerButton}
               onClick={handleExportSettings}
               ariaLabel={lang('CustomerServiceExportDescription')}
             >
               <Icon name="download" />
-              导出
+              {lang('CustomerServiceExportSettings')}
             </Button>
             <Button
               size="smaller"
               color="translucent"
-              style="width: 5rem !important;"
+              className={styles.footerButton}
               onClick={handleImportSettings}
               ariaLabel={lang('CustomerServiceImportDescription')}
             >
               <Icon name="open-in-new-tab" />
-              导入
+              {lang('CustomerServiceImportSettings')}
             </Button>
             {hasCloudSync && (
               <Button
                 size="smaller"
                 color="translucent"
-                style="width: 5rem !important;"
+                className={styles.footerButton}
                 onClick={() => setIsCloudSyncOpen(true)}
-                ariaLabel="云端同步"
+                ariaLabel={lang('CustomerServiceCloudSyncButton')}
               >
                 <Icon name="cloud-download" />
-                云端
+                {lang('CustomerServiceCloudSyncButton')}
               </Button>
             )}
             <Button
               size="smaller"
               color="translucent"
-              style="width: 5rem !important;"
+              className={styles.footerButton}
               onClick={handleReset}
               ariaLabel={lang('CustomerServiceResetSettings')}
             >
               <Icon name="reload" />
-              重置
+              {lang('CustomerServiceResetSettings')}
             </Button>
             <Button
               size="smaller"
               color="translucent"
-              style="width: 5rem !important;"
+              className={styles.footerButton}
               onClick={handleClose}
             >
               <Icon name="close" />
-              取消
+              {lang('CustomerServiceCancel')}
             </Button>
             <Button
               size="smaller"
               color="primary"
-              style="width: 5rem !important;"
+              className={styles.footerButton}
               onClick={handleSave}
             >
               <Icon name="check" />
-              保存
+              {lang('CustomerServiceSaveSettings')}
             </Button>
           </div>
         </div>

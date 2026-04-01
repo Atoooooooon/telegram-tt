@@ -39,16 +39,6 @@ addActionHandler('addToCustomerServiceV2', (global, actions, payload): ActionRet
     const chat = selectChat(global, chatId);
     const existingChatMessages = baseState.messagesByChatId[chatId] || [];
 
-    // eslint-disable-next-line no-console
-    console.log('[CS-Debug] addToCustomerServiceV2:', {
-      chatId,
-      newMessageId: message.id,
-      mode: baseState.settings?.mode,
-      existingChatMessages: existingChatMessages.map((m) => m.id),
-      chatLastReadInboxMessageId: chat?.lastReadInboxMessageId,
-      chatUnreadCount: chat?.unreadCount,
-    });
-
     // In assist mode, remove read messages from customer service window when new message arrives
     if (baseState.settings?.mode === 'assist' && chat?.lastReadInboxMessageId) {
       const readMessageIds = existingChatMessages
@@ -56,8 +46,6 @@ addActionHandler('addToCustomerServiceV2', (global, actions, payload): ActionRet
         .map((msg) => msg.id);
 
       if (readMessageIds.length > 0) {
-        // eslint-disable-next-line no-console
-        console.log('[CS-Debug] Removing read messages:', readMessageIds);
 
         messages = messages.filter(
           (msg) => !(msg.chatId === chatId && readMessageIds.includes(msg.id)),
@@ -78,13 +66,6 @@ addActionHandler('addToCustomerServiceV2', (global, actions, payload): ActionRet
     if (messages.length >= maxMessages) {
       messages = messages.slice(-keepMessages);
       didCleanup = true;
-
-      // eslint-disable-next-line no-console
-      console.log('[CS-Debug] FIFO cleanup triggered:', {
-        mode: baseState.settings?.mode,
-        before: messages.length + (maxMessages - keepMessages),
-        after: messages.length,
-      });
     }
 
     // Add new message

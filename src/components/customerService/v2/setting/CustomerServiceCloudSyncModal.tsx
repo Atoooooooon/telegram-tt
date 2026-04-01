@@ -9,6 +9,7 @@ import {
   loadCustomerServiceCloudSyncPreference,
   saveCustomerServiceCloudSyncPreference,
 } from '../../../../global/helpers/customerServiceCloudSyncPreference';
+import { ownersMatch } from '../../../../global/actions/ui/customerServiceV2Helpers';
 import useLastCallback from '../../../../hooks/useLastCallback';
 import useSelector from '../../../../hooks/data/useSelector';
 import useLang from '../../../../hooks/useLang';
@@ -44,20 +45,6 @@ type ExistingInfo = {
 };
 
 type ListenerRole = 'owner' | 'follower' | 'unknown';
-
-function ownersMatch(left?: string, right?: string): boolean {
-  if (!left || !right) {
-    return false;
-  }
-  if (left === right) {
-    return true;
-  }
-
-  const leftNumber = Number(left);
-  const rightNumber = Number(right);
-
-  return Number.isFinite(leftNumber) && Number.isFinite(rightNumber) && leftNumber === rightNumber;
-}
 
 const CustomerServiceCloudSyncModal: FC<Props> = ({ isOpen, onClose, onDownloaded, onUploaded }) => {
   const { syncCustomerServiceV2Cloud } = getActions();
