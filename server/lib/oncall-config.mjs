@@ -7,14 +7,11 @@ const DEFAULT_HOLDING_PATTERNS = [
   '稍等',
   '我看下',
   '我看一下',
-  '处理中',
-  '正在处理',
   '帮你确认',
   '稍后',
   'wait',
   'checking',
   'looking into',
-  'processing',
 ];
 const DEFAULT_RESOLVE_PATTERNS = [
   '已处理',
@@ -112,6 +109,8 @@ export function getDefaultOncallConfig() {
     holdingAlertThreadId: '',
     highestAlertChatId: '',
     highestAlertThreadId: '',
+    processingAlertChatId: '',
+    processingAlertThreadId: '',
     resolvedAlertChatId: '',
     resolvedAlertThreadId: '',
     holdingReplyPatternSources: toStringList(
@@ -176,6 +175,12 @@ export function normalizeOncallConfig(rawConfig, baseConfig = getDefaultOncallCo
       : '',
     highestAlertThreadId: typeof safeConfig.highestAlertThreadId === 'string'
       ? safeConfig.highestAlertThreadId.trim()
+      : '',
+    processingAlertChatId: typeof safeConfig.processingAlertChatId === 'string'
+      ? safeConfig.processingAlertChatId.trim()
+      : '',
+    processingAlertThreadId: typeof safeConfig.processingAlertThreadId === 'string'
+      ? safeConfig.processingAlertThreadId.trim()
       : '',
     resolvedAlertChatId: typeof safeConfig.resolvedAlertChatId === 'string'
       ? safeConfig.resolvedAlertChatId.trim()

@@ -355,6 +355,8 @@ export interface LangPair {
   'CustomerServiceOncallStageHoldingHint': undefined;
   'CustomerServiceOncallStageHighest': undefined;
   'CustomerServiceOncallStageHighestHint': undefined;
+  'CustomerServiceOncallStageProcessing': undefined;
+  'CustomerServiceOncallStageProcessingHint': undefined;
   'CustomerServiceOncallStageResolved': undefined;
   'CustomerServiceOncallStageResolvedHint': undefined;
   'CustomerServiceOncallSectionTimeouts': undefined;

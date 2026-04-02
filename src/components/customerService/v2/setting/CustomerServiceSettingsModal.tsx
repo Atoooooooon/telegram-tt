@@ -38,6 +38,7 @@ import styles from './CustomerServiceSettingsModal.module.scss';
 
 type StateProps = {
   isOpen?: boolean;
+  currentUserId?: string;
   chats: Record<string, ApiChat>;
   chatFullInfos: Record<string, ApiChatFullInfo>;
   topicsInfoByChatId: Record<string, TopicsInfo>;
@@ -85,7 +86,29 @@ type NormalizedSettings = {
   oncall: CustomerServiceOncallSettings;
 };
 
-const buildFilterSettings = (saved?: SavedSettings): FilterSettings => ({
+function ensureCurrentUserInStaffIds(staffIds: string[] | undefined, currentUserId?: string) {
+  const normalized = Array.isArray(staffIds)
+    ? staffIds.map((item) => String(item).trim()).filter(Boolean)
+    : [];
+
+  if (!currentUserId) {
+    return normalized;
+  }
+
+  return [currentUserId, ...normalized.filter((item) => item !== currentUserId)];
+}
+
+function ensureOncallStaffIncludesCurrentUser(
+  oncall: CustomerServiceOncallSettings,
+  currentUserId?: string,
+): CustomerServiceOncallSettings {
+  return {
+    ...oncall,
+    staffIds: ensureCurrentUserInStaffIds(oncall.staffIds, currentUserId),
+  };
+}
+
+const buildFilterSettings = (saved?: SavedSettings, currentUserId?: string): FilterSettings => ({
   monitoredChatIds: saved?.monitoredChatIds
     ? [...saved.monitoredChatIds]
     : Array.from(CUSTOMER_SERVICE_CONFIG.MONITORED_CHAT_IDS),
@@ -102,10 +125,13 @@ const buildFilterSettings = (saved?: SavedSettings): FilterSettings => ({
   rules: (saved?.rules && saved.rules.length
     ? saved.rules.map((rule) => JSON.parse(JSON.stringify(rule)))
     : []) as UserRule[],
-  oncall: normalizeCustomerServiceOncallSettings(saved?.oncall),
+  oncall: ensureOncallStaffIncludesCurrentUser(
+    normalizeCustomerServiceOncallSettings(saved?.oncall),
+    currentUserId,
+  ),
 });
 
-const buildNormalizedSettings = (settings: FilterSettings): NormalizedSettings => ({
+const buildNormalizedSettings = (settings: FilterSettings, currentUserId?: string): NormalizedSettings => ({
   monitoredChatIds: [...settings.monitoredChatIds],
   filteredUserIds: [...settings.filteredUserIds],
   regexFilters: settings.regexFilters.map((regex) => ({
@@ -117,10 +143,16 @@ const buildNormalizedSettings = (settings: FilterSettings): NormalizedSettings =
   quickReplies: normalizeCustomerServiceQuickReplies(settings.quickReplies),
   quickReplyPanelGlobal: Boolean(settings.quickReplyPanelGlobal),
   rules: settings.rules?.length ? JSON.parse(JSON.stringify(settings.rules)) : [],
-  oncall: normalizeCustomerServiceOncallSettings(settings.oncall),
+  oncall: ensureOncallStaffIncludesCurrentUser(
+    normalizeCustomerServiceOncallSettings(settings.oncall),
+    currentUserId,
+  ),
 });
 
-const buildNormalizedSavedSettings = (saved?: SavedSettings): NormalizedSettings | undefined => {
+const buildNormalizedSavedSettings = (
+  saved?: SavedSettings,
+  currentUserId?: string,
+): NormalizedSettings | undefined => {
   if (!saved) {
     return undefined;
   }
@@ -136,7 +168,10 @@ const buildNormalizedSavedSettings = (saved?: SavedSettings): NormalizedSettings
     quickReplies: normalizeCustomerServiceQuickReplies(saved.quickReplies ?? []),
     quickReplyPanelGlobal: Boolean(saved.quickReplyPanelGlobal),
     rules: saved.rules?.length ? JSON.parse(JSON.stringify(saved.rules)) : [],
-    oncall: normalizeCustomerServiceOncallSettings(saved.oncall),
+    oncall: ensureOncallStaffIncludesCurrentUser(
+      normalizeCustomerServiceOncallSettings(saved.oncall),
+      currentUserId,
+    ),
   };
 };
 
@@ -157,6 +192,7 @@ const isOnlyRuleEnabledChanged = (prev: NormalizedSettings, next: NormalizedSett
 
 const CustomerServiceSettingsModal = ({
   isOpen,
+  currentUserId,
   chats,
   chatFullInfos,
   topicsInfoByChatId,
@@ -179,7 +215,7 @@ const CustomerServiceSettingsModal = ({
   const hasCloudSync = Boolean(CUSTOMER_SERVICE_CONFIG.CLOUD_SYNC_ENABLED);
 
   const [activeTab, setActiveTab] = useState(0);
-  const [settings, setSettings] = useState<FilterSettings>(() => buildFilterSettings(savedSettings));
+  const [settings, setSettings] = useState<FilterSettings>(() => buildFilterSettings(savedSettings, currentUserId));
   const [hasInitialized, setHasInitialized] = useState(false);
   const [isCloudSyncOpen, setIsCloudSyncOpen] = useState(false);
 
@@ -195,12 +231,12 @@ const CustomerServiceSettingsModal = ({
     }
 
     if (savedSettings) {
-      setSettings(buildFilterSettings(savedSettings));
+      setSettings(buildFilterSettings(savedSettings, currentUserId));
     } else {
-      setSettings(buildFilterSettings());
+      setSettings(buildFilterSettings(undefined, currentUserId));
     }
     setHasInitialized(true);
-  }, [isOpen, savedSettings, hasInitialized]);
+  }, [currentUserId, hasInitialized, isOpen, savedSettings]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -266,7 +302,10 @@ const CustomerServiceSettingsModal = ({
   const handleOncallChange = useLastCallback((nextOncall: CustomerServiceOncallSettings) => {
     updateSettings((prev) => ({
       ...prev,
-      oncall: normalizeCustomerServiceOncallSettings(nextOncall),
+      oncall: ensureOncallStaffIncludesCurrentUser(
+        normalizeCustomerServiceOncallSettings(nextOncall),
+        currentUserId,
+      ),
     }));
   });
 
@@ -277,8 +316,8 @@ const CustomerServiceSettingsModal = ({
   });
 
   const handleSave = useLastCallback(() => {
-    const normalizedSettings = buildNormalizedSettings(settings);
-    const previousNormalized = buildNormalizedSavedSettings(savedSettings);
+    const normalizedSettings = buildNormalizedSettings(settings, currentUserId);
+    const previousNormalized = buildNormalizedSavedSettings(savedSettings, currentUserId);
     const skipCloudSync = previousNormalized
       ? isOnlyRuleEnabledChanged(previousNormalized, normalizedSettings)
       : false;
@@ -288,7 +327,7 @@ const CustomerServiceSettingsModal = ({
   });
 
   const handleReset = useLastCallback(() => {
-    setSettings(buildFilterSettings());
+    setSettings(buildFilterSettings(undefined, currentUserId));
   });
 
   const handleExportSettings = useLastCallback(() => {
@@ -394,6 +433,7 @@ const CustomerServiceSettingsModal = ({
             {activeTab === 5 && (
               <OncallGuaranteeTab
                 oncall={settings.oncall}
+                currentUserId={currentUserId}
                 users={users}
                 chats={chats}
                 topicsInfoByChatId={topicsInfoByChatId}
@@ -509,6 +549,7 @@ export default memo(withGlobal((global): StateProps => {
 
   return {
     isOpen: tabState.isCustomerServiceV2SettingsOpen,
+    currentUserId: global.currentUserId ? String(global.currentUserId) : undefined,
     chats,
     chatFullInfos: chatFullInfos || {},
     topicsInfoByChatId: topicsInfoByChatId || {},

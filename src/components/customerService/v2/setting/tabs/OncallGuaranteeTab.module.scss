@@ -243,6 +243,11 @@
   background: var(--color-background-secondary);
 }
 
+.removeButton:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
 .emptyState {
   display: flex;
   flex-direction: column;
@@ -264,10 +269,18 @@
 
 .stageRouteList {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.75rem;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.5rem;
+
+  @media (max-width: 1200px) {
+    grid-template-columns: repeat(3, 1fr);
+  }
 
   @media (max-width: 800px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  @media (max-width: 600px) {
     grid-template-columns: 1fr;
   }
 }
@@ -277,7 +290,7 @@
   flex-direction: column;
   gap: 0.625rem;
 
-  padding: 0.75rem;
+  padding: 0.625rem;
   border: 1px solid rgba(var(--color-primary-rgb, 51, 144, 236), 0.1);
   border-radius: 0.75rem;
 
@@ -287,6 +300,42 @@
 
   &:hover {
     border-color: rgba(var(--color-primary-rgb, 51, 144, 236), 0.25);
+  }
+
+  .formGrid {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+
+  :global(.input-group) {
+    margin-bottom: 0.5rem;
+
+    label {
+      background-color: transparent;
+      padding: 0;
+      left: 0.75rem;
+    }
+
+    &.touched label,
+    &.error label,
+    .form-control:focus + label {
+      transform: scale(0.75) translate(-0.25rem, -1.75rem);
+      background-color: var(--color-background);
+      padding: 0 0.25rem;
+    }
+  }
+
+  :global(.form-control) {
+    height: 2.5rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  :global(.input-group.with-arrow::after) {
+    top: 0.875rem;
+    right: 0.75rem;
+    width: 0.5rem;
+    height: 0.5rem;
   }
 }
 

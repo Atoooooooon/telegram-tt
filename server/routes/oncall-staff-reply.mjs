@@ -11,7 +11,7 @@ export default {
   path: '/api/oncall/staff-reply',
   async handler(req, res, ctx) {
     const {
-      allowOrigin, allowHeaders, maxBodyBytes, oncallService,
+      allowOrigin, allowHeaders, maxBodyBytes, oncallService, log,
     } = ctx;
 
     if (!oncallService) {
@@ -46,6 +46,19 @@ export default {
       oncallConfig: payload.oncallConfig && typeof payload.oncallConfig === 'object'
         ? payload.oncallConfig
         : undefined,
+    });
+
+    log('Oncall staff reply route handled', {
+      chatId: payload.chatId,
+      messageId,
+      replyToMessageId: toNumber(payload.replyToMessageId),
+      staffUserId: typeof payload.staffUserId === 'string' ? payload.staffUserId : undefined,
+      text: typeof payload.text === 'string' ? payload.text : undefined,
+      caseId: result.caseRecord?.id,
+      status: result.caseRecord?.status,
+      classifiedKind: result.classifiedKind,
+      matchedBy: result.matchedBy,
+      reason: result.reason,
     });
 
     sendJson(res, 200, { ok: true, case: sanitizeOncallCaseForResponse(result.caseRecord) }, allowOrigin, allowHeaders);

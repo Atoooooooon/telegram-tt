@@ -22,6 +22,7 @@ import styles from './OncallGuaranteeTab.module.scss';
 
 type Props = {
   oncall?: CustomerServiceOncallSettings;
+  currentUserId?: string;
   users: Record<string, ApiUser>;
   chats: Record<string, ApiChat>;
   topicsInfoByChatId: Record<string, TopicsInfo>;
@@ -29,7 +30,7 @@ type Props = {
   onChange: (next: CustomerServiceOncallSettings) => void;
 };
 
-type AlertStage = 'new' | 'holding' | 'highest' | 'resolved';
+type AlertStage = 'new' | 'holding' | 'highest' | 'processing' | 'resolved';
 
 type StageOption = {
   stage: AlertStage;
@@ -58,6 +59,7 @@ function parsePatterns(value: string) {
 
 const OncallGuaranteeTab: FC<Props> = ({
   oncall,
+  currentUserId,
   users,
   chats,
   topicsInfoByChatId,
@@ -72,6 +74,7 @@ const OncallGuaranteeTab: FC<Props> = ({
   const configuredAlertChatIds = useMemo(() => (
     [
       config.newAlertChatId,
+      config.processingAlertChatId,
       config.holdingAlertChatId,
       config.highestAlertChatId,
       config.resolvedAlertChatId,
@@ -80,6 +83,7 @@ const OncallGuaranteeTab: FC<Props> = ({
     config.highestAlertChatId,
     config.holdingAlertChatId,
     config.newAlertChatId,
+    config.processingAlertChatId,
     config.resolvedAlertChatId,
   ]);
 
@@ -164,6 +168,13 @@ const OncallGuaranteeTab: FC<Props> = ({
       threadKey: 'newAlertThreadId',
       label: lang('CustomerServiceOncallStageNew'),
       description: lang('CustomerServiceOncallStageNewHint'),
+    },
+    {
+      stage: 'processing',
+      chatKey: 'processingAlertChatId',
+      threadKey: 'processingAlertThreadId',
+      label: lang('CustomerServiceOncallStageProcessing'),
+      description: lang('CustomerServiceOncallStageProcessingHint'),
     },
     {
       stage: 'holding',
@@ -255,6 +266,10 @@ const OncallGuaranteeTab: FC<Props> = ({
   });
 
   const handleRemoveStaff = useLastCallback((staffId: string) => {
+    if (staffId === currentUserId) {
+      return;
+    }
+
     updateField('staffIds', selectedStaffIds.filter((id) => id !== staffId));
   });
 
@@ -370,6 +385,7 @@ const OncallGuaranteeTab: FC<Props> = ({
                   type="button"
                   className={styles.removeButton}
                   aria-label={lang('CustomerServiceOncallRemoveStaffUser')}
+                  disabled={staff.id === currentUserId}
                   onClick={() => handleRemoveStaff(staff.id)}
                 >
                   <Icon name="close" />

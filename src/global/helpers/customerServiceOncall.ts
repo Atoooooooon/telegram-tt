@@ -39,12 +39,25 @@ async function postJson(path: string, payload: Record<string, unknown>) {
   }
 
   try {
-    await fetch(path, {
+    const response = await fetch(path, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      logOncallSyncDebug(`POST ${path} failed`, {
+        status: response.status,
+        payload,
+      });
+      return;
+    }
+
+    logOncallSyncDebug(`POST ${path} succeeded`, {
+      payload,
+      status: response.status,
     });
   } catch (error) {
     logOncallSyncDebug(`Failed to POST ${path}`, error);
@@ -56,5 +69,12 @@ export function reportCustomerServiceUsefulMessage(payload: CustomerServiceUsefu
 }
 
 export function reportCustomerServiceStaffReply(payload: CustomerServiceStaffReplyPayload) {
+  logOncallSyncDebug('Sending oncall staff reply', {
+    chatId: payload.chatId,
+    messageId: payload.messageId,
+    replyToMessageId: payload.replyToMessageId,
+    staffUserId: payload.staffUserId,
+    text: payload.text,
+  });
   void postJson('/api/oncall/staff-reply', payload);
 }

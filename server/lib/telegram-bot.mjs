@@ -49,6 +49,29 @@ export class TelegramBotClient {
     return { ok: true, messageId: data.result?.message_id };
   }
 
+  async updateAlert(config, messageId, text) {
+    if (!this.isEnabled(config) || !messageId) {
+      return { ok: false, skipped: true };
+    }
+
+    try {
+      await this.request(config, 'editMessageText', {
+        chat_id: config.telegramAlertChatId,
+        message_id: Number(messageId),
+        text,
+        disable_web_page_preview: true,
+      });
+      return { ok: true };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('message is not modified')) {
+        return { ok: true, skipped: true };
+      }
+      this.log('Telegram bot editMessageText failed', error);
+      return { ok: false };
+    }
+  }
+
   async deleteMessage(config, messageId) {
     if (!this.isEnabled(config) || !messageId) {
       return { ok: false, skipped: true };
@@ -61,6 +84,10 @@ export class TelegramBotClient {
       });
       return { ok: true };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('message to delete not found')) {
+        return { ok: true, skipped: true, notFound: true };
+      }
       this.log('Telegram bot deleteMessage failed', error);
       return { ok: false };
     }

@@ -2,7 +2,7 @@ import type {
   CustomerServiceQuickReply,
 } from '../global/types/customerServiceV2';
 
-const envDevRedisHost = process.env.DEV_REDIS_HOST as string | undefined;
+const envDevRedisHost = process.env.DEV_REDIS_HOST;
 const ONCALL_MAX_MESSAGES = 100;
 
 // Customer Service Configuration
@@ -80,6 +80,8 @@ export const CUSTOMER_SERVICE_CONFIG = {
     holdingAlertThreadId: '',
     highestAlertChatId: '',
     highestAlertThreadId: '',
+    processingAlertChatId: '',
+    processingAlertThreadId: '',
     resolvedAlertChatId: '',
     resolvedAlertThreadId: '',
     firstResponseTimeoutMs: 5 * 60 * 1000,
@@ -90,14 +92,11 @@ export const CUSTOMER_SERVICE_CONFIG = {
       '稍等',
       '我看下',
       '我看一下',
-      '处理中',
-      '正在处理',
       '帮你确认',
       '稍后',
       'wait',
       'checking',
       'looking into',
-      'processing',
     ] as string[],
     resolveReplyPatterns: [
       '已处理',

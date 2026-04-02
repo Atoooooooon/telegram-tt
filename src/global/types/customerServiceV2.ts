@@ -18,6 +18,8 @@ export type CustomerServiceOncallSettings = {
   holdingAlertThreadId?: string;
   highestAlertChatId?: string;
   highestAlertThreadId?: string;
+  processingAlertChatId?: string;
+  processingAlertThreadId?: string;
   resolvedAlertChatId?: string;
   resolvedAlertThreadId?: string;
   firstResponseTimeoutMs?: number;

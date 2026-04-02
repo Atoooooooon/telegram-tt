@@ -4,6 +4,7 @@ import type {
   CustomerServiceSettings,
   UserRule,
 } from '../types/customerServiceV2';
+
 import { CUSTOMER_SERVICE_CONFIG } from '../../config/customerService';
 
 const CUSTOMER_SERVICE_V2_SETTINGS_KEY = 'customerServiceV2Settings';
@@ -30,7 +31,7 @@ export function normalizeCustomerServiceQuickReplies(raw: unknown): CustomerServ
   }
 
   return raw.reduce<CustomerServiceQuickReply[]>((result, item) => {
-    if (item === undefined || item === null) {
+    if (item === undefined || (!item && typeof item === 'object')) {
       return result;
     }
 
@@ -46,7 +47,7 @@ export function normalizeCustomerServiceQuickReplies(raw: unknown): CustomerServ
     }
 
     if (isRecord(item) && typeof item.text === 'string') {
-      const record = item as Record<string, unknown>;
+      const record = item;
       const text = item.text.trim();
       if (!text) {
         return result;
@@ -56,9 +57,9 @@ export function normalizeCustomerServiceQuickReplies(raw: unknown): CustomerServ
       if (typeof item.englishText === 'string') {
         englishText = item.englishText.trim();
       } else if (typeof record.textEn === 'string') {
-        englishText = (record.textEn as string).trim();
+        englishText = record.textEn.trim();
       } else if (typeof record.enText === 'string') {
-        englishText = (record.enText as string).trim();
+        englishText = record.enText.trim();
       }
 
       result.push({
@@ -117,6 +118,8 @@ export function normalizeCustomerServiceOncallSettings(raw: unknown): CustomerSe
     holdingAlertThreadId: toNumericString(source.holdingAlertThreadId),
     highestAlertChatId: toTrimmedString(source.highestAlertChatId),
     highestAlertThreadId: toNumericString(source.highestAlertThreadId),
+    processingAlertChatId: toTrimmedString(source.processingAlertChatId),
+    processingAlertThreadId: toNumericString(source.processingAlertThreadId),
     resolvedAlertChatId: toTrimmedString(source.resolvedAlertChatId),
     resolvedAlertThreadId: toNumericString(source.resolvedAlertThreadId),
     firstResponseTimeoutMs: toNonNegativeNumber(
