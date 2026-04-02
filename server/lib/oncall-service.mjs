@@ -5,6 +5,8 @@ import { getDefaultOncallConfig, normalizeOncallConfig } from './oncall-config.m
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const NON_TEXT_PLACEHOLDER = '[non-text message]';
 const CASE_SPLIT_IDLE_MS = 5 * 60 * 1000;
+const MAX_CASES_IN_MEMORY = 200;
+const CASE_RETENTION_MS = 3 * 24 * 60 * 60 * 1000;
 const ONCALL_NOTIFICATION_STAGES = {
   NEW: 'new',
   HOLDING: 'holding',
@@ -110,6 +112,10 @@ function getNotificationStage(caseRecord) {
   }
 
   if (caseRecord.status === 'processing') {
+    if (!hasEffectiveReply(caseRecord) && caseRecord.escalationLevel >= 2) {
+      return ONCALL_NOTIFICATION_STAGES.HIGHEST;
+    }
+
     return ONCALL_NOTIFICATION_STAGES.PROCESSING;
   }
 
@@ -400,6 +406,57 @@ function getLastCaseInteractionAt(caseRecord) {
   ].reduce((latest, value) => (typeof value === 'number' && value > latest ? value : latest), 0);
 }
 
+function shouldEvictCaseByRetention(caseRecord, now) {
+  const lastInteractionAt = getLastCaseInteractionAt(caseRecord);
+  if (!lastInteractionAt) {
+    return false;
+  }
+
+  return now - lastInteractionAt >= CASE_RETENTION_MS;
+}
+
+function compactOncallState(state, now) {
+  const cases = Object.values(state.casesById || {});
+  const evictedCases = [];
+  const evictedCaseIds = new Set();
+  const evictCase = (caseRecord) => {
+    if (!caseRecord?.id || evictedCaseIds.has(caseRecord.id)) {
+      return;
+    }
+
+    evictedCaseIds.add(caseRecord.id);
+    evictedCases.push(JSON.parse(JSON.stringify(caseRecord)));
+    delete state.casesById[caseRecord.id];
+
+    if (state.caseIdByChatId[caseRecord.chatId] === caseRecord.id) {
+      delete state.caseIdByChatId[caseRecord.chatId];
+    }
+  };
+
+  for (const caseRecord of cases) {
+    if (shouldEvictCaseByRetention(caseRecord, now)) {
+      evictCase(caseRecord);
+    }
+  }
+
+  const remainingCases = Object.values(state.casesById || {});
+  if (remainingCases.length > MAX_CASES_IN_MEMORY) {
+    const overflowCount = remainingCases.length - MAX_CASES_IN_MEMORY;
+    const overflowVictims = remainingCases
+      .sort((left, right) => getLastCaseInteractionAt(left) - getLastCaseInteractionAt(right))
+      .slice(0, overflowCount);
+
+    for (const caseRecord of overflowVictims) {
+      evictCase(caseRecord);
+    }
+  }
+
+  return {
+    evictedCases,
+    totalCases: Object.keys(state.casesById || {}).length,
+  };
+}
+
 function shouldStartNewCase(existingCase, eventAt) {
   if (!existingCase) {
     return false;
@@ -470,7 +527,7 @@ function applyUsefulMessageEvent(state, payload, config, now) {
     && !hadEffectiveReplyForCurrentTurn
   );
   caseRecord.messageIds = appendUnique(caseRecord.messageIds, payload.messageId);
-  caseRecord.firstMessageId = caseRecord.messageIds[0] || payload.messageId;
+  caseRecord.firstMessageId = caseRecord.firstMessageId || payload.messageId;
   caseRecord.lastMessageId = payload.messageId;
   caseRecord.updatedAt = payload.createdAt || now;
   caseRecord.summary = getNormalizedText(payload.text, payload.previewText);
@@ -497,6 +554,31 @@ function applyUsefulMessageEvent(state, payload, config, now) {
       staleCaseRecord,
       changed: true,
       classifiedKind: 'customer_resolve_reply',
+    };
+  }
+
+  const shouldPreserveProcessingStage = (
+    caseRecord.status === 'processing'
+    && hadEffectiveReplyForCurrentTurn
+  );
+
+  if (shouldPreserveProcessingStage) {
+    caseRecord.lastCustomerMessageAt = payload.createdAt || now;
+    caseRecord.latestCustomerMessageAt = payload.createdAt || now;
+    caseRecord.lastHoldingReplyAt = undefined;
+    caseRecord.lastHoldingReplyText = undefined;
+    caseRecord.lastAlertAt = undefined;
+    caseRecord.highestAlertSentAt = undefined;
+    caseRecord.escalationLevel = 0;
+    caseRecord.priority = 'normal';
+    caseRecord.nextEscalateAt = computeNextEscalateAt(caseRecord, config);
+    caseRecord.deadlineVersion += 1;
+
+    return {
+      caseRecord,
+      staleCaseRecord,
+      changed: true,
+      classifiedKind: 'processing_follow_up',
     };
   }
 
@@ -756,6 +838,26 @@ export class OncallService {
     await this.store.init();
   }
 
+  async compactMemory(reason) {
+    const result = await this.store.mutate((state) => compactOncallState(state, getNow()));
+    if (!result?.evictedCases?.length) {
+      return;
+    }
+
+    for (const caseRecord of result.evictedCases) {
+      this.clearCaseSchedule(caseRecord.id);
+      this.notificationSyncsByCaseId.delete(caseRecord.id);
+      void this.cleanupCaseNotifications(caseRecord).catch(() => undefined);
+    }
+
+    this.log('Oncall memory compacted', {
+      reason,
+      evictedCaseCount: result.evictedCases.length,
+      evictedCaseIds: result.evictedCases.map((caseRecord) => caseRecord.id),
+      remainingCaseCount: result.totalCases,
+    });
+  }
+
   async ingestUsefulMessage(payload) {
     const config = normalizeOncallConfig(payload.oncallConfig, this.defaultConfig);
     const now = getNow();
@@ -779,6 +881,8 @@ export class OncallService {
       this.syncCaseSchedule(result.caseRecord);
       await this.syncCaseNotification(result.caseRecord);
     }
+
+    await this.compactMemory('ingest_useful_message');
 
     return result;
   }
@@ -811,6 +915,8 @@ export class OncallService {
       await this.syncCaseNotification(result.caseRecord);
     }
 
+    await this.compactMemory('report_staff_reply');
+
     return result;
   }
 
@@ -831,6 +937,8 @@ export class OncallService {
       this.syncCaseSchedule(result.caseRecord);
       await this.syncCaseNotification(result.caseRecord);
     }
+
+    await this.compactMemory('deadline_reached');
   }
 
   async listCases(chatId) {
@@ -863,6 +971,8 @@ export class OncallService {
       this.syncCaseSchedule(result.caseRecord);
       await this.syncCaseNotification(result.caseRecord);
     }
+
+    await this.compactMemory('update_case_status');
 
     return result;
   }
