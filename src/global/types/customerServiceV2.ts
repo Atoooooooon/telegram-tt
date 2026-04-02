@@ -28,6 +28,7 @@ export type CustomerServiceOncallSettings = {
   reminderCooldownMs?: number;
   holdingReplyPatterns?: string[];
   resolveReplyPatterns?: string[];
+  customerResolvePatterns?: string[];
 };
 
 /**

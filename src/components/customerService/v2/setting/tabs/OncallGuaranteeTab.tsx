@@ -40,10 +40,26 @@ type StageOption = {
   description: string;
 };
 
-type StaffSearchResult = {
+type UserDirectoryEntry = {
   id: string;
   name: string;
   username?: string;
+};
+
+type UserSelectorSectionProps = {
+  title: string;
+  description: string;
+  searchQuery: string;
+  isSearchOpen: boolean;
+  searchResults: UserDirectoryEntry[];
+  selectedEntries: UserDirectoryEntry[];
+  emptyText: string;
+  removeAriaLabel: string;
+  onSearchChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onSearchClose: () => void;
+  onAdd: (userId: string) => void;
+  onRemove: (userId: string) => void;
+  isRemoveDisabled?: (userId: string) => boolean;
 };
 
 function stringifyPatterns(patterns?: string[]) {
@@ -55,6 +71,46 @@ function parsePatterns(value: string) {
     .split('\n')
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function buildUserDirectoryEntry(userId: string, users: Record<string, ApiUser>): UserDirectoryEntry {
+  const user = users[userId];
+  const name = user
+    ? [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || `User ${userId}`
+    : `User ${userId}`;
+  const username = user?.usernames?.find((item) => item.isActive)?.username || user?.usernames?.[0]?.username;
+
+  return {
+    id: userId,
+    name,
+    username,
+  };
+}
+
+function searchUsers(
+  users: Record<string, ApiUser>,
+  excludedIds: string[],
+  query: string,
+) {
+  const trimmedQuery = query.trim().toLowerCase();
+  if (!trimmedQuery) {
+    return [] as UserDirectoryEntry[];
+  }
+
+  return Object.values(users)
+    .filter((user) => (
+      Boolean(user)
+      && user.type !== 'userTypeDeleted'
+      && !excludedIds.includes(user.id)
+    ))
+    .map((user) => buildUserDirectoryEntry(user.id, users))
+    .filter((user) => (
+      user.name.toLowerCase().includes(trimmedQuery)
+      || Boolean(user.username?.toLowerCase().includes(trimmedQuery))
+      || user.id.toLowerCase().includes(trimmedQuery)
+    ))
+    .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
+    .slice(0, 10);
 }
 
 const OncallGuaranteeTab: FC<Props> = ({
@@ -116,49 +172,11 @@ const OncallGuaranteeTab: FC<Props> = ({
     .sort((left, right) => left.title.localeCompare(right.title, 'zh-CN'));
 
   const staffSearchResults = useMemo(() => {
-    const trimmedQuery = staffSearchQuery.trim().toLowerCase();
-    if (!trimmedQuery) {
-      return [] as StaffSearchResult[];
-    }
-
-    return Object.values(users)
-      .filter((user) => (
-        Boolean(user)
-        && user.type !== 'userTypeDeleted'
-        && !selectedStaffIds.includes(user.id)
-      ))
-      .map((user) => {
-        const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || `User ${user.id}`;
-        const username = user.usernames?.find((item) => item.isActive)?.username || user.usernames?.[0]?.username;
-        return {
-          id: user.id,
-          name,
-          username,
-        };
-      })
-      .filter((user) => (
-        user.name.toLowerCase().includes(trimmedQuery)
-        || Boolean(user.username?.toLowerCase().includes(trimmedQuery))
-        || user.id.toLowerCase().includes(trimmedQuery)
-      ))
-      .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
-      .slice(0, 10);
+    return searchUsers(users, selectedStaffIds, staffSearchQuery);
   }, [staffSearchQuery, users, selectedStaffIds]);
 
   const selectedStaffEntries = useMemo(() => {
-    return selectedStaffIds.map((staffId) => {
-      const user = users[staffId];
-      const name = user
-        ? [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || `User ${staffId}`
-        : `User ${staffId}`;
-      const username = user?.usernames?.find((item) => item.isActive)?.username || user?.usernames?.[0]?.username;
-
-      return {
-        id: staffId,
-        name,
-        username,
-      };
-    });
+    return selectedStaffIds.map((staffId) => buildUserDirectoryEntry(staffId, users));
   }, [selectedStaffIds, users]);
 
   const stageOptions: StageOption[] = [
@@ -273,6 +291,120 @@ const OncallGuaranteeTab: FC<Props> = ({
     updateField('staffIds', selectedStaffIds.filter((id) => id !== staffId));
   });
 
+  const renderUserSelectorSection = useLastCallback(({
+    title,
+    description,
+    searchQuery,
+    isSearchOpen,
+    searchResults,
+    selectedEntries,
+    emptyText,
+    removeAriaLabel,
+    onSearchChange,
+    onSearchClose,
+    onAdd,
+    onRemove,
+    isRemoveDisabled,
+  }: UserSelectorSectionProps) => (
+    <div className={styles.sectionBlock}>
+      <div className={styles.sectionTitle}>
+        <Icon name="user" />
+        <span>{title}</span>
+      </div>
+      <div className={styles.sectionDescription}>
+        {description}
+      </div>
+
+      <div className={styles.searchContainer}>
+        <div className={styles.staffSearchInputWrapper}>
+          <Icon name="search" className={styles.inputIcon} />
+          <InputText
+            value={searchQuery}
+            onChange={onSearchChange}
+            placeholder={lang('CustomerServiceSearchUsers')}
+            className={styles.staffSearchInput}
+          />
+        </div>
+
+        {isSearchOpen && searchResults.length > 0 && (
+          <>
+            <div className={styles.searchDropdown}>
+              {searchResults.map((result) => (
+                <button
+                  type="button"
+                  key={result.id}
+                  className={styles.searchResultItem}
+                  onClick={() => onAdd(result.id)}
+                >
+                  <div className={styles.resultAvatar}>
+                    <Icon name="user" />
+                  </div>
+                  <div className={styles.resultInfo}>
+                    <div className={styles.resultName}>{result.name}</div>
+                    <div className={styles.resultDetails}>
+                      <span className={styles.resultId}>{result.id}</span>
+                      {result.username && (
+                        <span className={styles.resultUsername}>
+                          @
+                          {result.username}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className={styles.searchOverlay} onClick={onSearchClose} />
+          </>
+        )}
+      </div>
+
+      {selectedEntries.length > 0 ? (
+        <div className={styles.staffList}>
+          {selectedEntries.map((entry) => {
+            const isDisabled = Boolean(isRemoveDisabled?.(entry.id));
+
+            return (
+              <div key={entry.id} className={styles.staffItem}>
+                <div className={styles.staffContent}>
+                  <div className={styles.userAvatar}>
+                    <Icon name="user" className={styles.filterIcon} />
+                  </div>
+                  <div className={styles.userInfo}>
+                    <div className={styles.userName}>{entry.name}</div>
+                    <div className={styles.userDetails}>
+                      <span className={styles.userId}>{entry.id}</span>
+                      {entry.username && (
+                        <span className={styles.userUsername}>
+                          @
+                          {entry.username}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className={styles.removeButton}
+                  aria-label={removeAriaLabel}
+                  disabled={isDisabled}
+                  onClick={() => onRemove(entry.id)}
+                >
+                  <Icon name="close" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className={styles.emptyState}>
+          <Icon name="user" className={styles.emptyIcon} />
+          <p>{emptyText}</p>
+        </div>
+      )}
+    </div>
+  ));
+
   return (
     <div className={layoutStyles.tabContent}>
       <div className={layoutStyles.sectionHeader}>
@@ -307,99 +439,21 @@ const OncallGuaranteeTab: FC<Props> = ({
         </div>
       </div>
 
-      <div className={styles.sectionBlock}>
-        <div className={styles.sectionTitle}>
-          <Icon name="user" />
-          <span>{lang('CustomerServiceOncallStaffIds')}</span>
-        </div>
-        <div className={styles.sectionDescription}>
-          {lang('CustomerServiceOncallStaffIdsDescription')}
-        </div>
-
-        <div className={styles.searchContainer}>
-          <div className={styles.staffSearchInputWrapper}>
-            <Icon name="search" className={styles.inputIcon} />
-            <InputText
-              value={staffSearchQuery}
-              onChange={handleStaffSearchChange}
-              placeholder={lang('CustomerServiceSearchUsers')}
-              className={styles.staffSearchInput}
-            />
-          </div>
-
-          {isStaffSearchOpen && staffSearchResults.length > 0 && (
-            <>
-              <div className={styles.searchDropdown}>
-                {staffSearchResults.map((result) => (
-                  <button
-                    type="button"
-                    key={result.id}
-                    className={styles.searchResultItem}
-                    onClick={() => handleAddStaff(result.id)}
-                  >
-                    <div className={styles.resultAvatar}>
-                      <Icon name="user" />
-                    </div>
-                    <div className={styles.resultInfo}>
-                      <div className={styles.resultName}>{result.name}</div>
-                      <div className={styles.resultDetails}>
-                        <span className={styles.resultId}>{result.id}</span>
-                        {result.username && (
-                          <span className={styles.resultUsername}>
-                            @
-                            {result.username}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-              <div className={styles.searchOverlay} onClick={() => setIsStaffSearchOpen(false)} />
-            </>
-          )}
-        </div>
-
-        {selectedStaffEntries.length > 0 ? (
-          <div className={styles.staffList}>
-            {selectedStaffEntries.map((staff) => (
-              <div key={staff.id} className={styles.staffItem}>
-                <div className={styles.staffContent}>
-                  <div className={styles.userAvatar}>
-                    <Icon name="user" className={styles.filterIcon} />
-                  </div>
-                  <div className={styles.userInfo}>
-                    <div className={styles.userName}>{staff.name}</div>
-                    <div className={styles.userDetails}>
-                      <span className={styles.userId}>{staff.id}</span>
-                      {staff.username && (
-                        <span className={styles.userUsername}>
-                          @
-                          {staff.username}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className={styles.removeButton}
-                  aria-label={lang('CustomerServiceOncallRemoveStaffUser')}
-                  disabled={staff.id === currentUserId}
-                  onClick={() => handleRemoveStaff(staff.id)}
-                >
-                  <Icon name="close" />
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className={styles.emptyState}>
-            <Icon name="user" className={styles.emptyIcon} />
-            <p>{lang('CustomerServiceOncallNoStaffUsers')}</p>
-          </div>
-        )}
-      </div>
+      {renderUserSelectorSection({
+        title: lang('CustomerServiceOncallStaffIds'),
+        description: lang('CustomerServiceOncallStaffIdsDescription'),
+        searchQuery: staffSearchQuery,
+        isSearchOpen: isStaffSearchOpen,
+        searchResults: staffSearchResults,
+        selectedEntries: selectedStaffEntries,
+        emptyText: lang('CustomerServiceOncallNoStaffUsers'),
+        removeAriaLabel: lang('CustomerServiceOncallRemoveStaffUser'),
+        onSearchChange: handleStaffSearchChange,
+        onSearchClose: () => setIsStaffSearchOpen(false),
+        onAdd: handleAddStaff,
+        onRemove: handleRemoveStaff,
+        isRemoveDisabled: (userId) => userId === currentUserId,
+      })}
 
       <div className={styles.sectionBlock}>
         <div className={styles.sectionTitle}>
@@ -529,6 +583,15 @@ const OncallGuaranteeTab: FC<Props> = ({
           value={stringifyPatterns(config.resolveReplyPatterns)}
           onChange={(e) => updateField('resolveReplyPatterns', parsePatterns(e.currentTarget.value))}
           label={lang('CustomerServiceOncallResolveRegex')}
+          placeholder={lang('CustomerServiceOncallRegexPlaceholder')}
+          className={styles.textAreaField}
+          noReplaceNewlines
+          autoResize={false}
+        />
+        <TextArea
+          value={stringifyPatterns(config.customerResolvePatterns)}
+          onChange={(e) => updateField('customerResolvePatterns', parsePatterns(e.currentTarget.value))}
+          label={lang('CustomerServiceOncallCustomerResolveRegex')}
           placeholder={lang('CustomerServiceOncallRegexPlaceholder')}
           className={styles.textAreaField}
           noReplaceNewlines

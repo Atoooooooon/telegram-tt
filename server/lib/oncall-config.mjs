@@ -25,6 +25,18 @@ const DEFAULT_RESOLVE_PATTERNS = [
   'done',
   'completed',
 ];
+const DEFAULT_CUSTOMER_RESOLVE_PATTERNS = [
+  '^好的$',
+  '^好$',
+  '^知道了$',
+  '^明白了$',
+  '^收到$',
+  '^OK$',
+  '^ok$',
+  '^okay$',
+  '^谢谢$',
+  '^感谢$',
+];
 
 function toNumber(value, fallback) {
   const parsed = Number(value);
@@ -121,6 +133,10 @@ export function getDefaultOncallConfig() {
       process.env.ONCALL_RESOLVE_REPLY_PATTERNS,
       DEFAULT_RESOLVE_PATTERNS,
     ),
+    customerResolvePatternSources: toStringList(
+      process.env.ONCALL_CUSTOMER_RESOLVE_PATTERNS,
+      DEFAULT_CUSTOMER_RESOLVE_PATTERNS,
+    ),
   };
 }
 
@@ -133,6 +149,10 @@ export function normalizeOncallConfig(rawConfig, baseConfig = getDefaultOncallCo
   const resolveReplyPatternSources = toStringList(
     safeConfig.resolveReplyPatterns ?? safeConfig.resolveReplyPatternSources,
     baseConfig.resolveReplyPatternSources,
+  );
+  const customerResolvePatternSources = toStringList(
+    safeConfig.customerResolvePatterns ?? safeConfig.customerResolvePatternSources,
+    baseConfig.customerResolvePatternSources,
   );
 
   return {
@@ -190,7 +210,9 @@ export function normalizeOncallConfig(rawConfig, baseConfig = getDefaultOncallCo
       : '',
     holdingReplyPatternSources,
     resolveReplyPatternSources,
+    customerResolvePatternSources,
     holdingReplyPatterns: buildPatterns(holdingReplyPatternSources),
     resolveReplyPatterns: buildPatterns(resolveReplyPatternSources),
+    customerResolvePatterns: buildPatterns(customerResolvePatternSources),
   };
 }

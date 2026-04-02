@@ -367,6 +367,7 @@ export interface LangPair {
   'CustomerServiceOncallSectionPatterns': undefined;
   'CustomerServiceOncallHoldingRegex': undefined;
   'CustomerServiceOncallResolveRegex': undefined;
+  'CustomerServiceOncallCustomerResolveRegex': undefined;
   'CustomerServiceOncallRegexPlaceholder': undefined;
   'CustomerServiceOncallStaffIds': undefined;
   'CustomerServiceOncallRemoveStaffUser': undefined;

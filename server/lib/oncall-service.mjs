@@ -323,6 +323,15 @@ function classifyStaffReply(text, config) {
   return 'real_reply';
 }
 
+function isCustomerResolveReply(text, config) {
+  const normalizedText = (text || '').trim();
+  if (!normalizedText) {
+    return false;
+  }
+
+  return config.customerResolvePatterns.some((pattern) => pattern.test(normalizedText));
+}
+
 function ensureCaseForChat(state, payload, now) {
   const existingCaseId = state.caseIdByChatId[payload.chatId];
   const existingCase = existingCaseId ? state.casesById[existingCaseId] : undefined;
@@ -468,6 +477,28 @@ function applyUsefulMessageEvent(state, payload, config, now) {
   caseRecord.lastCustomerText = getNormalizedText(payload.text, payload.previewText);
   caseRecord.latestCustomerMessageAt = payload.createdAt || now;
   caseRecord.oncallConfig = config;
+
+  const shouldResolveByCustomerReply = (
+    caseRecord.status !== 'resolved'
+    && caseRecord.status !== 'expired'
+    && (hadEffectiveReplyForCurrentTurn || hadHoldingReplyForCurrentTurn)
+    && isCustomerResolveReply(caseRecord.lastCustomerText, config)
+  );
+
+  if (shouldResolveByCustomerReply) {
+    caseRecord.status = 'resolved';
+    caseRecord.ackedAt = caseRecord.ackedAt || (payload.createdAt || now);
+    caseRecord.resolvedAt = payload.createdAt || now;
+    caseRecord.nextEscalateAt = computeNextEscalateAt(caseRecord, config);
+    caseRecord.deadlineVersion += 1;
+
+    return {
+      caseRecord,
+      staleCaseRecord,
+      changed: true,
+      classifiedKind: 'customer_resolve_reply',
+    };
+  }
 
   const shouldRestartLifecycle = (
     caseRecord.messageIds.length <= 1
@@ -739,6 +770,7 @@ export class OncallService {
         status: result.caseRecord.status,
         nextEscalateAt: result.caseRecord.nextEscalateAt,
         escalationLevel: result.caseRecord.escalationLevel,
+        classifiedKind: result.classifiedKind,
       });
       if (result.staleCaseRecord) {
         this.syncCaseSchedule(result.staleCaseRecord);

@@ -110,5 +110,17 @@ export const CUSTOMER_SERVICE_CONFIG = {
       'done',
       'completed',
     ] as string[],
+    customerResolvePatterns: [
+      '^好的$',
+      '^好$',
+      '^知道了$',
+      '^明白了$',
+      '^收到$',
+      '^OK$',
+      '^ok$',
+      '^okay$',
+      '^谢谢$',
+      '^感谢$',
+    ] as string[],
   },
 } as const;

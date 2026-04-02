@@ -146,6 +146,10 @@ export function normalizeCustomerServiceOncallSettings(raw: unknown): CustomerSe
       source.resolveReplyPatterns,
       defaults.resolveReplyPatterns,
     ),
+    customerResolvePatterns: normalizeStringArray(
+      source.customerResolvePatterns,
+      defaults.customerResolvePatterns,
+    ),
   };
 }
 

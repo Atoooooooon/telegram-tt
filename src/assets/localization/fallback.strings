@@ -425,6 +425,7 @@
 "CustomerServiceOncallSectionPatterns" = "回复识别规则";
 "CustomerServiceOncallHoldingRegex" = "“稍等 / 处理中” 正则";
 "CustomerServiceOncallResolveRegex" = "“已解决 / 已完成” 正则";
+"CustomerServiceOncallCustomerResolveRegex" = "“客户已确认完成” 正则";
 "CustomerServiceOncallRegexPlaceholder" = "每行一个正则，支持 /pattern/flags";
 "CustomerServiceOncallStaffIds" = "同事账号";
 "CustomerServiceOncallRemoveStaffUser" = "移除同事账号";
