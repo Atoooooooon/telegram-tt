@@ -366,6 +366,8 @@ export interface LangPair {
   'CustomerServiceOncallHoldingRegex': undefined;
   'CustomerServiceOncallResolveRegex': undefined;
   'CustomerServiceOncallRegexPlaceholder': undefined;
+  'CustomerServiceOncallStaffIds': undefined;
+  'CustomerServiceOncallRemoveStaffUser': undefined;
   'CustomerServiceDeleteRule': undefined;
   'CustomerServiceRuleEnabled': undefined;
   'CustomerServiceRuleName': undefined;
@@ -1949,6 +1951,8 @@ export interface LangPair {
   'CustomerServiceFilterByTag': undefined;
   'CustomerServiceNoGroups': undefined;
   'CustomerServiceFilteredUserIdsDescription': undefined;
+  'CustomerServiceOncallStaffIdsDescription': undefined;
+  'CustomerServiceOncallNoStaffUsers': undefined;
   'CustomerServiceRegexFiltersDescription': undefined;
   'CustomerServiceRegexPlaceholder': undefined;
   'CustomerServiceRegexExample1': undefined;

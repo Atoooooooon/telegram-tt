@@ -1,8 +1,10 @@
 import type { FC } from '../../../../../lib/teact/teact';
 import type React from '../../../../../lib/teact/teact';
-import { memo, useEffect } from '../../../../../lib/teact/teact';
+import {
+  memo, useEffect, useMemo, useState,
+} from '../../../../../lib/teact/teact';
 
-import type { ApiChat } from '../../../../../api/types';
+import type { ApiChat, ApiUser } from '../../../../../api/types';
 import type { CustomerServiceOncallSettings } from '../../../../../global/types/customerServiceV2';
 import type { TopicsInfo } from '../../../../../types';
 
@@ -20,6 +22,7 @@ import styles from './OncallGuaranteeTab.module.scss';
 
 type Props = {
   oncall?: CustomerServiceOncallSettings;
+  users: Record<string, ApiUser>;
   chats: Record<string, ApiChat>;
   topicsInfoByChatId: Record<string, TopicsInfo>;
   onLoadTopics: (payload: { chatId: string; force?: boolean }) => void;
@@ -36,6 +39,12 @@ type StageOption = {
   description: string;
 };
 
+type StaffSearchResult = {
+  id: string;
+  name: string;
+  username?: string;
+};
+
 function stringifyPatterns(patterns?: string[]) {
   return (patterns || []).join('\n');
 }
@@ -49,6 +58,7 @@ function parsePatterns(value: string) {
 
 const OncallGuaranteeTab: FC<Props> = ({
   oncall,
+  users,
   chats,
   topicsInfoByChatId,
   onLoadTopics,
@@ -56,20 +66,29 @@ const OncallGuaranteeTab: FC<Props> = ({
 }) => {
   const lang = useLang();
   const config = oncall || {};
+  const [staffSearchQuery, setStaffSearchQuery] = useState('');
+  const [isStaffSearchOpen, setIsStaffSearchOpen] = useState(false);
+  const selectedStaffIds = useMemo(() => config.staffIds || [], [config.staffIds]);
+  const configuredAlertChatIds = useMemo(() => (
+    [
+      config.newAlertChatId,
+      config.holdingAlertChatId,
+      config.highestAlertChatId,
+      config.resolvedAlertChatId,
+    ].filter((id): id is string => Boolean(id))
+  ), [
+    config.highestAlertChatId,
+    config.holdingAlertChatId,
+    config.newAlertChatId,
+    config.resolvedAlertChatId,
+  ]);
 
   // On mount, auto-load topics for any forum chats that are already configured
   // (onLoadTopics is normally only called when the user picks a chat, so it's
   // never triggered when the modal opens with pre-existing settings).
   useEffect(() => {
-    const alertChatIds = [
-      config.newAlertChatId,
-      config.holdingAlertChatId,
-      config.highestAlertChatId,
-      config.resolvedAlertChatId,
-    ].filter((id): id is string => Boolean(id));
-
     const seen = new Set<string>();
-    for (const chatId of alertChatIds) {
+    for (const chatId of configuredAlertChatIds) {
       if (seen.has(chatId)) continue;
       seen.add(chatId);
       const chat = chats[chatId];
@@ -77,8 +96,7 @@ const OncallGuaranteeTab: FC<Props> = ({
         onLoadTopics({ chatId });
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [chats, configuredAlertChatIds, onLoadTopics, topicsInfoByChatId]);
 
   const chatOptions = Object.values(chats)
     .filter((chat) => (
@@ -92,6 +110,52 @@ const OncallGuaranteeTab: FC<Props> = ({
       )
     ))
     .sort((left, right) => left.title.localeCompare(right.title, 'zh-CN'));
+
+  const staffSearchResults = useMemo(() => {
+    const trimmedQuery = staffSearchQuery.trim().toLowerCase();
+    if (!trimmedQuery) {
+      return [] as StaffSearchResult[];
+    }
+
+    return Object.values(users)
+      .filter((user) => (
+        Boolean(user)
+        && user.type !== 'userTypeDeleted'
+        && !selectedStaffIds.includes(user.id)
+      ))
+      .map((user) => {
+        const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || `User ${user.id}`;
+        const username = user.usernames?.find((item) => item.isActive)?.username || user.usernames?.[0]?.username;
+        return {
+          id: user.id,
+          name,
+          username,
+        };
+      })
+      .filter((user) => (
+        user.name.toLowerCase().includes(trimmedQuery)
+        || Boolean(user.username?.toLowerCase().includes(trimmedQuery))
+        || user.id.toLowerCase().includes(trimmedQuery)
+      ))
+      .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
+      .slice(0, 10);
+  }, [staffSearchQuery, users, selectedStaffIds]);
+
+  const selectedStaffEntries = useMemo(() => {
+    return selectedStaffIds.map((staffId) => {
+      const user = users[staffId];
+      const name = user
+        ? [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || `User ${staffId}`
+        : `User ${staffId}`;
+      const username = user?.usernames?.find((item) => item.isActive)?.username || user?.usernames?.[0]?.username;
+
+      return {
+        id: staffId,
+        name,
+        username,
+      };
+    });
+  }, [selectedStaffIds, users]);
 
   const stageOptions: StageOption[] = [
     {
@@ -136,9 +200,9 @@ const OncallGuaranteeTab: FC<Props> = ({
 
   const updateNumberField = useLastCallback((
     key: 'firstResponseTimeoutMs'
-    | 'highestEscalationTimeoutMs'
-    | 'holdingReplyGraceTimeoutMs'
-    | 'reminderCooldownMs',
+      | 'highestEscalationTimeoutMs'
+      | 'holdingReplyGraceTimeoutMs'
+      | 'reminderCooldownMs',
     value: string,
   ) => {
     if (!value.trim()) {
@@ -174,6 +238,26 @@ const OncallGuaranteeTab: FC<Props> = ({
     updateField(threadKey, e.currentTarget.value || undefined);
   });
 
+  const handleStaffSearchChange = useLastCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const nextValue = e.currentTarget.value;
+    setStaffSearchQuery(nextValue);
+    setIsStaffSearchOpen(Boolean(nextValue.trim()));
+  });
+
+  const handleAddStaff = useLastCallback((staffId: string) => {
+    if (selectedStaffIds.includes(staffId)) {
+      return;
+    }
+
+    updateField('staffIds', [...selectedStaffIds, staffId]);
+    setStaffSearchQuery('');
+    setIsStaffSearchOpen(false);
+  });
+
+  const handleRemoveStaff = useLastCallback((staffId: string) => {
+    updateField('staffIds', selectedStaffIds.filter((id) => id !== staffId));
+  });
+
   return (
     <div className={layoutStyles.tabContent}>
       <div className={layoutStyles.sectionHeader}>
@@ -206,6 +290,99 @@ const OncallGuaranteeTab: FC<Props> = ({
           <Icon name="settings" className={styles.summaryIcon} />
           <span>{lang('CustomerServiceOncallGuaranteeSummary2')}</span>
         </div>
+      </div>
+
+      <div className={styles.sectionBlock}>
+        <div className={styles.sectionTitle}>
+          <Icon name="user" />
+          <span>{lang('CustomerServiceOncallStaffIds')}</span>
+        </div>
+        <div className={styles.sectionDescription}>
+          {lang('CustomerServiceOncallStaffIdsDescription')}
+        </div>
+
+        <div className={styles.searchContainer}>
+          <div className={styles.staffSearchInputWrapper}>
+            <Icon name="search" className={styles.inputIcon} />
+            <InputText
+              value={staffSearchQuery}
+              onChange={handleStaffSearchChange}
+              placeholder={lang('CustomerServiceSearchUsers')}
+              className={styles.staffSearchInput}
+            />
+          </div>
+
+          {isStaffSearchOpen && staffSearchResults.length > 0 && (
+            <>
+              <div className={styles.searchDropdown}>
+                {staffSearchResults.map((result) => (
+                  <button
+                    type="button"
+                    key={result.id}
+                    className={styles.searchResultItem}
+                    onClick={() => handleAddStaff(result.id)}
+                  >
+                    <div className={styles.resultAvatar}>
+                      <Icon name="user" />
+                    </div>
+                    <div className={styles.resultInfo}>
+                      <div className={styles.resultName}>{result.name}</div>
+                      <div className={styles.resultDetails}>
+                        <span className={styles.resultId}>{result.id}</span>
+                        {result.username && (
+                          <span className={styles.resultUsername}>
+                            @
+                            {result.username}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <div className={styles.searchOverlay} onClick={() => setIsStaffSearchOpen(false)} />
+            </>
+          )}
+        </div>
+
+        {selectedStaffEntries.length > 0 ? (
+          <div className={styles.staffList}>
+            {selectedStaffEntries.map((staff) => (
+              <div key={staff.id} className={styles.staffItem}>
+                <div className={styles.staffContent}>
+                  <div className={styles.userAvatar}>
+                    <Icon name="user" className={styles.filterIcon} />
+                  </div>
+                  <div className={styles.userInfo}>
+                    <div className={styles.userName}>{staff.name}</div>
+                    <div className={styles.userDetails}>
+                      <span className={styles.userId}>{staff.id}</span>
+                      {staff.username && (
+                        <span className={styles.userUsername}>
+                          @
+                          {staff.username}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className={styles.removeButton}
+                  aria-label={lang('CustomerServiceOncallRemoveStaffUser')}
+                  onClick={() => handleRemoveStaff(staff.id)}
+                >
+                  <Icon name="close" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className={styles.emptyState}>
+            <Icon name="user" className={styles.emptyIcon} />
+            <p>{lang('CustomerServiceOncallNoStaffUsers')}</p>
+          </div>
+        )}
       </div>
 
       <div className={styles.sectionBlock}>

@@ -424,6 +424,8 @@
 "CustomerServiceOncallHoldingRegex" = "“稍等 / 处理中” 正则";
 "CustomerServiceOncallResolveRegex" = "“已解决 / 已完成” 正则";
 "CustomerServiceOncallRegexPlaceholder" = "每行一个正则，支持 /pattern/flags";
+"CustomerServiceOncallStaffIds" = "同事账号";
+"CustomerServiceOncallRemoveStaffUser" = "移除同事账号";
 "CustomerServiceDeleteRule" = "删除规则";
 "CustomerServiceRuleEnabled" = "启用";
 "CustomerServiceRuleName" = "规则名称";
@@ -2624,6 +2626,8 @@
 "CustomerServiceFilterByTag" = "标签";
 "CustomerServiceNoGroups" = "暂无可用群组";
 "CustomerServiceFilteredUserIdsDescription" = "添加需要从客服模块中过滤掉的用户ID";
+"CustomerServiceOncallStaffIdsDescription" = "搜索并添加会被视为“客服同事回复”的账号。设置最终仅保存用户 ID，用于识别同事消息。";
+"CustomerServiceOncallNoStaffUsers" = "暂无同事账号";
 "CustomerServiceRegexFiltersDescription" = "添加正则规则来过滤特定的消息内容";
 "CustomerServiceRegexPlaceholder" = "输入正则表达式，例如：^/\\w+ (过滤命令)";
 "CustomerServiceRegexExample1" = "过滤所有命令（以/开头）";
