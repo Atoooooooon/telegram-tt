@@ -37,6 +37,7 @@ mkdir -p "$LOG_DIR"
 
 NODE_PATH=""
 PLATFORM=""
+LOG_TAIL_LINES=120
 
 show_help() {
     echo ""
@@ -85,6 +86,19 @@ detect_platform() {
             exit 1
         fi
     fi
+}
+
+print_log_tail() {
+    local log_file="$1"
+    local title="$2"
+
+    echo "----- $title -----"
+    if [ -f "$log_file" ]; then
+        tail -n "$LOG_TAIL_LINES" "$log_file" || true
+    else
+        echo "日志文件不存在: $log_file"
+    fi
+    echo "-------------------"
 }
 
 is_pid_running() {
@@ -138,6 +152,7 @@ start_process() {
     fi
 
     echo "❌ $name 启动失败，请检查日志: $log_file"
+    print_log_tail "$log_file" "$name 最近日志"
     rm -f "$pid_file"
     return 1
 }
