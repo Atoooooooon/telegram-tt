@@ -36,8 +36,10 @@ BACKEND_LOG_FILE="$LOG_DIR/backend.log"
 mkdir -p "$LOG_DIR"
 
 NODE_PATH=""
+NODE_VERSION=""
 PLATFORM=""
 LOG_TAIL_LINES=120
+BACKEND_REQUIRED_NODE_MAJOR=22
 
 show_help() {
     echo ""
@@ -61,31 +63,68 @@ show_help() {
 }
 
 detect_platform() {
+    local bundled_node=""
+    local system_node=""
+    local bundled_major=0
+    local system_major=0
+
     if [[ "$OSTYPE" == "darwin"* ]]; then
         PLATFORM="macOS"
         if [ -f "./runtime/darwin/bin/node" ]; then
-            NODE_PATH="./runtime/darwin/bin/node"
+            bundled_node="./runtime/darwin/bin/node"
         fi
     elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
         PLATFORM="Linux"
         if [ -f "./runtime/linux/bin/node" ]; then
-            NODE_PATH="./runtime/linux/bin/node"
+            bundled_node="./runtime/linux/bin/node"
         fi
     else
         echo "❌ 不支持的平台: $OSTYPE"
         exit 1
     fi
 
-    if [ -z "$NODE_PATH" ]; then
-        local system_node
-        system_node="$(command -v node || true)"
-        if [ -n "$system_node" ]; then
-            NODE_PATH="$system_node"
-        else
-            echo "❌ 未找到可用的 Node.js 运行时"
-            exit 1
-        fi
+    system_node="$(command -v node || true)"
+
+    if [ -n "$bundled_node" ]; then
+        bundled_major="$(get_node_major "$bundled_node" || printf '0')"
     fi
+
+    if [ -n "$system_node" ]; then
+        system_major="$(get_node_major "$system_node" || printf '0')"
+    fi
+
+    if [ -n "$bundled_node" ] && [ "$bundled_major" -ge "$BACKEND_REQUIRED_NODE_MAJOR" ]; then
+        NODE_PATH="$bundled_node"
+    elif [ -n "$system_node" ] && [ "$system_major" -ge "$BACKEND_REQUIRED_NODE_MAJOR" ]; then
+        NODE_PATH="$system_node"
+    elif [ -n "$system_node" ] && [ "$system_major" -ge "$bundled_major" ]; then
+        NODE_PATH="$system_node"
+    elif [ -n "$bundled_node" ]; then
+        NODE_PATH="$bundled_node"
+    elif [ -n "$system_node" ]; then
+        NODE_PATH="$system_node"
+    else
+        echo "❌ 未找到可用的 Node.js 运行时"
+        exit 1
+    fi
+
+    NODE_VERSION="$(get_node_version "$NODE_PATH")"
+
+    if [ "$(get_node_major "$NODE_PATH")" -lt "$BACKEND_REQUIRED_NODE_MAJOR" ]; then
+        echo "⚠️  当前 Node.js 版本为 v$NODE_VERSION，低于后端推荐的 v$BACKEND_REQUIRED_NODE_MAJOR+"
+    fi
+}
+
+get_node_version() {
+    local node_bin="$1"
+    "$node_bin" -p "process.versions.node" 2>/dev/null || return 1
+}
+
+get_node_major() {
+    local node_bin="$1"
+    local version
+    version="$(get_node_version "$node_bin")" || return 1
+    printf '%s\n' "${version%%.*}"
 }
 
 print_log_tail() {
@@ -140,6 +179,7 @@ start_process() {
     fi
 
     echo "🚀 正在启动 $name..."
+    echo "🧩 使用 Node.js: $NODE_PATH (v$NODE_VERSION)"
     nohup "$NODE_PATH" "$command_path" >> "$log_file" 2>&1 &
     local pid=$!
     echo "$pid" > "$pid_file"
@@ -194,6 +234,12 @@ start_frontend() {
 }
 
 start_backend() {
+    if [ "$(get_node_major "$NODE_PATH")" -lt "$BACKEND_REQUIRED_NODE_MAJOR" ]; then
+        echo "❌ Telegram Web 后端需要 Node.js >= $BACKEND_REQUIRED_NODE_MAJOR，当前为 v$NODE_VERSION ($NODE_PATH)"
+        echo "💡 请更新 ./runtime/linux/bin/node，或让系统 node 升级到兼容版本"
+        return 1
+    fi
+
     start_process "Telegram Web 后端" "./server/index.mjs" "$BACKEND_PID_FILE" "$BACKEND_LOG_FILE"
 }
 
@@ -262,7 +308,7 @@ start_service() {
     echo ""
 
     detect_platform
-    echo "✅ 使用 $PLATFORM 的 Node.js 运行时: $NODE_PATH"
+    echo "✅ 使用 $PLATFORM 的 Node.js 运行时: $NODE_PATH (v$NODE_VERSION)"
 
     local failed=0
     case "$target" in
