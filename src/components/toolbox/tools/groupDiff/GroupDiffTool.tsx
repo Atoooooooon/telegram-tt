@@ -2,7 +2,7 @@ import type { FC } from '../../../../lib/teact/teact';
 import {
   memo, useCallback, useMemo, useState,
 } from '../../../../lib/teact/teact';
-import { withGlobal } from '../../../../global';
+import { getActions, withGlobal } from '../../../../global';
 
 import type { ApiChat, ApiUser } from '../../../../api/types';
 
@@ -13,6 +13,7 @@ import {
 } from '../../../../global/helpers';
 import { getRawPeerId } from '../../../../util/entities/ids';
 import { callApi } from '../../../../api/gramjs';
+import { fetchTelegramBotIdentity, leaveChatAsBot } from './telegramBotApi';
 
 import Button from '../../../ui/Button';
 import Checkbox from '../../../ui/Checkbox';
@@ -51,6 +52,12 @@ type CommonChatsResponse = {
 
 type InviteState = {
   status: 'idle' | 'loading' | 'success' | 'error';
+  message?: string;
+};
+
+type TelegramBotState = {
+  status: 'idle' | 'loading' | 'success' | 'error';
+  username?: string;
   message?: string;
 };
 
@@ -232,6 +239,7 @@ const UserSelector: FC<{
 };
 
 const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
+  const { showNotification } = getActions();
   const [useMyGroups, setUseMyGroups] = useState(true);
 
   // Target User (The one to invite / The one missing groups)
@@ -258,6 +266,11 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
 
   const [inviteStates, setInviteStates] = useState<Record<string, Record<string, InviteState>>>({});
   const [removeStates, setRemoveStates] = useState<Record<string, Record<string, InviteState>>>({});
+  const [botToken, setBotToken] = useState('');
+  const [botState, setBotState] = useState<TelegramBotState>({ status: 'idle' });
+  const [botLeaveStates, setBotLeaveStates] = useState<Record<string, InviteState>>({});
+  const [selectedChatIds, setSelectedChatIds] = useState<Record<string, true>>({});
+  const [isBatchLeaving, setIsBatchLeaving] = useState(false);
 
   const activityData = useMemo(() => parseActivityInput(activityInput), [activityInput]);
   const activityMap = useMemo(() => (
@@ -310,8 +323,6 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
 
   const filteredTargetUsers = useMemo(() => filterUsers(targetSearch), [filterUsers, targetSearch]);
   const filteredSourceUsers = useMemo(() => filterUsers(sourceSearch), [filterUsers, sourceSearch]);
-  const selectedSourceUser = sourceUserId ? usersById[sourceUserId] : undefined;
-  const selectedTargetUser = targetUserId ? usersById[targetUserId] : undefined;
 
   const fetchAllCommonChats = useCallback(async (userId: string, accessHash: string) => {
     const collected: ApiChat[] = [];
@@ -471,6 +482,8 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
 
       setInviteStates({});
       setRemoveStates({});
+      setBotLeaveStates({});
+      setSelectedChatIds({});
       setLastRunInfo({
         sourceName: useMyGroups ? '我' : (getDisplayName(sourceUser) || sourceUser!.id),
         targetName: getDisplayName(targetUser) || targetUser.id,
@@ -588,6 +601,152 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
   ], [onlyInSource.length, onlyInTarget.length, bothInSourceAndTarget.length]);
 
   const currentResults = activeTab === 0 ? onlyInSource : activeTab === 1 ? onlyInTarget : bothInSourceAndTarget;
+  const trimmedBotToken = botToken.trim();
+  const selectedCurrentResults = useMemo(
+    () => currentResults.filter((group) => selectedChatIds[group.chatId]),
+    [currentResults, selectedChatIds],
+  );
+  const allCurrentResultsSelected = currentResults.length > 0
+    && currentResults.every((group) => selectedChatIds[group.chatId]);
+
+  const handleBotTokenChange = useCallback((value: string) => {
+    setBotToken(value);
+    setBotState({ status: 'idle' });
+    setBotLeaveStates({});
+  }, []);
+
+  const handleVerifyBotToken = useCallback(async () => {
+    if (!trimmedBotToken) {
+      setError('请先输入 Bot Token。');
+      return;
+    }
+
+    setError(undefined);
+    setBotState({ status: 'loading' });
+
+    try {
+      const identity = await fetchTelegramBotIdentity(trimmedBotToken);
+      setBotState({
+        status: 'success',
+        username: identity.username,
+        message: identity.can_join_groups === false
+          ? '该机器人被设置为不可加群，但仍可退出已加入的群。'
+          : 'Token 校验通过。',
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Token 校验失败';
+      setBotState({ status: 'error', message });
+    }
+  }, [trimmedBotToken]);
+
+  const handleToggleChatSelection = useCallback((chatId: string, checked: boolean) => {
+    setSelectedChatIds((prev) => {
+      if (checked) {
+        return {
+          ...prev,
+          [chatId]: true,
+        };
+      }
+
+      if (!prev[chatId]) {
+        return prev;
+      }
+
+      const next = { ...prev };
+      delete next[chatId];
+      return next;
+    });
+  }, []);
+
+  const handleToggleCurrentResults = useCallback((checked: boolean) => {
+    setSelectedChatIds((prev) => {
+      const next = { ...prev };
+
+      currentResults.forEach((group) => {
+        if (checked) {
+          next[group.chatId] = true;
+        } else {
+          delete next[group.chatId];
+        }
+      });
+
+      return next;
+    });
+  }, [currentResults]);
+
+  const handleClearCurrentSelection = useCallback(() => {
+    setSelectedChatIds((prev) => {
+      const next = { ...prev };
+
+      currentResults.forEach((group) => {
+        delete next[group.chatId];
+      });
+
+      return next;
+    });
+  }, [currentResults]);
+
+  const handleBotLeave = useCallback(async (chatId: string) => {
+    if (!trimmedBotToken) {
+      setError('请先输入 Bot Token。');
+      return false;
+    }
+
+    setBotLeaveStates((prev) => ({
+      ...prev,
+      [chatId]: { status: 'loading' },
+    }));
+
+    try {
+      await leaveChatAsBot(trimmedBotToken, chatId);
+      setBotLeaveStates((prev) => ({
+        ...prev,
+        [chatId]: { status: 'success' },
+      }));
+      return true;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Bot 退群失败';
+      setBotLeaveStates((prev) => ({
+        ...prev,
+        [chatId]: { status: 'error', message },
+      }));
+      return false;
+    }
+  }, [trimmedBotToken]);
+
+  const handleBatchBotLeave = useCallback(async () => {
+    if (!trimmedBotToken) {
+      setError('请先输入 Bot Token。');
+      return;
+    }
+
+    if (selectedCurrentResults.length === 0) {
+      setError('请先勾选需要退群的群组。');
+      return;
+    }
+
+    setError(undefined);
+    setIsBatchLeaving(true);
+
+    let successCount = 0;
+    let failedCount = 0;
+
+    for (const group of selectedCurrentResults) {
+      const isSuccess = await handleBotLeave(group.chatId);
+      if (isSuccess) {
+        successCount += 1;
+      } else {
+        failedCount += 1;
+      }
+    }
+
+    setIsBatchLeaving(false);
+    showNotification({
+      message: failedCount > 0
+        ? `Bot 批量退群完成，成功 ${successCount} 个，失败 ${failedCount} 个。`
+        : `Bot 已退出 ${successCount} 个群组。`,
+    });
+  }, [handleBotLeave, selectedCurrentResults, showNotification, trimmedBotToken]);
 
   return (
     <div className={styles.root}>
@@ -635,40 +794,94 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
         />
       </div>
 
-      <section className={`${styles.panel} ${styles.activityPanel}`}>
-        <div className={styles.panelHeader}>
-          <h4>活跃度榜单 (可选)</h4>
-          <span className={styles.panelHint}>用于排序结果</span>
-        </div>
-        <div className={styles.panelBody}>
-          <textarea
-            className={styles.textarea}
-            value={activityInput}
-            onChange={(e) => setActivityInput(e.currentTarget.value)}
-            placeholder={'1. -4549167178 [TEST] (96)\n...'}
-          />
-          <div className={styles.activityStats}>
-            <span>
-              已解析
-              {activityData.entries.length}
-              {' '}
-              条
-            </span>
-            {activityData.invalid > 0 && (
-              <span className={styles.warning}>
-                忽略
-                {activityData.invalid}
+      <div className={styles.secondaryGrid}>
+        <section className={`${styles.panel} ${styles.activityPanel}`}>
+          <div className={styles.panelHeader}>
+            <h4>活跃度榜单 (可选)</h4>
+            <span className={styles.panelHint}>用于排序结果</span>
+          </div>
+          <div className={styles.panelBody}>
+            <textarea
+              className={styles.textarea}
+              value={activityInput}
+              onChange={(e) => setActivityInput(e.currentTarget.value)}
+              placeholder={'1. -4549167178 [TEST] (96)\n...'}
+            />
+            <div className={styles.activityStats}>
+              <span>
+                已解析
+                {activityData.entries.length}
                 {' '}
                 条
               </span>
-            )}
+              {activityData.invalid > 0 && (
+                <span className={styles.warning}>
+                  忽略
+                  {activityData.invalid}
+                  {' '}
+                  条
+                </span>
+              )}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+
+        <section className={`${styles.panel} ${styles.botPanel}`}>
+          <div className={styles.panelHeader}>
+            <h4>Bot Token 批量退群</h4>
+            <span className={styles.panelHint}>前端直接调用 Telegram Bot API</span>
+          </div>
+          <div className={styles.panelBody}>
+            <div className={styles.botFormRow}>
+              <div className={styles.tokenInput}>
+                <InputText
+                  className={styles.tokenField}
+                  label="Bot Token"
+                  value={botToken}
+                  placeholder="输入 Bot Token，例如 123456:AA..."
+                  autoComplete="off"
+                  onChange={(e) => handleBotTokenChange(e.currentTarget.value)}
+                />
+              </div>
+              <Button
+                inline
+                size="smaller"
+                color="secondary"
+                className={styles.compactActionButton}
+                onClick={handleVerifyBotToken}
+                disabled={!trimmedBotToken || botState.status === 'loading'}
+                isLoading={botState.status === 'loading'}
+              >
+                校验 Token
+              </Button>
+            </div>
+            <div className={styles.botMetaRow}>
+              <div className={styles.helpText}>
+                这里调用的是 Bot API 的
+                {' '}
+                <code>leaveChat</code>
+                ，机器人会主动退出群聊，不依赖踢人权限。
+              </div>
+              {botState.status === 'success' && (
+                <span className={styles.statusTextSuccess}>
+                  已连接
+                  {botState.username ? ` @${botState.username}` : '该机器人'}
+                  {botState.message ? `，${botState.message}` : ''}
+                </span>
+              )}
+              {botState.status === 'error' && (
+                <span className={styles.statusTextError}>{botState.message || 'Token 校验失败'}</span>
+              )}
+            </div>
+          </div>
+        </section>
+      </div>
 
       <div className={styles.actions}>
         <Button
+          inline
           size="smaller"
+          className={styles.runButton}
           onClick={handleRun}
           disabled={!targetUserId || (!useMyGroups && !sourceUserId) || isChecking}
           isLoading={isChecking}
@@ -712,6 +925,38 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
 
         <TabList tabs={tabs} activeTab={activeTab} onSwitchTab={setActiveTab} />
 
+        <div className={styles.batchToolbar}>
+          <Checkbox
+            checked={allCurrentResultsSelected}
+            label={`全选当前列表 (${selectedCurrentResults.length}/${currentResults.length})`}
+            disabled={currentResults.length === 0}
+            onCheck={handleToggleCurrentResults}
+          />
+          <div className={styles.batchActions}>
+            <Button
+              inline
+              size="smaller"
+              color="secondary"
+              className={styles.compactActionButton}
+              onClick={handleClearCurrentSelection}
+              disabled={selectedCurrentResults.length === 0}
+            >
+              清空选择
+            </Button>
+            <Button
+              inline
+              size="smaller"
+              color="danger"
+              className={styles.compactActionButton}
+              onClick={handleBatchBotLeave}
+              disabled={!trimmedBotToken || selectedCurrentResults.length === 0 || isBatchLeaving}
+              isLoading={isBatchLeaving}
+            >
+              Bot 批量退群
+            </Button>
+          </div>
+        </div>
+
         <div className={styles.resultList}>
           {currentResults.length === 0 ? (
             <div className={styles.empty}>
@@ -725,25 +970,51 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
               const inviteB = inviteStates[group.chatId]?.[targetUserId!]?.status ?? 'idle';
               const removeA = removeStates[group.chatId]?.[sourceUserId!]?.status ?? 'idle';
               const removeB = removeStates[group.chatId]?.[targetUserId!]?.status ?? 'idle';
+              const botLeave = botLeaveStates[group.chatId]?.status ?? 'idle';
 
               const showRankTag = hasActivityRanking && typeof group.rank === 'number';
               const showScoreTag = hasActivityRanking && (group.score ?? 0) > 0;
 
               return (
                 <div key={group.chatId} className={styles.resultItem}>
+                  <label className={styles.selectToggle}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(selectedChatIds[group.chatId])}
+                      onChange={(e) => handleToggleChatSelection(group.chatId, e.currentTarget.checked)}
+                    />
+                  </label>
                   <div className={styles.resultDetails}>
                     <div className={styles.resultTitleRow}>
                       <div className={styles.resultTitle}>{group.title}</div>
                       {(showRankTag || showScoreTag) && (
                         <div className={styles.tagRow}>
-                          {showRankTag && <span className={styles.rankTag}>#{group.rank}</span>}
-                          {showScoreTag && <span className={styles.scoreTag}>活跃度{group.score}</span>}
+                          {showRankTag && (
+                            <span className={styles.rankTag}>
+                              #
+                              {group.rank}
+                            </span>
+                          )}
+                          {showScoreTag && (
+                            <span className={styles.scoreTag}>
+                              活跃度
+                              {group.score}
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
                     <div className={styles.resultMeta}>
-                      <span>ID:{group.chatId}</span>
-                      {group.alias && <span>别名:{group.alias}</span>}
+                      <span>
+                        ID:
+                        {group.chatId}
+                      </span>
+                      {group.alias && (
+                        <span>
+                          别名:
+                          {group.alias}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className={styles.resultActions}>
@@ -751,6 +1022,7 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
                       {activeTab === 0 && (
                         <>
                           <Button
+                            inline
                             size="smaller"
                             color="primary"
                             className={styles.inviteButton}
@@ -762,6 +1034,7 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
                           </Button>
                           {!useMyGroups && (
                             <Button
+                              inline
                               size="smaller"
                               color="danger"
                               className={styles.removeButton}
@@ -772,12 +1045,24 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
                               移出 A
                             </Button>
                           )}
+                          <Button
+                            inline
+                            size="smaller"
+                            color="danger"
+                            className={styles.botLeaveButton}
+                            disabled={botLeave === 'loading' || !trimmedBotToken}
+                            isLoading={botLeave === 'loading'}
+                            onClick={() => handleBotLeave(group.chatId)}
+                          >
+                            Bot 退群
+                          </Button>
                         </>
                       )}
                       {activeTab === 1 && (
                         <>
                           {!useMyGroups && (
                             <Button
+                              inline
                               size="smaller"
                               color="primary"
                               className={styles.inviteButton}
@@ -789,6 +1074,18 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
                             </Button>
                           )}
                           <Button
+                            inline
+                            size="smaller"
+                            color="danger"
+                            className={styles.botLeaveButton}
+                            disabled={botLeave === 'loading' || !trimmedBotToken}
+                            isLoading={botLeave === 'loading'}
+                            onClick={() => handleBotLeave(group.chatId)}
+                          >
+                            Bot 退群
+                          </Button>
+                          <Button
+                            inline
                             size="smaller"
                             color="danger"
                             className={styles.removeButton}
@@ -804,6 +1101,7 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
                         <>
                           {!useMyGroups && (
                             <Button
+                              inline
                               size="smaller"
                               color="danger"
                               className={styles.removeButton}
@@ -815,6 +1113,18 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
                             </Button>
                           )}
                           <Button
+                            inline
+                            size="smaller"
+                            color="danger"
+                            className={styles.botLeaveButton}
+                            disabled={botLeave === 'loading' || !trimmedBotToken}
+                            isLoading={botLeave === 'loading'}
+                            onClick={() => handleBotLeave(group.chatId)}
+                          >
+                            Bot 退群
+                          </Button>
+                          <Button
+                            inline
                             size="smaller"
                             color="danger"
                             className={styles.removeButton}
@@ -828,12 +1138,22 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
                       )}
                     </div>
                     <div className={styles.actionMessages}>
-                      {(inviteA === 'success' || inviteB === 'success') && <span className={styles.successText}>已发送邀请</span>}
-                      {(removeA === 'success' || removeB === 'success') && <span className={styles.successText}>已移出成员</span>}
+                      {(inviteA === 'success' || inviteB === 'success') && (
+                        <span className={styles.successText}>已发送邀请</span>
+                      )}
+                      {(removeA === 'success' || removeB === 'success') && (
+                        <span className={styles.successText}>已移出成员</span>
+                      )}
+                      {botLeave === 'success' && <span className={styles.successText}>Bot 已退群</span>}
                       {inviteA === 'error' && <span className={styles.errorText}>A 邀请失败</span>}
                       {inviteB === 'error' && <span className={styles.errorText}>B 邀请失败</span>}
                       {removeA === 'error' && <span className={styles.errorText}>A 移除失败</span>}
                       {removeB === 'error' && <span className={styles.errorText}>B 移除失败</span>}
+                      {botLeave === 'error' && (
+                        <span className={styles.errorText}>
+                          {botLeaveStates[group.chatId]?.message || 'Bot 退群失败'}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

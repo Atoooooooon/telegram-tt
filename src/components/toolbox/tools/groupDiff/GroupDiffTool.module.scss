@@ -17,10 +17,23 @@
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 1rem;
   align-items: stretch;
-  flex-shrink: 0; /* Prevent shrinking */
-  .checkbox{
+  flex-shrink: 0;
+
+  .panel {
+    height: 320px; /* Restrict height for User Selectors */
+  }
+
+  .checkbox {
     padding-inline-start: 2.7rem !important;
   }
+}
+
+.secondaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 1rem;
+  align-items: stretch;
+  flex-shrink: 0;
 }
 
 .panel {
@@ -31,18 +44,52 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  height: 280px;
   transition: opacity 0.2s ease;
 }
 
 .activityPanel {
-  height: auto;
   flex-shrink: 0;
-  
+
   .textarea {
-    flex: none;
-    height: 120px;
+    flex: 1;
+    min-height: 120px;
   }
+}
+
+.botPanel {
+  flex-shrink: 0;
+}
+
+.botFormRow {
+  display: grid;
+  grid-template-columns: 1fr auto; /* Force input to take all available space */
+  align-items: end;
+  gap: 1rem;
+  width: 100%;
+}
+
+.tokenInput {
+  min-width: 0; /* Allow grid cell to shrink if needed */
+  width: 100%;
+}
+
+.tokenField {
+  margin-bottom: 0;
+  width: 100% !important;
+
+  :global(.input-group) {
+    width: 100% !important;
+    max-width: unset !important;
+  }
+}
+
+.botMetaRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
 }
 
 .panelDisabled {
@@ -129,9 +176,17 @@
 }
 
 .helpText {
-  margin-top: 0.5rem;
+  margin-top: 0;
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
+  line-height: 1.4;
+
+  code {
+    font-family: var(--font-family-monospace, var(--font-family));
+    background: var(--color-chat-hover);
+    padding: 0.05rem 0.25rem;
+    border-radius: 0.25rem;
+  }
 }
 
 .textarea {
@@ -187,6 +242,17 @@
   flex-wrap: wrap;
 }
 
+.runButton {
+  min-width: 11rem;
+}
+
+.compactActionButton {
+  min-width: 6.5rem;
+  height: 3.375rem !important; /* Align with InputText height including label */
+  padding-inline: 0.875rem !important;
+  font-size: 0.8125rem !important;
+}
+
 .actionsHint {
   font-size: 0.85rem;
   color: var(--color-text-secondary);
@@ -203,15 +269,14 @@
 .results {
   flex: 1;
   min-width: 0;
-  min-height: 360px;
-  max-height: 600px;
+  min-height: 460px;
   border: 1px solid var(--color-borders);
   border-radius: 0.75rem;
   padding: 1rem;
   background: var(--color-panel, var(--color-background));
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
 .resultsHeader {
@@ -240,6 +305,28 @@
   color: var(--color-text-secondary);
 }
 
+.batchToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--color-borders);
+  flex-wrap: wrap;
+}
+
+.batchActions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+
+  button {
+    max-width: 5rem;
+    padding-inline: 0.5rem !important;
+  }
+}
+
 .resultList {
   flex: 1;
   min-width: 0;
@@ -248,7 +335,6 @@
   flex-direction: column;
   gap: 0.5rem;
   padding-right: 0.25rem;
-  margin-top: 0.25rem;
 }
 
 .resultItem {
@@ -257,11 +343,24 @@
   padding: 0.5rem 0.75rem;
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 1rem;
   min-width: 0;
   background: var(--color-background);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.selectToggle {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+
+  input {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    cursor: pointer;
+  }
 }
 
 .resultDetails {
@@ -316,16 +415,20 @@
 
 .resultActions {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
   flex-shrink: 0;
   min-width: 0;
 }
 
 .actionButtons {
   display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 0.35rem;
   flex-shrink: 0;
+  max-width: 21rem;
 }
 
 .actionMessages {
@@ -338,7 +441,8 @@
 }
 
 .inviteButton,
-.removeButton {
+.removeButton,
+.botLeaveButton {
   padding: 0 !important;
   width: 5.5rem !important;
   height: 24px !important;
@@ -346,9 +450,9 @@
   min-width: unset !important;
   flex-shrink: 0 !important;
   line-height: 24px !important;
-  
+
   :global(.label) {
-     padding: 0 0.25rem !important;
+    padding: 0 0.25rem !important;
   }
 }
 
@@ -358,8 +462,20 @@
   white-space: nowrap;
 }
 
+.statusTextSuccess {
+  font-size: 0.75rem;
+  color: var(--color-success, #2f8f46);
+  white-space: nowrap;
+}
+
 .errorText {
   font-size: 0.6875rem;
+  color: var(--color-error);
+  white-space: nowrap;
+}
+
+.statusTextError {
+  font-size: 0.75rem;
   color: var(--color-error);
   white-space: nowrap;
 }
@@ -371,4 +487,50 @@
   border-radius: 0.75rem;
   padding: 1rem;
   font-size: 0.875rem;
+}
+
+@media (max-width: 900px) {
+  .botFormRow {
+    grid-template-columns: 1fr; /* Stack on mobile */
+    align-items: stretch;
+  }
+
+  .runButton {
+    display: flex !important; /* Override .inline to allow width: 100% */
+    width: 100% !important;
+    height: 2.25rem !important;
+  }
+
+  .compactActionButton {
+    height: 2.25rem !important;
+  }
+
+  .botFormRow .compactActionButton {
+    display: flex !important;
+    width: 100% !important;
+  }
+
+  .resultItem {
+    flex-direction: column;
+    gap: 0.625rem;
+  }
+
+  .resultActions {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .actionButtons {
+    max-width: none;
+    justify-content: flex-start;
+  }
+
+  .actionMessages {
+    align-items: flex-start;
+  }
+
+  .batchToolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }

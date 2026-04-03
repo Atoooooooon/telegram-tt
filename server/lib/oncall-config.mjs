@@ -1,17 +1,20 @@
-const DEFAULT_FIRST_RESPONSE_TIMEOUT_MS = 5 * 60 * 1000;
-const DEFAULT_HIGHEST_ESCALATION_TIMEOUT_MS = 10 * 60 * 1000;
-const DEFAULT_HOLDING_REPLY_GRACE_TIMEOUT_MS = 15 * 60 * 1000;
-const DEFAULT_REMINDER_COOLDOWN_MS = 5 * 60 * 1000;
+const DEFAULT_FIRST_RESPONSE_TIMEOUT_MS = 10 * 1000;
+const DEFAULT_HIGHEST_ESCALATION_TIMEOUT_MS = 20 * 1000;
+const DEFAULT_HOLDING_REPLY_GRACE_TIMEOUT_MS = 30 * 1000;
+const DEFAULT_REMINDER_COOLDOWN_MS = 60 * 1000;
 const DEFAULT_STAFF_IDS = [];
 const DEFAULT_HOLDING_PATTERNS = [
   '稍等',
   '我看下',
   '我看一下',
+  '处理中',
+  '正在处理',
   '帮你确认',
   '稍后',
   'wait',
   'checking',
   'looking into',
+  'processing',
 ];
 const DEFAULT_RESOLVE_PATTERNS = [
   '已处理',
@@ -92,22 +95,10 @@ function buildPatterns(sources) {
 export function getDefaultOncallConfig() {
   return {
     enabled: false,
-    firstResponseTimeoutMs: toNumber(
-      process.env.ONCALL_FIRST_RESPONSE_TIMEOUT_MS,
-      DEFAULT_FIRST_RESPONSE_TIMEOUT_MS,
-    ),
-    highestEscalationTimeoutMs: toNumber(
-      process.env.ONCALL_HIGHEST_ESCALATION_TIMEOUT_MS,
-      DEFAULT_HIGHEST_ESCALATION_TIMEOUT_MS,
-    ),
-    holdingReplyGraceTimeoutMs: toNumber(
-      process.env.ONCALL_HOLDING_REPLY_GRACE_TIMEOUT_MS,
-      DEFAULT_HOLDING_REPLY_GRACE_TIMEOUT_MS,
-    ),
-    reminderCooldownMs: toNumber(
-      process.env.ONCALL_REMINDER_COOLDOWN_MS,
-      DEFAULT_REMINDER_COOLDOWN_MS,
-    ),
+    firstResponseTimeoutMs: DEFAULT_FIRST_RESPONSE_TIMEOUT_MS,
+    highestEscalationTimeoutMs: DEFAULT_HIGHEST_ESCALATION_TIMEOUT_MS,
+    holdingReplyGraceTimeoutMs: DEFAULT_HOLDING_REPLY_GRACE_TIMEOUT_MS,
+    reminderCooldownMs: DEFAULT_REMINDER_COOLDOWN_MS,
     staffIds: toStringList(
       process.env.ONCALL_STAFF_IDS,
       DEFAULT_STAFF_IDS,
@@ -125,14 +116,8 @@ export function getDefaultOncallConfig() {
     processingAlertThreadId: '',
     resolvedAlertChatId: '',
     resolvedAlertThreadId: '',
-    holdingReplyPatternSources: toStringList(
-      process.env.ONCALL_HOLDING_REPLY_PATTERNS,
-      DEFAULT_HOLDING_PATTERNS,
-    ),
-    resolveReplyPatternSources: toStringList(
-      process.env.ONCALL_RESOLVE_REPLY_PATTERNS,
-      DEFAULT_RESOLVE_PATTERNS,
-    ),
+    holdingReplyPatternSources: [...DEFAULT_HOLDING_PATTERNS],
+    resolveReplyPatternSources: [...DEFAULT_RESOLVE_PATTERNS],
     customerResolvePatternSources: toStringList(
       process.env.ONCALL_CUSTOMER_RESOLVE_PATTERNS,
       DEFAULT_CUSTOMER_RESOLVE_PATTERNS,
