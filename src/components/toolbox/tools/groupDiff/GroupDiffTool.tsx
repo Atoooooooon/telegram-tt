@@ -17,6 +17,7 @@ import { callApi } from '../../../../api/gramjs';
 import Button from '../../../ui/Button';
 import Checkbox from '../../../ui/Checkbox';
 import InputText from '../../../ui/InputText';
+import TabList from '../../../ui/TabList';
 
 import styles from './GroupDiffTool.module.scss';
 
@@ -242,7 +243,11 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
   const [sourceUserId, setSourceUserId] = useState<string>();
 
   const [activityInput, setActivityInput] = useState('');
-  const [missingGroups, setMissingGroups] = useState<MissingGroup[]>([]);
+  const [onlyInSource, setOnlyInSource] = useState<MissingGroup[]>([]);
+  const [onlyInTarget, setOnlyInTarget] = useState<MissingGroup[]>([]);
+  const [bothInSourceAndTarget, setBothInSourceAndTarget] = useState<MissingGroup[]>([]);
+  const [activeTab, setActiveTab] = useState(0);
+
   const [error, setError] = useState<string>();
   const [isChecking, setIsChecking] = useState(false);
 
@@ -251,8 +256,8 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
   const [lastTargetCount, setLastTargetCount] = useState(0);
   const [lastRunInfo, setLastRunInfo] = useState<{ sourceName: string; targetName: string }>();
 
-  const [inviteStates, setInviteStates] = useState<Record<string, InviteState>>({});
-  const [removeStates, setRemoveStates] = useState<Record<string, InviteState>>({});
+  const [inviteStates, setInviteStates] = useState<Record<string, Record<string, InviteState>>>({});
+  const [removeStates, setRemoveStates] = useState<Record<string, Record<string, InviteState>>>({});
 
   const activityData = useMemo(() => parseActivityInput(activityInput), [activityInput]);
   const activityMap = useMemo(() => (
@@ -307,8 +312,6 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
   const filteredSourceUsers = useMemo(() => filterUsers(sourceSearch), [filterUsers, sourceSearch]);
   const selectedSourceUser = sourceUserId ? usersById[sourceUserId] : undefined;
   const selectedTargetUser = targetUserId ? usersById[targetUserId] : undefined;
-  const canRemoveSourceMember = !useMyGroups && Boolean(sourceUserId && selectedSourceUser);
-  const removeButtonLabel = selectedSourceUser?.type === 'userTypeBot' ? '踢掉旧机器人' : '移出来源成员';
 
   const fetchAllCommonChats = useCallback(async (userId: string, accessHash: string) => {
     const collected: ApiChat[] = [];
@@ -350,12 +353,12 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
 
   const handleRun = useCallback(async () => {
     if (!targetUserId) {
-      setError('请先选择目标好友（要对比的用户）。');
+      setError('请先选择目标好友。');
       return;
     }
 
     if (!useMyGroups && !sourceUserId) {
-      setError('请先选择来源好友（作为基准的用户）。');
+      setError('请先选择来源好友。');
       return;
     }
 
@@ -388,64 +391,84 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
       setLastSourceCount(sourceChats.length);
 
       // 2. Get Target Chats (Common chats with ME)
-      const targetCommonChats = await fetchAllCommonChats(targetUser.id, targetUser.accessHash);
-      setLastTargetCount(targetCommonChats.length);
+      const targetChats = await fetchAllCommonChats(targetUser.id, targetUser.accessHash);
+      setLastTargetCount(targetChats.length);
 
-      const targetMatchKeys = new Set<string>();
-
-      targetCommonChats.forEach((chat) => {
-        getMatchKeys(chat).forEach((key) => targetMatchKeys.add(key));
+      const sourceMap = new Map<string, ApiChat>();
+      sourceChats.forEach((chat) => {
+        getMatchKeys(chat).forEach((key) => sourceMap.set(key, chat));
       });
 
-      const results: MissingGroup[] = sourceChats.reduce<MissingGroup[]>((acc, chat) => {
-        const sourceKeys = getMatchKeys(chat);
-        let matched = false;
-        for (const key of sourceKeys) {
-          if (targetMatchKeys.has(key)) {
-            matched = true;
-            break;
-          }
-        }
-        if (matched) {
-          return acc;
-        }
+      const targetMap = new Map<string, ApiChat>();
+      targetChats.forEach((chat) => {
+        getMatchKeys(chat).forEach((key) => targetMap.set(key, chat));
+      });
 
+      const toMissingGroup = (chat: ApiChat): MissingGroup => {
         const activityKeys = getMatchKeys(chat, true);
         let activity: ActivityEntry | undefined;
         for (const key of activityKeys) {
           activity = activityMap.get(key);
-          if (activity) {
-            break;
-          }
+          if (activity) break;
         }
-
-        acc.push({
+        return {
           chat,
           chatId: chat.id,
           title: chat.title,
           alias: activity?.alias,
           score: activity?.score ?? 0,
           rank: activity?.rank,
-        });
+        };
+      };
 
-        return acc;
-      }, []);
-
-      if (hasActivityRanking) {
-        results.sort((a, b) => {
+      const sortResults = (results: MissingGroup[]) => {
+        if (!hasActivityRanking) {
+          return results.sort((a, b) => a.title.localeCompare(b.title, 'zh-Hans'));
+        }
+        return results.sort((a, b) => {
           if (b.score !== a.score) {
             return b.score - a.score;
           }
-
           if ((a.rank ?? Infinity) !== (b.rank ?? Infinity)) {
             return (a.rank ?? Infinity) - (b.rank ?? Infinity);
           }
-
           return a.title.localeCompare(b.title, 'zh-Hans');
         });
-      }
+      };
 
-      setMissingGroups(results);
+      const onlySrc: MissingGroup[] = [];
+      const onlyTgt: MissingGroup[] = [];
+      const both: MissingGroup[] = [];
+
+      sourceChats.forEach((chat) => {
+        const keys = getMatchKeys(chat);
+        let inTarget = false;
+        for (const k of keys) {
+          if (targetMap.has(k)) {
+            inTarget = true;
+            break;
+          }
+        }
+        if (inTarget) both.push(toMissingGroup(chat));
+        else onlySrc.push(toMissingGroup(chat));
+      });
+
+      targetChats.forEach((chat) => {
+        const keys = getMatchKeys(chat);
+        let inSource = false;
+        for (const k of keys) {
+          if (sourceMap.has(k)) {
+            inSource = true;
+            break;
+          }
+        }
+        if (!inSource) onlyTgt.push(toMissingGroup(chat));
+      });
+
+      setOnlyInSource(sortResults(onlySrc));
+      setOnlyInTarget(sortResults(onlyTgt));
+      setBothInSourceAndTarget(sortResults(both));
+
       setInviteStates({});
       setRemoveStates({});
       setLastRunInfo({
@@ -468,56 +491,58 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
     usersById,
   ]);
 
-  const handleInvite = useCallback(async (chat: ApiChat) => {
-    if (!targetUserId) {
-      setError('请先选择好友后再邀请。');
-      return;
-    }
-
-    const targetUser = usersById[targetUserId];
-    if (!targetUser?.accessHash) {
-      setError('缺少该好友的 accessHash，请重新搜索后再试。');
+  const handleInvite = useCallback(async (chat: ApiChat, userId: string) => {
+    const user = usersById[userId];
+    if (!user?.accessHash) {
+      setError('缺少好友的 accessHash，请重新搜索后再试。');
       return;
     }
 
     setInviteStates((prev) => ({
       ...prev,
-      [chat.id]: { status: 'loading' },
+      [chat.id]: {
+        ...(prev[chat.id] || {}),
+        [userId]: { status: 'loading' },
+      },
     }));
 
     try {
-      const result = await callApi('addChatMembers', chat, [targetUser]);
+      const result = await callApi('addChatMembers', chat, [user]);
       if (result === undefined) {
         throw new Error('邀请失败');
       }
       setInviteStates((prev) => ({
         ...prev,
-        [chat.id]: { status: 'success' },
+        [chat.id]: {
+          ...(prev[chat.id] || {}),
+          [userId]: { status: 'success' },
+        },
       }));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '邀请失败';
       setInviteStates((prev) => ({
         ...prev,
-        [chat.id]: { status: 'error', message },
+        [chat.id]: {
+          ...(prev[chat.id] || {}),
+          [userId]: { status: 'error', message },
+        },
       }));
     }
-  }, [targetUserId, usersById]);
+  }, [usersById]);
 
-  const handleRemove = useCallback(async (chat: ApiChat) => {
-    if (useMyGroups || !sourceUserId) {
-      setError('请先选择来源成员后再移除。');
-      return;
-    }
-
-    const sourceUser = usersById[sourceUserId];
-    if (!sourceUser?.accessHash) {
-      setError('缺少来源成员的 accessHash，请重新搜索后再试。');
+  const handleRemove = useCallback(async (chat: ApiChat, userId: string) => {
+    const user = usersById[userId];
+    if (!user?.accessHash) {
+      setError('缺少成员的 accessHash，请重新搜索后再试。');
       return;
     }
 
     setRemoveStates((prev) => ({
       ...prev,
-      [chat.id]: { status: 'loading' },
+      [chat.id]: {
+        ...(prev[chat.id] || {}),
+        [userId]: { status: 'loading' },
+      },
     }));
 
     try {
@@ -526,11 +551,11 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
       if (isChatSuperGroup(chat) || isChatChannel(chat)) {
         result = await callApi('updateChatMemberBannedRights', {
           chat,
-          user: sourceUser,
+          user,
           bannedRights: REMOVE_MEMBER_BANNED_RIGHTS,
         });
       } else {
-        result = await callApi('deleteChatMember', chat, sourceUser);
+        result = await callApi('deleteChatMember', chat, user);
       }
 
       if (!result) {
@@ -539,33 +564,50 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
 
       setRemoveStates((prev) => ({
         ...prev,
-        [chat.id]: { status: 'success' },
+        [chat.id]: {
+          ...(prev[chat.id] || {}),
+          [userId]: { status: 'success' },
+        },
       }));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '移除失败';
       setRemoveStates((prev) => ({
         ...prev,
-        [chat.id]: { status: 'error', message },
+        [chat.id]: {
+          ...(prev[chat.id] || {}),
+          [userId]: { status: 'error', message },
+        },
       }));
     }
-  }, [sourceUserId, useMyGroups, usersById]);
+  }, [usersById]);
+
+  const tabs = useMemo(() => [
+    { id: 0, title: `仅 A 有 (${onlyInSource.length})` },
+    { id: 1, title: `仅 B 有 (${onlyInTarget.length})` },
+    { id: 2, title: `两者共有 (${bothInSourceAndTarget.length})` },
+  ], [onlyInSource.length, onlyInTarget.length, bothInSourceAndTarget.length]);
+
+  const currentResults = activeTab === 0 ? onlyInSource : activeTab === 1 ? onlyInTarget : bothInSourceAndTarget;
 
   return (
     <div className={styles.root}>
       <div className={styles.intro}>
         <p>
-          计算差集：
+          差异对比：分析
           {' '}
-          <b>[来源群组]</b>
+          <b>[来源好友 A]</b>
           {' '}
-          -
-          <b>[目标群组]</b>
+          与
+          {' '}
+          <b>[目标好友 B]</b>
+          {' '}
+          的群组分布
         </p>
       </div>
 
       <div className={styles.grid}>
         <UserSelector
-          title="选择来源好友 (基准)"
+          title="来源好友 (A)"
           search={sourceSearch}
           onSearchChange={setSourceSearch}
           users={filteredSourceUsers}
@@ -573,7 +615,7 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
           onSelect={setSourceUserId}
           placeholder="搜索来源好友..."
           disabled={useMyGroups}
-          headerAction={(/* This replace string is provided by the user, I am not allowed to change it. */
+          headerAction={(
             <Checkbox
               checked={useMyGroups}
               label="使用我的群组"
@@ -583,7 +625,7 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
         />
 
         <UserSelector
-          title="选择目标好友 (被减)"
+          title="目标好友 (B)"
           search={targetSearch}
           onSearchChange={setTargetSearch}
           users={filteredTargetUsers}
@@ -621,14 +663,6 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
               </span>
             )}
           </div>
-          <p className={styles.activityHint}>
-            支持格式：
-            <code>1. -123456789</code>
-            {' '}
-            或
-            {' '}
-            <code>1. -123456789 [Alias] (96)</code>
-          </p>
         </div>
       </section>
 
@@ -639,10 +673,10 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
           disabled={!targetUserId || (!useMyGroups && !sourceUserId) || isChecking}
           isLoading={isChecking}
         >
-          计算缺失群组
+          计算群组差异
         </Button>
         <span className={styles.actionsHint}>
-          Telegram 接口会分页返回共同群组，好友群越多等待时间越长。
+          对比两人与我的共同群组，找出差异。
         </span>
       </div>
 
@@ -653,53 +687,45 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
       <section className={styles.results}>
         <div className={styles.resultsHeader}>
           <div>
-            <h4>
-              缺失群组（
-              {missingGroups.length}
-              ）
-            </h4>
+            <h4>分析结果</h4>
             {lastRunInfo && (
               <p>
-                对比：
+                A:
                 {lastRunInfo.sourceName}
                 {' '}
-                的群组 -
-                {' '}
+                | B:
                 {lastRunInfo.targetName}
-                {' '}
-                的共同群组
               </p>
             )}
           </div>
           <div className={styles.resultsStats}>
             <span>
-              来源群数：
+              A 共：
               {lastSourceCount}
             </span>
             <span>
-              目标共同群数：
+              B 共：
               {lastTargetCount}
-            </span>
-            <span>
-              活跃榜：
-              {activityData.entries.length}
             </span>
           </div>
         </div>
 
+        <TabList tabs={tabs} activeTab={activeTab} onSwitchTab={setActiveTab} />
+
         <div className={styles.resultList}>
-          {missingGroups.length === 0 ? (
+          {currentResults.length === 0 ? (
             <div className={styles.empty}>
               {lastRunInfo
-                ? '没有发现缺失的群组。'
+                ? '该分类下没有群组。'
                 : '尚未开始，请选择好友并点击计算.'}
             </div>
           ) : (
-            missingGroups.map((group) => {
-              const inviteState = inviteStates[group.chatId]?.status ?? 'idle';
-              const inviteMessage = inviteStates[group.chatId]?.message;
-              const removeState = removeStates[group.chatId]?.status ?? 'idle';
-              const removeMessage = removeStates[group.chatId]?.message;
+            currentResults.map((group) => {
+              const inviteA = inviteStates[group.chatId]?.[sourceUserId!]?.status ?? 'idle';
+              const inviteB = inviteStates[group.chatId]?.[targetUserId!]?.status ?? 'idle';
+              const removeA = removeStates[group.chatId]?.[sourceUserId!]?.status ?? 'idle';
+              const removeB = removeStates[group.chatId]?.[targetUserId!]?.status ?? 'idle';
+
               const showRankTag = hasActivityRanking && typeof group.rank === 'number';
               const showScoreTag = hasActivityRanking && (group.score ?? 0) > 0;
 
@@ -710,74 +736,104 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
                       <div className={styles.resultTitle}>{group.title}</div>
                       {(showRankTag || showScoreTag) && (
                         <div className={styles.tagRow}>
-                          {showRankTag && (
-                            <span className={styles.rankTag}>
-                              #
-                              {group.rank}
-                            </span>
-                          )}
-                          {showScoreTag && (
-                            <span className={styles.scoreTag}>
-                              活跃度
-                              {group.score}
-                            </span>
-                          )}
+                          {showRankTag && <span className={styles.rankTag}>#{group.rank}</span>}
+                          {showScoreTag && <span className={styles.scoreTag}>活跃度{group.score}</span>}
                         </div>
                       )}
                     </div>
                     <div className={styles.resultMeta}>
-                      <span>
-                        ID:
-                        {group.chatId}
-                      </span>
-                      {group.alias && (
-                        <span>
-                          别名:
-                          {group.alias}
-                        </span>
-                      )}
+                      <span>ID:{group.chatId}</span>
+                      {group.alias && <span>别名:{group.alias}</span>}
                     </div>
                   </div>
                   <div className={styles.resultActions}>
                     <div className={styles.actionButtons}>
-                      <Button
-                        size="smaller"
-                        color="primary"
-                        className={styles.inviteButton}
-                        disabled={!targetUserId || inviteState === 'loading'}
-                        isLoading={inviteState === 'loading'}
-                        onClick={() => handleInvite(group.chat)}
-                      >
-                        {selectedTargetUser?.type === 'userTypeBot' ? '拉新机器人进群' : '邀请进群'}
-                      </Button>
-                      {canRemoveSourceMember && (
-                        <Button
-                          size="smaller"
-                          color="danger"
-                          className={styles.removeButton}
-                          disabled={removeState === 'loading'}
-                          isLoading={removeState === 'loading'}
-                          onClick={() => handleRemove(group.chat)}
-                        >
-                          {removeButtonLabel}
-                        </Button>
+                      {activeTab === 0 && (
+                        <>
+                          <Button
+                            size="smaller"
+                            color="primary"
+                            className={styles.inviteButton}
+                            disabled={inviteB === 'loading'}
+                            isLoading={inviteB === 'loading'}
+                            onClick={() => handleInvite(group.chat, targetUserId!)}
+                          >
+                            邀请 B 进群
+                          </Button>
+                          {!useMyGroups && (
+                            <Button
+                              size="smaller"
+                              color="danger"
+                              className={styles.removeButton}
+                              disabled={removeA === 'loading'}
+                              isLoading={removeA === 'loading'}
+                              onClick={() => handleRemove(group.chat, sourceUserId!)}
+                            >
+                              移出 A
+                            </Button>
+                          )}
+                        </>
+                      )}
+                      {activeTab === 1 && (
+                        <>
+                          {!useMyGroups && (
+                            <Button
+                              size="smaller"
+                              color="primary"
+                              className={styles.inviteButton}
+                              disabled={inviteA === 'loading'}
+                              isLoading={inviteA === 'loading'}
+                              onClick={() => handleInvite(group.chat, sourceUserId!)}
+                            >
+                              邀请 A 进群
+                            </Button>
+                          )}
+                          <Button
+                            size="smaller"
+                            color="danger"
+                            className={styles.removeButton}
+                            disabled={removeB === 'loading'}
+                            isLoading={removeB === 'loading'}
+                            onClick={() => handleRemove(group.chat, targetUserId!)}
+                          >
+                            移出 B
+                          </Button>
+                        </>
+                      )}
+                      {activeTab === 2 && (
+                        <>
+                          {!useMyGroups && (
+                            <Button
+                              size="smaller"
+                              color="danger"
+                              className={styles.removeButton}
+                              disabled={removeA === 'loading'}
+                              isLoading={removeA === 'loading'}
+                              onClick={() => handleRemove(group.chat, sourceUserId!)}
+                            >
+                              移出 A
+                            </Button>
+                          )}
+                          <Button
+                            size="smaller"
+                            color="danger"
+                            className={styles.removeButton}
+                            disabled={removeB === 'loading'}
+                            isLoading={removeB === 'loading'}
+                            onClick={() => handleRemove(group.chat, targetUserId!)}
+                          >
+                            移出 B
+                          </Button>
+                        </>
                       )}
                     </div>
                     <div className={styles.actionMessages}>
-                      {inviteState === 'success' && (
-                        <span className={styles.successText}>已发送邀请</span>
-                      )}
-                      {inviteState === 'error' && (
-                        <span className={styles.errorText}>{inviteMessage || '邀请失败'}</span>
-                      )}
-                      {removeState === 'success' && (
-                        <span className={styles.successText}>
-                          {selectedSourceUser?.type === 'userTypeBot' ? '已踢掉旧机器人' : '已移出来源成员'}
-                        </span>
-                      )}
-                      {removeState === 'error' && (
-                        <span className={styles.errorText}>{removeMessage || '移除失败'}</span>
-                      )}
+                      {(inviteA === 'success' || inviteB === 'success') && <span className={styles.successText}>已发送邀请</span>}
+                      {(removeA === 'success' || removeB === 'success') && <span className={styles.successText}>已移出成员</span>}
+                      {inviteA === 'error' && <span className={styles.errorText}>A 邀请失败</span>}
+                      {inviteB === 'error' && <span className={styles.errorText}>B 邀请失败</span>}
+                      {removeA === 'error' && <span className={styles.errorText}>A 移除失败</span>}
+                      {removeB === 'error' && <span className={styles.errorText}>B 移除失败</span>}
                     </div>
                   </div>
                 </div>
