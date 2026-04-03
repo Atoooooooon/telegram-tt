@@ -27,6 +27,14 @@ function getNow() {
   return Date.now();
 }
 
+function getErrorMessage(error) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return String(error);
+}
+
 export class OncallService {
   constructor({ log }) {
     this.log = log;
@@ -349,10 +357,25 @@ export class OncallService {
         return;
       }
 
-      void this.handleDeadlineReached(caseId, deadlineVersion);
+      void this.handleDeadlineReached(caseId, deadlineVersion).catch((error) => {
+        this.log('Oncall deadline handler failed', {
+          caseId,
+          deadlineVersion,
+          error: getErrorMessage(error),
+        });
+      });
     }, effectiveDelay);
 
     this.timersByCaseId.set(caseId, { timeoutId, deadlineVersion, targetAt });
+  }
+
+  async close() {
+    for (const caseId of this.timersByCaseId.keys()) {
+      this.clearCaseSchedule(caseId);
+    }
+
+    await Promise.allSettled(this.notificationSyncsByCaseId.values());
+    this.notificationSyncsByCaseId.clear();
   }
 }
 

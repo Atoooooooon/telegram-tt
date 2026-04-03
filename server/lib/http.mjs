@@ -19,6 +19,10 @@ export function toBoolean(value) {
 }
 
 export function readBody(req, maxBytes) {
+  if (typeof req.rawBodyText === 'string') {
+    return Promise.resolve(req.rawBodyText);
+  }
+
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
