@@ -124,9 +124,8 @@ const CustomerServiceMiddleHeader: FC<OwnProps & StateProps> = ({
 
 export default memo(
   withGlobal<OwnProps>((global): StateProps => {
-    const tabId = getCurrentTabId();
-    const messageCount = selectCustomerServiceV2MessageCount(global, tabId);
-    const settings = selectCustomerServiceV2Settings(global, tabId);
+    const messageCount = selectCustomerServiceV2MessageCount(global);
+    const settings = selectCustomerServiceV2Settings(global);
 
     return {
       messageCount,

@@ -1,15 +1,17 @@
-import type React from '../../../../lib/teact/teact';
 import { memo, useEffect, useMemo, useState } from '../../../../lib/teact/teact';
 import { getActions, withGlobal } from '../../../../global';
 
-import type { ApiChat, ApiChatFullInfo } from '../../../../api/types';
+import type { ApiChat, ApiChatFullInfo, ApiUser } from '../../../../api/types';
 import type {
+  CustomerServiceOncallSettings,
   CustomerServiceQuickReply,
   UserRule,
 } from '../../../../global/types/customerServiceV2';
+import type { TopicsInfo } from '../../../../types';
 
 import { CUSTOMER_SERVICE_CONFIG } from '../../../../config/customerService';
 import {
+  normalizeCustomerServiceOncallSettings,
   normalizeCustomerServiceQuickReplies,
 } from '../../../../global/helpers/customerServiceV2Settings';
 import { selectCustomerServiceV2Settings } from '../../../../global/selectors/customerServiceV2';
@@ -24,21 +26,23 @@ import Button from '../../../ui/Button';
 import Checkbox from '../../../ui/Checkbox';
 import Modal from '../../../ui/Modal';
 import TabList from '../../../ui/TabList';
-
+import CustomerServiceCloudSyncModal from './CustomerServiceCloudSyncModal';
 import GroupFiltersTab from './tabs/GroupFiltersTab';
 import MessageFiltersTab from './tabs/MessageFiltersTab';
+import OncallGuaranteeTab from './tabs/OncallGuaranteeTab';
 import QuickRepliesTab from './tabs/QuickRepliesTab';
-import UserFiltersTab from './tabs/UserFiltersTab';
 import RuleEngineTab from './tabs/RuleEngineTab';
-import CustomerServiceCloudSyncModal from './CustomerServiceCloudSyncModal';
+import UserFiltersTab from './tabs/UserFiltersTab';
 
 import styles from './CustomerServiceSettingsModal.module.scss';
 
 type StateProps = {
   isOpen?: boolean;
+  currentUserId?: string;
   chats: Record<string, ApiChat>;
   chatFullInfos: Record<string, ApiChatFullInfo>;
-  users: Record<string, any>;
+  topicsInfoByChatId: Record<string, TopicsInfo>;
+  users: Record<string, ApiUser>;
   chatFolders: Record<number, any>;
   orderedFolderIds?: number[];
   savedSettings?: {
@@ -53,6 +57,7 @@ type StateProps = {
     quickReplies?: CustomerServiceQuickReply[];
     quickReplyPanelGlobal?: boolean;
     rules?: UserRule[];
+    oncall?: CustomerServiceOncallSettings;
   };
 };
 
@@ -65,6 +70,7 @@ type FilterSettings = {
   quickReplies: CustomerServiceQuickReply[];
   quickReplyPanelGlobal: boolean;
   rules: UserRule[];
+  oncall: CustomerServiceOncallSettings;
 };
 
 type SavedSettings = StateProps['savedSettings'];
@@ -77,9 +83,32 @@ type NormalizedSettings = {
   quickReplies: CustomerServiceQuickReply[];
   quickReplyPanelGlobal: boolean;
   rules: UserRule[];
+  oncall: CustomerServiceOncallSettings;
 };
 
-const buildFilterSettings = (saved?: SavedSettings): FilterSettings => ({
+function ensureCurrentUserInStaffIds(staffIds: string[] | undefined, currentUserId?: string) {
+  const normalized = Array.isArray(staffIds)
+    ? staffIds.map((item) => String(item).trim()).filter(Boolean)
+    : [];
+
+  if (!currentUserId) {
+    return normalized;
+  }
+
+  return [currentUserId, ...normalized.filter((item) => item !== currentUserId)];
+}
+
+function ensureOncallStaffIncludesCurrentUser(
+  oncall: CustomerServiceOncallSettings,
+  currentUserId?: string,
+): CustomerServiceOncallSettings {
+  return {
+    ...oncall,
+    staffIds: ensureCurrentUserInStaffIds(oncall.staffIds, currentUserId),
+  };
+}
+
+const buildFilterSettings = (saved?: SavedSettings, currentUserId?: string): FilterSettings => ({
   monitoredChatIds: saved?.monitoredChatIds
     ? [...saved.monitoredChatIds]
     : Array.from(CUSTOMER_SERVICE_CONFIG.MONITORED_CHAT_IDS),
@@ -96,9 +125,13 @@ const buildFilterSettings = (saved?: SavedSettings): FilterSettings => ({
   rules: (saved?.rules && saved.rules.length
     ? saved.rules.map((rule) => JSON.parse(JSON.stringify(rule)))
     : []) as UserRule[],
+  oncall: ensureOncallStaffIncludesCurrentUser(
+    normalizeCustomerServiceOncallSettings(saved?.oncall),
+    currentUserId,
+  ),
 });
 
-const buildNormalizedSettings = (settings: FilterSettings): NormalizedSettings => ({
+const buildNormalizedSettings = (settings: FilterSettings, currentUserId?: string): NormalizedSettings => ({
   monitoredChatIds: [...settings.monitoredChatIds],
   filteredUserIds: [...settings.filteredUserIds],
   regexFilters: settings.regexFilters.map((regex) => ({
@@ -110,9 +143,16 @@ const buildNormalizedSettings = (settings: FilterSettings): NormalizedSettings =
   quickReplies: normalizeCustomerServiceQuickReplies(settings.quickReplies),
   quickReplyPanelGlobal: Boolean(settings.quickReplyPanelGlobal),
   rules: settings.rules?.length ? JSON.parse(JSON.stringify(settings.rules)) : [],
+  oncall: ensureOncallStaffIncludesCurrentUser(
+    normalizeCustomerServiceOncallSettings(settings.oncall),
+    currentUserId,
+  ),
 });
 
-const buildNormalizedSavedSettings = (saved?: SavedSettings): NormalizedSettings | undefined => {
+const buildNormalizedSavedSettings = (
+  saved?: SavedSettings,
+  currentUserId?: string,
+): NormalizedSettings | undefined => {
   if (!saved) {
     return undefined;
   }
@@ -128,6 +168,10 @@ const buildNormalizedSavedSettings = (saved?: SavedSettings): NormalizedSettings
     quickReplies: normalizeCustomerServiceQuickReplies(saved.quickReplies ?? []),
     quickReplyPanelGlobal: Boolean(saved.quickReplyPanelGlobal),
     rules: saved.rules?.length ? JSON.parse(JSON.stringify(saved.rules)) : [],
+    oncall: ensureOncallStaffIncludesCurrentUser(
+      normalizeCustomerServiceOncallSettings(saved.oncall),
+      currentUserId,
+    ),
   };
 };
 
@@ -148,8 +192,10 @@ const isOnlyRuleEnabledChanged = (prev: NormalizedSettings, next: NormalizedSett
 
 const CustomerServiceSettingsModal = ({
   isOpen,
+  currentUserId,
   chats,
   chatFullInfos,
+  topicsInfoByChatId,
   users,
   chatFolders,
   orderedFolderIds,
@@ -161,17 +207,15 @@ const CustomerServiceSettingsModal = ({
     saveCustomerServiceV2Settings,
     exportCustomerServiceV2Settings,
     importCustomerServiceV2Settings,
+    loadTopics,
   } = getActions();
 
   const lang = useLang();
 
-  const hasCloudSync = Boolean(
-    CUSTOMER_SERVICE_CONFIG.CLOUD_SYNC_REDIS_URL
-    && CUSTOMER_SERVICE_CONFIG.CLOUD_SYNC_REDIS_TOKEN,
-  );
+  const hasCloudSync = Boolean(CUSTOMER_SERVICE_CONFIG.CLOUD_SYNC_ENABLED);
 
   const [activeTab, setActiveTab] = useState(0);
-  const [settings, setSettings] = useState<FilterSettings>(buildFilterSettings(savedSettings));
+  const [settings, setSettings] = useState<FilterSettings>(() => buildFilterSettings(savedSettings, currentUserId));
   const [hasInitialized, setHasInitialized] = useState(false);
   const [isCloudSyncOpen, setIsCloudSyncOpen] = useState(false);
 
@@ -187,12 +231,12 @@ const CustomerServiceSettingsModal = ({
     }
 
     if (savedSettings) {
-      setSettings(buildFilterSettings(savedSettings));
+      setSettings(buildFilterSettings(savedSettings, currentUserId));
     } else {
-      setSettings(buildFilterSettings());
+      setSettings(buildFilterSettings(undefined, currentUserId));
     }
     setHasInitialized(true);
-  }, [isOpen, savedSettings, hasInitialized]);
+  }, [currentUserId, hasInitialized, isOpen, savedSettings]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -255,6 +299,16 @@ const CustomerServiceSettingsModal = ({
     }));
   });
 
+  const handleOncallChange = useLastCallback((nextOncall: CustomerServiceOncallSettings) => {
+    updateSettings((prev) => ({
+      ...prev,
+      oncall: ensureOncallStaffIncludesCurrentUser(
+        normalizeCustomerServiceOncallSettings(nextOncall),
+        currentUserId,
+      ),
+    }));
+  });
+
   const handleClose = useLastCallback(() => {
     setActiveTab(0);
     setHasInitialized(false);
@@ -262,8 +316,8 @@ const CustomerServiceSettingsModal = ({
   });
 
   const handleSave = useLastCallback(() => {
-    const normalizedSettings = buildNormalizedSettings(settings);
-    const previousNormalized = buildNormalizedSavedSettings(savedSettings);
+    const normalizedSettings = buildNormalizedSettings(settings, currentUserId);
+    const previousNormalized = buildNormalizedSavedSettings(savedSettings, currentUserId);
     const skipCloudSync = previousNormalized
       ? isOnlyRuleEnabledChanged(previousNormalized, normalizedSettings)
       : false;
@@ -273,7 +327,7 @@ const CustomerServiceSettingsModal = ({
   });
 
   const handleReset = useLastCallback(() => {
-    setSettings(buildFilterSettings());
+    setSettings(buildFilterSettings(undefined, currentUserId));
   });
 
   const handleExportSettings = useLastCallback(() => {
@@ -310,6 +364,7 @@ const CustomerServiceSettingsModal = ({
     { title: lang('CustomerServiceMessageFilters') },
     { title: lang('CustomerServiceQuickReplies') },
     { title: lang('CustomerServiceRuleEngine') },
+    { title: lang('CustomerServiceOncallGuarantee') },
   ]), [lang]);
 
   if (!isOpen) {
@@ -335,122 +390,133 @@ const CustomerServiceSettingsModal = ({
           </div>
         )}
       >
-      <div className={styles.settingsModal}>
-        <div className={styles.content}>
-          {activeTab === 0 && (
-            <GroupFiltersTab
-              chats={chats}
-              chatFullInfos={chatFullInfos}
-              chatFolders={chatFolders}
-              orderedFolderIds={orderedFolderIds}
-              monitoredChatIds={settings.monitoredChatIds}
-              onChange={handleMonitoredChatIdsChange}
-            />
-          )}
-          {activeTab === 1 && (
-            <UserFiltersTab
-              users={users}
-              chats={chats}
-              filteredUserIds={settings.filteredUserIds}
-              onChange={handleFilteredUserIdsChange}
-            />
-          )}
-          {activeTab === 2 && (
-            <MessageFiltersTab
-              regexFilters={settings.regexFilters}
-              onChange={handleRegexFiltersChange}
-            />
-          )}
-          {activeTab === 3 && (
-            <QuickRepliesTab
-              quickReplies={settings.quickReplies}
-              quickReplyPanelGlobal={settings.quickReplyPanelGlobal}
-              onQuickRepliesChange={handleQuickRepliesChange}
-              onToggleGlobal={handleQuickReplyPanelGlobalChange}
-            />
-          )}
-          {activeTab === 4 && (
-            <RuleEngineTab
-              rules={settings.rules}
-              onRulesChange={handleRulesChange}
-            />
-          )}
-        </div>
-
-        <div className={styles.footer}>
-          <div className={styles.leftSection}>
-            <Checkbox
-              label={lang('CustomerServiceAutoRead')}
-              className={styles.autoReadCheckbox}
-              checked={Boolean(settings.autoRead)}
-              onChange={(e) => handleAutoReadChange(e.currentTarget.checked)}
-            />
+        <div className={styles.settingsModal}>
+          <div className={styles.content}>
+            {activeTab === 0 && (
+              <GroupFiltersTab
+                chats={chats}
+                chatFullInfos={chatFullInfos}
+                chatFolders={chatFolders}
+                orderedFolderIds={orderedFolderIds}
+                monitoredChatIds={settings.monitoredChatIds}
+                onChange={handleMonitoredChatIdsChange}
+              />
+            )}
+            {activeTab === 1 && (
+              <UserFiltersTab
+                users={users}
+                chats={chats}
+                filteredUserIds={settings.filteredUserIds}
+                onChange={handleFilteredUserIdsChange}
+              />
+            )}
+            {activeTab === 2 && (
+              <MessageFiltersTab
+                regexFilters={settings.regexFilters}
+                onChange={handleRegexFiltersChange}
+              />
+            )}
+            {activeTab === 3 && (
+              <QuickRepliesTab
+                quickReplies={settings.quickReplies}
+                quickReplyPanelGlobal={settings.quickReplyPanelGlobal}
+                onQuickRepliesChange={handleQuickRepliesChange}
+                onToggleGlobal={handleQuickReplyPanelGlobalChange}
+              />
+            )}
+            {activeTab === 4 && (
+              <RuleEngineTab
+                rules={settings.rules}
+                onRulesChange={handleRulesChange}
+              />
+            )}
+            {activeTab === 5 && (
+              <OncallGuaranteeTab
+                oncall={settings.oncall}
+                currentUserId={currentUserId}
+                users={users}
+                chats={chats}
+                topicsInfoByChatId={topicsInfoByChatId}
+                onLoadTopics={loadTopics}
+                onChange={handleOncallChange}
+              />
+            )}
           </div>
 
-          <div className={styles.rightSection}>
-            <Button
-              size="smaller"
-              color="translucent"
-              style="width: 5rem !important;"
-              onClick={handleExportSettings}
-              ariaLabel={lang('CustomerServiceExportDescription')}
-            >
-              <Icon name="download" />
-              导出
-            </Button>
-            <Button
-              size="smaller"
-              color="translucent"
-              style="width: 5rem !important;"
-              onClick={handleImportSettings}
-              ariaLabel={lang('CustomerServiceImportDescription')}
-            >
-              <Icon name="open-in-new-tab" />
-              导入
-            </Button>
-            {hasCloudSync && (
+          <div className={styles.footer}>
+            <div className={styles.leftSection}>
+              <Checkbox
+                label={lang('CustomerServiceAutoRead')}
+                className={styles.autoReadCheckbox}
+                checked={Boolean(settings.autoRead)}
+                onChange={(e) => handleAutoReadChange(e.currentTarget.checked)}
+              />
+            </div>
+
+            <div className={styles.rightSection}>
               <Button
                 size="smaller"
                 color="translucent"
-                style="width: 5rem !important;"
-                onClick={() => setIsCloudSyncOpen(true)}
-                ariaLabel="云端同步"
+                className={styles.footerButton}
+                onClick={handleExportSettings}
+                ariaLabel={lang('CustomerServiceExportDescription')}
               >
-                <Icon name="cloud-download" />
-                云端
+                <Icon name="download" />
+                {lang('CustomerServiceExportSettings')}
               </Button>
-            )}
-            <Button
-              size="smaller"
-              color="translucent"
-              style="width: 5rem !important;"
-              onClick={handleReset}
-              ariaLabel={lang('CustomerServiceResetSettings')}
-            >
-              <Icon name="reload" />
-              重置
-            </Button>
-            <Button
-              size="smaller"
-              color="translucent"
-              style="width: 5rem !important;"
-              onClick={handleClose}
-            >
-              <Icon name="close" />
-              取消
-            </Button>
-            <Button
-              size="smaller"
-              color="primary"
-              style="width: 5rem !important;"
-              onClick={handleSave}
-            >
-              <Icon name="check" />
-              保存
-            </Button>
+              <Button
+                size="smaller"
+                color="translucent"
+                className={styles.footerButton}
+                onClick={handleImportSettings}
+                ariaLabel={lang('CustomerServiceImportDescription')}
+              >
+                <Icon name="open-in-new-tab" />
+                {lang('CustomerServiceImportSettings')}
+              </Button>
+              {hasCloudSync && (
+                <Button
+                  size="smaller"
+                  color="translucent"
+                  className={styles.footerButton}
+                  onClick={() => setIsCloudSyncOpen(true)}
+                  ariaLabel={lang('CustomerServiceCloudSyncButton')}
+                >
+                  <Icon name="cloud-download" />
+                  {lang('CustomerServiceCloudSyncButton')}
+                </Button>
+              )}
+              <Button
+                size="smaller"
+                color="translucent"
+                className={styles.footerButton}
+                onClick={handleReset}
+                ariaLabel={lang('CustomerServiceResetSettings')}
+              >
+                <Icon name="reload" />
+                {lang('CustomerServiceResetSettings')}
+              </Button>
+              <Button
+                size="smaller"
+                color="translucent"
+                className={styles.footerButton}
+                onClick={handleClose}
+              >
+                <Icon name="close" />
+                {lang('CustomerServiceCancel')}
+              </Button>
+              <Button
+                size="smaller"
+                color="primary"
+                className={styles.footerButton}
+                onClick={handleSave}
+              >
+                <Icon name="check" />
+                {lang('CustomerServiceSaveSettings')}
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
       </Modal>
       {hasCloudSync && (
         <CustomerServiceCloudSyncModal
@@ -472,18 +538,21 @@ export default memo(withGlobal((global): StateProps => {
   const tabId = getCurrentTabId();
   const chats = global.chats.byId;
   const chatFullInfos = global.chats.fullInfoById;
+  const topicsInfoByChatId = global.chats.topicsInfoById;
   const users = global.users.byId;
   const {
     byId: chatFolders,
     orderedIds: orderedFolderIds,
   } = global.chatFolders || {};
-  const savedSettings = selectCustomerServiceV2Settings(global, tabId);
+  const savedSettings = selectCustomerServiceV2Settings(global);
   const tabState = selectTabState(global, tabId);
 
   return {
     isOpen: tabState.isCustomerServiceV2SettingsOpen,
+    currentUserId: global.currentUserId ? String(global.currentUserId) : undefined,
     chats,
     chatFullInfos: chatFullInfos || {},
+    topicsInfoByChatId: topicsInfoByChatId || {},
     users,
     chatFolders: chatFolders || {},
     orderedFolderIds,

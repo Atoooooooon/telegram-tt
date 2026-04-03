@@ -178,6 +178,11 @@
   gap: 0.3rem;
 }
 
+.groupId {
+  user-select: text !important;
+  cursor: text;
+}
+
 .metaIcon {
   color: var(--color-primary);
 }

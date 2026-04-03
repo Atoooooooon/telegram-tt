@@ -78,6 +78,8 @@
   flex-direction: column;
   width: 100%;
   height: 100%;
+  max-height: calc(100vh - 4rem);
+  min-height: 0;
   background: var(--color-background);
 }
 
@@ -115,6 +117,8 @@
 
 .content {
   flex: 1;
+  min-height: 0;
+  max-height: 100%;
   padding: 1.5rem 1.75rem;
   overflow-y: auto;
   background: var(--color-background);
@@ -297,6 +301,7 @@
   }
 
   @media (max-width: 480px) {
+    max-height: none;
     flex-direction: column;
     align-items: stretch;
     padding: 0.75rem;
@@ -341,6 +346,10 @@
       font-size: 0.9rem;
     }
   }
+}
+
+.footerButton {
+  width: 5rem;
 }
 
 .autoReadCheckbox {

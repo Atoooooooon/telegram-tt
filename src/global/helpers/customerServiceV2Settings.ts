@@ -1,8 +1,11 @@
 import type {
+  CustomerServiceOncallSettings,
   CustomerServiceQuickReply,
   CustomerServiceSettings,
   UserRule,
 } from '../types/customerServiceV2';
+
+import { CUSTOMER_SERVICE_CONFIG } from '../../config/customerService';
 
 const CUSTOMER_SERVICE_V2_SETTINGS_KEY = 'customerServiceV2Settings';
 
@@ -15,6 +18,7 @@ type NormalizableSettings = {
   quickReplies?: unknown;
   quickReplyPanelGlobal?: unknown;
   rules?: unknown;
+  oncall?: unknown;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -27,7 +31,7 @@ export function normalizeCustomerServiceQuickReplies(raw: unknown): CustomerServ
   }
 
   return raw.reduce<CustomerServiceQuickReply[]>((result, item) => {
-    if (item === undefined || item === null) {
+    if (item === undefined || (!item && typeof item === 'object')) {
       return result;
     }
 
@@ -43,7 +47,7 @@ export function normalizeCustomerServiceQuickReplies(raw: unknown): CustomerServ
     }
 
     if (isRecord(item) && typeof item.text === 'string') {
-      const record = item as Record<string, unknown>;
+      const record = item;
       const text = item.text.trim();
       if (!text) {
         return result;
@@ -53,9 +57,9 @@ export function normalizeCustomerServiceQuickReplies(raw: unknown): CustomerServ
       if (typeof item.englishText === 'string') {
         englishText = item.englishText.trim();
       } else if (typeof record.textEn === 'string') {
-        englishText = (record.textEn as string).trim();
+        englishText = record.textEn.trim();
       } else if (typeof record.enText === 'string') {
-        englishText = (record.enText as string).trim();
+        englishText = record.enText.trim();
       }
 
       result.push({
@@ -67,6 +71,86 @@ export function normalizeCustomerServiceQuickReplies(raw: unknown): CustomerServ
 
     return result;
   }, []);
+}
+
+function toTrimmedString(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function toNumericString(value: unknown): string | undefined {
+  const str = toTrimmedString(value);
+  if (!str) return undefined;
+  return /^\d+$/.test(str) ? str : undefined;
+}
+
+function toNonNegativeNumber(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function normalizeStringArray(value: unknown, fallback: string[]): string[] {
+  if (!Array.isArray(value)) {
+    return [...fallback];
+  }
+
+  const normalized = value.map((item) => String(item).trim()).filter(Boolean);
+  return normalized.length ? normalized : [...fallback];
+}
+
+export function normalizeCustomerServiceOncallSettings(raw: unknown): CustomerServiceOncallSettings {
+  const defaults = CUSTOMER_SERVICE_CONFIG.ONCALL_DEFAULTS;
+  const source = isRecord(raw) ? raw : {};
+
+  return {
+    enabled: Boolean(source.enabled),
+    staffIds: normalizeStringArray(
+      source.staffIds,
+      defaults.staffIds,
+    ),
+    newAlertChatId: toTrimmedString(source.newAlertChatId),
+    newAlertThreadId: toNumericString(source.newAlertThreadId),
+    holdingAlertChatId: toTrimmedString(source.holdingAlertChatId),
+    holdingAlertThreadId: toNumericString(source.holdingAlertThreadId),
+    highestAlertChatId: toTrimmedString(source.highestAlertChatId),
+    highestAlertThreadId: toNumericString(source.highestAlertThreadId),
+    processingAlertChatId: toTrimmedString(source.processingAlertChatId),
+    processingAlertThreadId: toNumericString(source.processingAlertThreadId),
+    resolvedAlertChatId: toTrimmedString(source.resolvedAlertChatId),
+    resolvedAlertThreadId: toNumericString(source.resolvedAlertThreadId),
+    firstResponseTimeoutMs: toNonNegativeNumber(
+      source.firstResponseTimeoutMs,
+      defaults.firstResponseTimeoutMs,
+    ),
+    highestEscalationTimeoutMs: toNonNegativeNumber(
+      source.highestEscalationTimeoutMs,
+      defaults.highestEscalationTimeoutMs,
+    ),
+    holdingReplyGraceTimeoutMs: toNonNegativeNumber(
+      source.holdingReplyGraceTimeoutMs,
+      defaults.holdingReplyGraceTimeoutMs,
+    ),
+    reminderCooldownMs: toNonNegativeNumber(
+      source.reminderCooldownMs,
+      defaults.reminderCooldownMs,
+    ),
+    holdingReplyPatterns: normalizeStringArray(
+      source.holdingReplyPatterns,
+      defaults.holdingReplyPatterns,
+    ),
+    resolveReplyPatterns: normalizeStringArray(
+      source.resolveReplyPatterns,
+      defaults.resolveReplyPatterns,
+    ),
+    customerResolvePatterns: normalizeStringArray(
+      source.customerResolvePatterns,
+      defaults.customerResolvePatterns,
+    ),
+  };
 }
 
 function normalizeSettings(raw: unknown): CustomerServiceSettings | undefined {
@@ -83,6 +167,7 @@ function normalizeSettings(raw: unknown): CustomerServiceSettings | undefined {
     quickReplies,
     quickReplyPanelGlobal,
     rules,
+    oncall,
   } = raw as NormalizableSettings;
 
   const normalized: CustomerServiceSettings = {
@@ -98,6 +183,7 @@ function normalizeSettings(raw: unknown): CustomerServiceSettings | undefined {
     quickReplies: normalizeCustomerServiceQuickReplies(quickReplies),
     quickReplyPanelGlobal: Boolean(quickReplyPanelGlobal),
     rules: Array.isArray(rules) ? rules as UserRule[] : undefined,
+    oncall: normalizeCustomerServiceOncallSettings(oncall),
   };
 
   if (Array.isArray(regexFilters)) {

@@ -234,8 +234,8 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
 export default memo(
   withGlobal<OwnProps>((global): StateProps => {
     const tabId = getCurrentTabId();
-    const messages = selectCustomerServiceV2Messages(global, tabId);
-    const messageCount = selectCustomerServiceV2MessageCount(global, tabId);
+    const messages = selectCustomerServiceV2Messages(global);
+    const messageCount = selectCustomerServiceV2MessageCount(global);
     const activeContextChatId = selectCustomerServiceV2ContextChatId(global, tabId);
     const activeContextMessageId = selectCustomerServiceV2ContextMessageId(global, tabId);
 

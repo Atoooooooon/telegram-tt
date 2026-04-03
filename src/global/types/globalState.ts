@@ -80,6 +80,7 @@ import type {
   WebPageMediaSize,
 } from '../../types';
 import type { RegularLangFnParameters } from '../../util/localization';
+import type { CustomerServiceV2State } from './customerServiceV2';
 import type { SharedState } from './sharedState';
 import type { TabState } from './tabState';
 
@@ -461,6 +462,8 @@ export type GlobalState = {
   trustedBotIds: string[];
 
   serviceNotifications: ServiceNotification[];
+
+  customerServiceV2?: CustomerServiceV2State;
 
   byTabId: Record<number, TabState>;
   sharedState: SharedState;

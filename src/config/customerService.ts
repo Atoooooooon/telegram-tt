@@ -2,8 +2,7 @@ import type {
   CustomerServiceQuickReply,
 } from '../global/types/customerServiceV2';
 
-const envRedisUrl = process.env.UPSTASH_REDIS_REST_URL as string | undefined;
-const envRedisToken = process.env.UPSTASH_REDIS_REST_TOKEN as string | undefined;
+const envDevRedisHost = process.env.DEV_REDIS_HOST;
 const ONCALL_MAX_MESSAGES = 100;
 
 // Customer Service Configuration
@@ -69,7 +68,59 @@ export const CUSTOMER_SERVICE_CONFIG = {
   // 消息过期时间(24小时,单位:毫秒)
   MESSAGE_EXPIRE_TIME: 24 * 60 * 60 * 1000,
 
-  // 云端同步接口(可选)
-  CLOUD_SYNC_REDIS_URL: envRedisUrl,
-  CLOUD_SYNC_REDIS_TOKEN: envRedisToken,
+  // 云端同步能力是否可用
+  CLOUD_SYNC_ENABLED: Boolean(envDevRedisHost),
+
+  ONCALL_DEFAULTS: {
+    enabled: false,
+    staffIds: [] as string[],
+    newAlertChatId: '',
+    newAlertThreadId: '',
+    holdingAlertChatId: '',
+    holdingAlertThreadId: '',
+    highestAlertChatId: '',
+    highestAlertThreadId: '',
+    processingAlertChatId: '',
+    processingAlertThreadId: '',
+    resolvedAlertChatId: '',
+    resolvedAlertThreadId: '',
+    firstResponseTimeoutMs: 5 * 60 * 1000,
+    highestEscalationTimeoutMs: 10 * 60 * 1000,
+    holdingReplyGraceTimeoutMs: 15 * 60 * 1000,
+    reminderCooldownMs: 5 * 60 * 1000,
+    holdingReplyPatterns: [
+      '稍等',
+      '我看下',
+      '我看一下',
+      '帮你确认',
+      '稍后',
+      'wait',
+      'checking',
+      'looking into',
+    ] as string[],
+    resolveReplyPatterns: [
+      '已处理',
+      '已恢复',
+      '好了',
+      '可以了',
+      '处理完成',
+      '解决了',
+      'resolved',
+      'fixed',
+      'done',
+      'completed',
+    ] as string[],
+    customerResolvePatterns: [
+      '^好的$',
+      '^好$',
+      '^知道了$',
+      '^明白了$',
+      '^收到$',
+      '^OK$',
+      '^ok$',
+      '^okay$',
+      '^谢谢$',
+      '^感谢$',
+    ] as string[],
+  },
 } as const;

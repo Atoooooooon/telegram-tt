@@ -9,6 +9,28 @@ export type CustomerServiceQuickReply = {
   englishText?: string;
 };
 
+export type CustomerServiceOncallSettings = {
+  enabled?: boolean;
+  staffIds?: string[];
+  newAlertChatId?: string;
+  newAlertThreadId?: string;
+  holdingAlertChatId?: string;
+  holdingAlertThreadId?: string;
+  highestAlertChatId?: string;
+  highestAlertThreadId?: string;
+  processingAlertChatId?: string;
+  processingAlertThreadId?: string;
+  resolvedAlertChatId?: string;
+  resolvedAlertThreadId?: string;
+  firstResponseTimeoutMs?: number;
+  highestEscalationTimeoutMs?: number;
+  holdingReplyGraceTimeoutMs?: number;
+  reminderCooldownMs?: number;
+  holdingReplyPatterns?: string[];
+  resolveReplyPatterns?: string[];
+  customerResolvePatterns?: string[];
+};
+
 /**
  * Virtual ChatId constant for Customer Service V2
  * This represents the Customer Service view as a virtual chat in the message list
@@ -40,6 +62,9 @@ export type CustomerServiceSettings = {
 
   /** Rule engine: User-configured rules */
   rules?: UserRule[];
+
+  /** Personal oncall guarantee settings */
+  oncall?: CustomerServiceOncallSettings;
 };
 
 /**
@@ -53,34 +78,26 @@ export type PausedChat = {
 };
 
 /**
- * Customer Service V2 State
+ * Customer Service V2 State — shared across all tabs, lives in global (not byTabId)
  * Ephemeral design - no persistence to IndexedDB
  * Bounded in-memory FIFO queue with mode-specific limits
  */
 export type CustomerServiceV2State = {
-  /** Flat array of all CS messages */
   messages: ApiMessage[];
-
-  /** Multi-chat lookup map for efficient message display */
   messagesByChatId: Record<string, ApiMessage[]>;
-
-  /** Shared settings with V1 */
   settings?: CustomerServiceSettings;
-
-  /** Phase 2: Currently open context panel chat ID */
-  currentContextChatId?: string;
-
-  /** Phase 2: Highlighted message in context view */
-  currentContextMessageId?: number;
-
-  /** V1 compatibility: Paused chats for assist mode */
   pausedChats?: Record<string, PausedChat>;
-
-  /** Last sync timestamp */
   lastSyncTimestamp: number;
-
-  /** Cached message count for badge performance */
   messageCount: number;
+};
+
+/**
+ * Per-tab UI context for Customer Service V2
+ * Tracks which message is currently focused in each browser tab
+ */
+export type CustomerServiceV2Context = {
+  currentContextChatId?: string;
+  currentContextMessageId?: number;
 };
 
 /**

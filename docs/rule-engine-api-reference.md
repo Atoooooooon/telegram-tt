@@ -737,7 +737,12 @@ return {
 
 **功能**: 添加消息到客服队列
 
-**配置参数**: 无
+**配置参数**:
+```typescript
+{
+  syncToOncall?: boolean; // 是否同时同步到后端消息保障(默认 false)
+}
+```
 
 **输出数据**:
 ```typescript

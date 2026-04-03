@@ -64,7 +64,7 @@ import type {
   ApiUser,
   ApiVideo,
 } from '../../api/types';
-import type { CustomerServiceV2State } from './customerServiceV2';
+import type { CustomerServiceV2Context } from './customerServiceV2';
 import type { ToolboxState } from './toolbox';
 import type { FoldersActions } from '../../hooks/reducers/useFoldersReducer';
 import type { ReducerAction } from '../../hooks/useReducer';
@@ -230,7 +230,7 @@ export type TabState = {
   isCustomerServiceModalOpen?: boolean;
   isCustomerServiceV2SettingsOpen?: boolean;
 
-  customerServiceV2?: CustomerServiceV2State;
+  customerServiceV2Context?: CustomerServiceV2Context;
   toolbox?: ToolboxState;
 
   reactionPicker?: {

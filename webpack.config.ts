@@ -36,8 +36,8 @@ process.env.BASE_URL = process.env.BASE_URL || PRODUCTION_URL;
 const {
   BASE_URL,
   APP_TITLE = DEFAULT_APP_TITLE,
-  UPSTASH_REDIS_REST_URL,
-  UPSTASH_REDIS_REST_TOKEN,
+  PROXY_PORT = '8787',
+  DEV_REDIS_HOST,
 } = process.env;
 
 const CSP = `
@@ -82,6 +82,13 @@ export default function createConfig(
       host: '0.0.0.0',
       allowedHosts: 'all',
       hot: false,
+      proxy: [
+        {
+          context: ['/api/ocr', '/api/oncall', '/api/customer-service-cloud'],
+          target: `http://127.0.0.1:${PROXY_PORT}`,
+          changeOrigin: true,
+        },
+      ],
       client: {
         overlay: false,
       },
@@ -229,8 +236,7 @@ export default function createConfig(
         // eslint-disable-next-line no-null/no-null
         TEST_SESSION: null,
         BASE_URL,
-        UPSTASH_REDIS_REST_URL,
-        UPSTASH_REDIS_REST_TOKEN,
+        DEV_REDIS_HOST,
       }),
       // Updates each dev re-build to provide current git branch or commit hash
       new DefinePlugin({

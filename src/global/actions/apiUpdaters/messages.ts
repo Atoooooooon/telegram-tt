@@ -11,6 +11,7 @@ import { MAIN_THREAD_ID } from '../../../api/types';
 
 import { SERVICE_NOTIFICATIONS_USER_ID } from '../../../config';
 import { isMonitoredChat, isFilteredUser, shouldFilterMessage } from '../../helpers/customerServiceV2';
+import { reportCustomerServiceStaffReply, reportCustomerServiceUsefulMessage } from '../../helpers/customerServiceOncall';
 import { callApi } from '../../../api/gramjs';
 import { processMessageWithRules } from '../../helpers/ruleEngine';
 import { registerAllCapabilities } from '../../helpers/capabilities';
@@ -369,24 +370,20 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
         }
       }
 
-      // Add message to customer service if it passes all filters and not from current user
-      if (!isLocal && !message.isOutgoing) {
+      // Read CS settings directly from global — not tied to any specific browser tab
+      const csOncallSettings = global.customerServiceV2?.settings?.oncall;
+      const oncallStaffIds = csOncallSettings?.staffIds || [];
+      const isConfiguredOncallStaff = Boolean(
+        csOncallSettings?.enabled
+        && !message.isOutgoing
+        && newMessage.senderId
+        && oncallStaffIds.includes(String(newMessage.senderId)),
+      );
+
+      if (!isLocal && !message.isOutgoing && !isConfiguredOncallStaff) {
         const messageText = getMessageText(newMessage);
-
-        // 检查该聊天是否被暂停监听（仅在辅助模式下）
-        const currentTabId = getCurrentTabId();
-        const customerServiceV2 = selectCustomerServiceV2State(global, currentTabId);
-        const isAssistMode = customerServiceV2?.settings?.mode === 'assist';
-        const isPaused = isAssistMode && customerServiceV2?.pausedChats?.[chatId];
-
-        // Phase 1: Execute pre-filter rules (before any basic filtering, for all incoming messages)
-        const settings = customerServiceV2?.settings;
+        const settings = global.customerServiceV2?.settings;
         const preFilterRules = settings?.rules?.filter((r) => r.enabled && r.executionPhase === 'pre-filter') || [];
-        const postFilterRules = settings?.rules?.filter(
-          (r) => r.enabled && (!r.executionPhase || r.executionPhase === 'post-filter'),
-        ) || [];
-
-        // Determine message type for rule engine
         const isBotMessage = message.senderId && isFilteredUser(message.senderId, global);
         const eventType = isBotMessage ? 'bot_reply' : 'customer_message';
         const initialRuleContext = {
@@ -397,42 +394,44 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
           text: messageText?.text || '',
         };
 
-        // Execute pre-filter rules if any
         const preFilterPromise = preFilterRules.length > 0
           ? processMessageWithRules(newMessage, eventType, global, actions, preFilterRules, initialRuleContext)
           : Promise.resolve({ matched: false, skipPostProcessing: false });
 
         preFilterPromise.then(({ skipPostProcessing: skipByPreFilter }) => {
           if (skipByPreFilter) {
-            // Pre-filter rule requested to skip all post-processing
             // eslint-disable-next-line no-console
             console.log('[RuleEngine] Pre-filter rule skipped post-processing for message:', message.id);
             return;
           }
 
-          // Phase 2: Basic filtering (customer service base behavior)
-          const isMonitored = isMonitoredChat(chatId, global);
-          if (!isMonitored) {
+          // Re-read live global at each async boundary — avoids stale closure reads
+          const freshGlobal = getGlobal();
+          const freshCs = freshGlobal.customerServiceV2;
+          const freshSettings = freshCs?.settings;
+          const freshIsPaused = freshSettings?.mode === 'assist' && Boolean(freshCs?.pausedChats?.[chatId]);
+          const freshPostFilterRules = freshSettings?.rules?.filter(
+            (r) => r.enabled && (!r.executionPhase || r.executionPhase === 'post-filter'),
+          ) || [];
+
+          // Phase 2: Basic filtering
+          if (!isMonitoredChat(chatId, freshGlobal)) {
             console.log("Message from non-monitored chat:", chatId, "message:", message.id, "ignored");
             return;
           }
 
-          // 如果暂停监听，直接跳过
-          if (isPaused) {
-            console.log("Chat monitoring paused for:", chatId, "message:", message.id, "ignored (assist mode)");
-            return;
-          }
-
-          const isFiltered = shouldFilterMessage(chatId, message.senderId, messageText, global);
+          const isFiltered = shouldFilterMessage(chatId, message.senderId, messageText, freshGlobal);
           if (isFiltered) {
-            // 消息被基础过滤器过滤掉（用户被屏蔽或内容匹配过滤正则）
+            if (freshIsPaused) {
+              console.log("Chat monitoring paused for filtered message:", chatId, "message:", message.id, "ignored (assist mode)");
+              return;
+            }
+
             console.log("Message filtered by basic filters:", message.id, "in chat:", chatId);
 
-            // 检查是否启用自动已读功能
-            const shouldAutoRead = customerServiceV2?.settings?.autoRead || false;
-            if (shouldAutoRead) {
+            if (freshSettings?.autoRead) {
               console.log("Auto-reading filtered message in monitored chat:", message.id);
-              const monitoredChat = selectChat(global, chatId);
+              const monitoredChat = selectChat(freshGlobal, chatId);
               if (monitoredChat) {
                 const delayMs = getHumanDelayMs({ minMs: 900, maxMs: 1700 });
                 setTimeout(() => {
@@ -451,27 +450,90 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
             return;
           }
 
-          // Phase 3: Execute post-filter rules (after basic filtering)
-          const postFilterPromise = postFilterRules.length > 0
-            ? processMessageWithRules(newMessage, eventType, global, actions, postFilterRules, initialRuleContext)
+          // Phase 3: Post-filter rules
+          const postFilterPromise = freshPostFilterRules.length > 0
+            ? processMessageWithRules(newMessage, eventType, freshGlobal, actions, freshPostFilterRules, initialRuleContext)
             : Promise.resolve({ matched: false, skipPostProcessing: false });
 
           postFilterPromise.then(({ matched: handledByRules }) => {
-            // If no rules handled the message, add to queue (legacy behavior)
+            const actionGlobal = getGlobal();
+            const actionCs = actionGlobal.customerServiceV2;
+            const actionSettings = actionCs?.settings;
+            const actionIsPaused = actionSettings?.mode === 'assist' && Boolean(actionCs?.pausedChats?.[chatId]);
+
             if (!handledByRules) {
+              if (actionSettings?.oncall?.enabled) {
+                reportCustomerServiceUsefulMessage({
+                  chatId,
+                  messageId: newMessage.id,
+                  createdAt: typeof newMessage.date === 'number' ? newMessage.date * 1000 : Date.now(),
+                  chatTitle: chat?.title,
+                  senderId: newMessage.senderId,
+                  text: messageText?.text,
+                  previewText: messageText?.text,
+                  oncallConfig: actionSettings.oncall,
+                });
+              }
+
+              if (actionIsPaused) {
+                console.log("Chat monitoring paused for useful message:", chatId, "message:", message.id, "reported to oncall only");
+                return;
+              }
+
               console.log("No rules matched, adding to customer service queue:", message.id);
-              actions.addToCustomerServiceV2({ message: newMessage, chatId, tabId: currentTabId });
+              actions.addToCustomerServiceV2({ message: newMessage, chatId, tabId: getCurrentTabId() });
             } else {
               console.log("Message handled by rule engine:", message.id);
             }
           }).catch((error) => {
             console.error('[RuleEngine] Post-filter processing failed:', error);
-            // On error, fallback to adding to queue
-            actions.addToCustomerServiceV2({ message: newMessage, chatId, tabId: currentTabId });
+
+            const actionGlobal = getGlobal();
+            const actionCs = actionGlobal.customerServiceV2;
+            const actionSettings = actionCs?.settings;
+            const actionIsPaused = actionSettings?.mode === 'assist' && Boolean(actionCs?.pausedChats?.[chatId]);
+
+            if (actionSettings?.oncall?.enabled) {
+              reportCustomerServiceUsefulMessage({
+                chatId,
+                messageId: newMessage.id,
+                createdAt: typeof newMessage.date === 'number' ? newMessage.date * 1000 : Date.now(),
+                chatTitle: chat?.title,
+                senderId: newMessage.senderId,
+                text: messageText?.text,
+                previewText: messageText?.text,
+                oncallConfig: actionSettings.oncall,
+              });
+            }
+
+            if (actionIsPaused) {
+              console.log("Chat monitoring paused after post-filter error:", chatId, "message:", message.id, "reported to oncall only");
+              return;
+            }
+
+            actions.addToCustomerServiceV2({ message: newMessage, chatId, tabId: getCurrentTabId() });
           });
         }).catch((error) => {
           console.error('[RuleEngine] Pre-filter processing failed:', error);
-          // On pre-filter error, continue with normal flow
+        });
+      }
+
+      if (
+        !isLocal
+        && (message.isOutgoing || isConfiguredOncallStaff)
+        && isMonitoredChat(chatId, global)
+        && !isActionMessage(newMessage)
+        && csOncallSettings?.enabled
+      ) {
+        reportCustomerServiceStaffReply({
+          chatId,
+          messageId: newMessage.id,
+          replyToMessageId: replyInfo?.replyToMsgId,
+          createdAt: typeof newMessage.date === 'number' ? newMessage.date * 1000 : Date.now(),
+          staffUserId: newMessage.senderId || global.currentUserId || undefined,
+          text: getMessageText(newMessage)?.text,
+          previewText: getMessageText(newMessage)?.text,
+          oncallConfig: csOncallSettings,
         });
       }
 
@@ -681,8 +743,7 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
       setGlobal(global);
 
       // Customer Service V2: Sync message edits
-      const currentTabId = getCurrentTabId();
-      actions.syncCustomerServiceV2Message({ message: newMessage, tabId: currentTabId });
+      actions.syncCustomerServiceV2Message({ message: newMessage });
 
       break;
     }
@@ -1662,8 +1723,7 @@ export function deleteMessages<T extends GlobalState>(
     setGlobal(global);
 
     // Customer Service V2: Sync message deletions
-    const currentTabId = getCurrentTabId();
-    actions.removeCustomerServiceV2Messages({ messageIds: ids, chatId, tabId: currentTabId });
+    actions.removeCustomerServiceV2Messages({ messageIds: ids, chatId });
 
     const isAnimatingAsSnap = selectCanAnimateSnapEffect(global);
 

@@ -139,6 +139,7 @@
     "emoji-data-ios": "git+https://github.com/korenskoy/emoji-data-ios#30529a2",
     "fflate": "^0.8.2",
     "idb-keyval": "^6.2.2",
+    "ioredis": "^5.10.1",
     "lowlight": "^3.3.0",
     "music-metadata": "^11.12.3",
     "opus-recorder": "github:Ajaxy/opus-recorder#116830a",
