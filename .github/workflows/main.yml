@@ -51,8 +51,20 @@ jobs:
       - name: Prune dev dependencies for deploy bundle
         run: npm prune --omit=dev
 
+      - name: Prepare portable Linux Node.js runtime
+        run: |
+          NODE_VERSION="$(node -p "process.versions.node")"
+          NODE_DIST="node-v${NODE_VERSION}-linux-x64"
+          curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/${NODE_DIST}.tar.xz"
+          rm -rf runtime
+          mkdir -p runtime/linux
+          tar -xJf "${NODE_DIST}.tar.xz"
+          cp -R "${NODE_DIST}/bin" runtime/linux/
+          cp -R "${NODE_DIST}/lib" runtime/linux/
+          rm -rf "${NODE_DIST}" "${NODE_DIST}.tar.xz"
+
       - name: Package deploy bundle
-        run: tar -cvf dist.tar dist server deploy node_modules package.json package-lock.json .env
+        run: tar -cvf dist.tar dist server deploy runtime node_modules package.json package-lock.json .env
 
       - name: Deploy to server
         uses: appleboy/scp-action@v0.1.7
@@ -71,7 +83,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd /root/tgweb/dist-portable-bundle
-            rm -rf dist server deploy node_modules
+            rm -rf dist server deploy runtime node_modules
             rm -f package.json package-lock.json .env
             tar -xvf dist.tar
             rm dist.tar
