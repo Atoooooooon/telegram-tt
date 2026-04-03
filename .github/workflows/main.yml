@@ -24,10 +24,14 @@ jobs:
           cat << EOF > .env
           TELEGRAM_API_ID=${{ secrets.TELEGRAM_API_ID }}
           TELEGRAM_API_HASH=${{ secrets.TELEGRAM_API_HASH }}
+          UPSTASH_REDIS_REST_URL=${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN=${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
           BASE_URL=${{ secrets.BASE_URL }}
           DEV_REDIS_HOST=${{ secrets.DEV_REDIS_HOST }}
           DEV_REDIS_PASS=${{ secrets.DEV_REDIS_PASS }}
           DEV_REDIS_PORT=${{ secrets.DEV_REDIS_PORT }}
+          DEV_REDIS_DB=${{ secrets.DEV_REDIS_DB }}
+          DEV_REDIS_USER=${{ secrets.DEV_REDIS_USER }}
           DEV_REDIS_TLS=${{ secrets.DEV_REDIS_TLS }}
           PROXY_HOST=0.0.0.0
           PROXY_PORT=8787
@@ -45,7 +49,7 @@ jobs:
         run: npm run build:dev
 
       - name: Package deploy bundle
-        run: tar -cvf dist.tar dist server package.json package-lock.json .env
+        run: tar -cvf dist.tar dist server deploy package.json package-lock.json .env
 
       - name: Deploy to server
         uses: appleboy/scp-action@v0.1.7
@@ -64,11 +68,9 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd /root/tgweb/dist-portable-bundle
-            rm -rf dist server
+            rm -rf dist server deploy
             rm -f package.json package-lock.json .env
             tar -xvf dist.tar
             rm dist.tar
             npm i
-            ./tg_web.sh restart
-            pkill -f "node server/index.mjs" || true
-            nohup npm run backend > backend.log 2>&1 &
+            bash deploy/tg_web.sh restart

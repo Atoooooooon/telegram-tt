@@ -3,7 +3,28 @@
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-APP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+APP_DIR=""
+
+resolve_app_dir() {
+    if [ -f "$SCRIPT_DIR/server/index.mjs" ] || [ -f "$SCRIPT_DIR/server.cjs" ]; then
+        APP_DIR="$SCRIPT_DIR"
+        return 0
+    fi
+
+    local parent_dir
+    parent_dir="$(cd "$SCRIPT_DIR/.." && pwd)"
+    if [ -f "$parent_dir/server/index.mjs" ] || [ -f "$parent_dir/server.cjs" ]; then
+        APP_DIR="$parent_dir"
+        return 0
+    fi
+
+    echo "❌ 无法定位项目目录"
+    echo "📁 当前脚本目录: $SCRIPT_DIR"
+    echo "💡 请将脚本放在项目根目录，或放在项目根目录下的 deploy/ 目录中执行"
+    exit 1
+}
+
+resolve_app_dir
 cd "$APP_DIR"
 
 FRONTEND_PID_FILE="./telegram-web.pid"
@@ -64,14 +85,6 @@ detect_platform() {
             exit 1
         fi
     fi
-}
-
-has_frontend_entry() {
-    [ -f "./server.cjs" ]
-}
-
-has_backend_entry() {
-    [ -f "./server/index.mjs" ]
 }
 
 is_pid_running() {
