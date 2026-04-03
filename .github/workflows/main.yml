@@ -3,11 +3,12 @@ name: Build and Deploy
 on:
   push:
     branches:
-      - master-deploy  
+      - master-deploy
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -15,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'  # 根据项目需求调整版本
+          node-version: '24'
           cache: 'npm'
 
       - name: Create .env file
@@ -23,19 +24,18 @@ jobs:
           cat << EOF > .env
           TELEGRAM_API_ID=${{ secrets.TELEGRAM_API_ID }}
           TELEGRAM_API_HASH=${{ secrets.TELEGRAM_API_HASH }}
-          UPSTASH_REDIS_REST_URL=${{ secrets.UPSTASH_REDIS_REST_URL }}
-          UPSTASH_REDIS_REST_TOKEN=${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
           BASE_URL=${{ secrets.BASE_URL }}
           DEV_REDIS_HOST=${{ secrets.DEV_REDIS_HOST }}
           DEV_REDIS_PASS=${{ secrets.DEV_REDIS_PASS }}
           DEV_REDIS_PORT=${{ secrets.DEV_REDIS_PORT }}
           DEV_REDIS_TLS=${{ secrets.DEV_REDIS_TLS }}
-          PROXY_HOST=${{ secrets.SERVER_HOST }}
+          PROXY_HOST=0.0.0.0
           PROXY_PORT=8787
           PROXY_ALLOW_ORIGIN=*
           PROXY_ALLOW_HEADERS=content-type
           PROXY_MAX_BODY_BYTES=6000000
           PROXY_LOG=1
+          ONCALL_TELEGRAM_BOT_TOKEN=${{ secrets.ONCALL_TELEGRAM_BOT_TOKEN }}
           EOF
 
       - name: Install dependencies
@@ -44,8 +44,8 @@ jobs:
       - name: Build project
         run: npm run build:dev
 
-      - name: Package dist folder
-        run: tar -cvf dist.tar dist
+      - name: Package deploy bundle
+        run: tar -cvf dist.tar dist server package.json package-lock.json .env
 
       - name: Deploy to server
         uses: appleboy/scp-action@v0.1.7
@@ -64,7 +64,11 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd /root/tgweb/dist-portable-bundle
-            rm -rf dist  # 删除旧的 dist 目录
+            rm -rf dist server
+            rm -f package.json package-lock.json .env
             tar -xvf dist.tar
-            rm dist.tar  # 清理压缩包
+            rm dist.tar
+            npm i
             ./tg_web.sh restart
+            pkill -f "node server/index.mjs" || true
+            nohup npm run backend > backend.log 2>&1 &
