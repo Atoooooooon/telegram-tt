@@ -7,7 +7,6 @@ import type { Capability } from '../../types/customerServiceV2';
 import { MAIN_THREAD_ID } from '../../../api/types';
 
 import { renderTemplate } from '../templateRenderer';
-import { waitHumanLike } from '../../../util/delays';
 
 const MIN_TYPING_DELAY_MS = 900;
 const MAX_TYPING_DELAY_MS = 1800;
@@ -29,6 +28,32 @@ function resolveTypingDelayMs(configuredDelay?: number): number {
 
   return MIN_TYPING_DELAY_MS
     + Math.floor(Math.random() * (MAX_TYPING_DELAY_MS - MIN_TYPING_DELAY_MS));
+}
+
+function extractSentMessageId(result: unknown): number | undefined {
+  if (!result || typeof result !== 'object') {
+    return undefined;
+  }
+
+  if ('id' in result && typeof result.id === 'number') {
+    return result.id;
+  }
+
+  if ('updates' in result && Array.isArray(result.updates)) {
+    const idUpdate = result.updates.find(
+      (update): update is typeof update & { id: number } => ('id' in update && typeof update.id === 'number'),
+    );
+
+    if (idUpdate) {
+      return idUpdate.id;
+    }
+  }
+
+  if ('messageId' in result && typeof result.messageId === 'number') {
+    return result.messageId;
+  }
+
+  return undefined;
 }
 
 /**
@@ -245,20 +270,7 @@ export const actionAutoReplyCapability: Capability = {
         replyInfo,
       });
 
-      // Robust extraction of message ID from GramJS update structures
-      let sentMessageId: number | undefined;
-      if (result && typeof result === 'object') {
-        if ('id' in result && typeof result.id === 'number') {
-          sentMessageId = result.id;
-        } else if ('updates' in result && Array.isArray(result.updates)) {
-          const idUpdate = result.updates.find(
-            (update): update is typeof update & { id: number } => ('id' in update && typeof update.id === 'number'),
-          );
-          if (idUpdate) sentMessageId = idUpdate.id;
-        } else if ('messageId' in result) {
-          sentMessageId = (result as any).messageId;
-        }
-      }
+      const sentMessageId = extractSentMessageId(result);
 
       if (typingActionActive) {
         callApi('sendMessageAction', {
@@ -312,14 +324,12 @@ export const actionAddQueueCapability: Capability = {
 
       if (config.syncToOncall) {
         const [
-          { getCurrentTabId },
           { selectCustomerServiceV2Settings },
           { selectChat },
           { getMessageText },
           { loadCustomerServiceV2SettingsFromStorage },
           { reportCustomerServiceUsefulMessage },
         ] = await Promise.all([
-          import('../../../util/establishMultitabRole'),
           import('../../selectors/customerServiceV2'),
           import('../../selectors'),
           import('../messages'),
@@ -327,7 +337,7 @@ export const actionAddQueueCapability: Capability = {
           import('../customerServiceOncall'),
         ]);
 
-        const settings = selectCustomerServiceV2Settings(global, getCurrentTabId())
+        const settings = selectCustomerServiceV2Settings(global)
           || loadCustomerServiceV2SettingsFromStorage();
         const oncallSettings = settings?.oncall;
 
@@ -379,6 +389,12 @@ export const actionForwardCapability: Capability = {
       required: true,
       placeholder: '输入目标聊天的ID',
     },
+    mode: {
+      type: 'select',
+      label: '转发模式',
+      options: ['原生转发', '复制转发'],
+      default: '原生转发',
+    },
     dropAuthor: {
       type: 'boolean',
       label: '隐藏原作者',
@@ -389,10 +405,21 @@ export const actionForwardCapability: Capability = {
       label: '删除原标题',
       default: false,
     },
+    template: {
+      type: 'textarea',
+      label: '复制转发模板',
+      placeholder: '复制转发时生效，例如：[{chatTitle}] {text}',
+    },
   },
 
-  async execute({ message, config, global }) {
-    const { toChatId, dropAuthor = false, dropCaption = false } = config;
+  async execute({ message, config, global, pipelineData }) {
+    const {
+      toChatId,
+      mode = '原生转发',
+      dropAuthor = false,
+      dropCaption = false,
+      template,
+    } = config;
 
     if (!toChatId) {
       return {
@@ -436,6 +463,35 @@ export const actionForwardCapability: Capability = {
         // Continue even if mark read fails
       }
 
+      if (mode === '复制转发' || mode === '复制文字转发') {
+        const renderedText = renderTemplate(template || '{text}', pipelineData);
+
+        if (!renderedText.trim()) {
+          return {
+            success: false,
+            error: 'Copy forward template rendered empty text',
+          };
+        }
+
+        const result = await callApi('sendMessage', {
+          chat: toChat,
+          text: renderedText,
+        });
+
+        const sentMessageId = extractSentMessageId(result);
+
+        return {
+          success: true,
+          data: {
+            forwardedTo: toChatId,
+            messageId: message.id,
+            forwardMode: 'copy_text',
+            sentText: renderedText,
+            sentMessageId,
+          },
+        };
+      }
+
       await callApi('forwardMessages', {
         fromChat,
         toChat,
@@ -449,6 +505,7 @@ export const actionForwardCapability: Capability = {
         data: {
           forwardedTo: toChatId,
           messageId: message.id,
+          forwardMode: 'native',
         },
       };
     } catch (error) {
@@ -521,20 +578,7 @@ export const actionSendToCapability: Capability = {
         text,
       });
 
-      // Robust extraction of message ID from GramJS update structures
-      let sentMessageId: number | undefined;
-      if (result && typeof result === 'object') {
-        if ('id' in result && typeof result.id === 'number') {
-          sentMessageId = result.id;
-        } else if ('updates' in result && Array.isArray(result.updates)) {
-          const idUpdate = result.updates.find(
-            (update): update is typeof update & { id: number } => ('id' in update && typeof update.id === 'number'),
-          );
-          if (idUpdate) sentMessageId = idUpdate.id;
-        } else if ('messageId' in result) {
-          sentMessageId = (result as any).messageId;
-        }
-      }
+      const sentMessageId = extractSentMessageId(result);
 
       return {
         success: true,

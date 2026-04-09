@@ -185,6 +185,10 @@ const RuleEngineDoc: FC = () => {
               : 发送者ID
             </li>
             <li>
+              <code>senderName</code>
+              : 发送者名称(便于模板拼接)
+            </li>
+            <li>
               <code>text</code>
               : 消息文本(入口预填充,也可被 OCR/文本处理步骤覆盖)
             </li>
@@ -681,7 +685,7 @@ const RuleEngineDoc: FC = () => {
             <p>
               发送自动回复消息，支持
               {' '}
-              <code>{'{{变量}}'}</code>
+              <code>{'{{变量}} / {变量}'}</code>
               {' '}
               模板语法
             </p>
@@ -752,7 +756,7 @@ const RuleEngineDoc: FC = () => {
               {' '}
               - 转发消息
             </h6>
-            <p>转发消息到指定聊天窗口,自动模拟真实用户行为(先已读再转发)</p>
+            <p>转发消息到指定聊天窗口，支持原生转发和复制转发两种模式，执行前会自动先已读。</p>
             <ul>
               <li>
                 <code>toChatId</code>
@@ -761,22 +765,53 @@ const RuleEngineDoc: FC = () => {
                 输入目标聊天的ID
               </li>
               <li>
+                <code>mode</code>
+                : 转发模式 (select, 默认 原生转发)
+                <br />
+                可选
+                {' '}
+                <code>原生转发</code>
+                {' '}
+                /
+                {' '}
+                <code>复制转发</code>
+              </li>
+              <li>
                 <code>dropAuthor</code>
                 : 隐藏原作者 (boolean, 默认 false)
                 <br />
-                设为 true 时转发消息不显示原作者信息
+                仅原生转发模式生效；设为 true 时转发消息不显示原作者信息
               </li>
               <li>
                 <code>dropCaption</code>
                 : 删除原标题 (boolean, 默认 false)
                 <br />
-                设为 true 时转发消息不包含原标题/说明文字
+                仅原生转发模式生效；设为 true 时转发消息不包含原标题/说明文字
+              </li>
+              <li>
+                <code>template</code>
+                : 复制转发模板 (string, 选填)
+                <br />
+                仅复制转发模式生效。默认使用
+                {' '}
+                <code>{'{text}'}</code>
+                ，支持
+                {' '}
+                <code>{'{{chatTitle}}'}</code>
+                ,
+                {' '}
+                <code>{'{text}'}</code>
+                ,
+                {' '}
+                <code>{'{{senderName}}'}</code>
+                {' '}
+                等上下文变量
               </li>
             </ul>
             <p>
               <strong>重要:</strong>
               {' '}
-              转发前会自动标记消息为已读,模拟真实用户操作,避免触发 Telegram 反机器人检测
+              复制转发不会调用 Telegram 原生转发接口，而是基于消息文本发送一条新的消息；适合补充额外说明后再发出。
             </p>
             <p>
               <strong>输出数据:</strong>
@@ -785,6 +820,15 @@ const RuleEngineDoc: FC = () => {
               ,
               {' '}
               <code>messageId</code>
+              ,
+              {' '}
+              <code>forwardMode</code>
+              ,
+              {' '}
+              <code>sentText</code>
+              ,
+              {' '}
+              <code>sentMessageId</code>
             </p>
           </div>
 

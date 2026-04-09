@@ -1,10 +1,10 @@
 /**
  * Template renderer utility
- * Supports {{variable}} syntax with nested object access
+ * Supports {{variable}} and {variable} syntax with nested object access
  */
 
 /**
- * Render template string by replacing {{variables}}
+ * Render template string by replacing template variables
  * Supports nested properties using dot notation: {{user.name}}
  *
  * @param template - Template string with {{variable}} placeholders
@@ -15,8 +15,8 @@ export function renderTemplate(
   template: string,
   data: Record<string, any>,
 ): string {
-  return template.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
-    const trimmedPath = path.trim();
+  return template.replace(/\{\{([^{}]+)\}\}|\{([^{}]+)\}/g, (match, doubleBracePath, singleBracePath) => {
+    const trimmedPath = String(doubleBracePath || singleBracePath).trim();
     const value = getNestedValue(data, trimmedPath);
 
     if (value === undefined || value === null) {
