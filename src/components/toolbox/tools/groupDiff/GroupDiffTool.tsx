@@ -6,6 +6,7 @@ import { getActions, withGlobal } from '../../../../global';
 
 import type { ApiChat, ApiUser } from '../../../../api/types';
 
+import { DEBUG } from '../../../../config';
 import {
   getUserFullName,
   isChatChannel,
@@ -59,6 +60,31 @@ type TelegramBotState = {
   status: 'idle' | 'loading' | 'success' | 'error';
   username?: string;
   message?: string;
+};
+
+type GroupDiffLogPayload = {
+  source: {
+    id?: string;
+    name: string;
+    count: number;
+    mode: 'my-groups' | 'friend-common-groups';
+  };
+  target: {
+    id: string;
+    name: string;
+    count: number;
+  };
+  activity: {
+    parsed: number;
+    invalid: number;
+    enabled: boolean;
+  };
+  results: {
+    onlyInSource: MissingGroup[];
+    onlyInTarget: MissingGroup[];
+    bothInSourceAndTarget: MissingGroup[];
+  };
+  durationMs: number;
 };
 
 const REMOVE_MEMBER_BANNED_RIGHTS = {
@@ -166,6 +192,40 @@ function getDisplayName(user?: ApiUser) {
   return getUserFullName(user)
     || user.usernames?.[0]?.username
     || (user.phoneNumber ? `+${user.phoneNumber}` : user.id);
+}
+
+function toGroupDiffChatIds(groups: MissingGroup[]) {
+  return groups.map((group) => group.chatId).join(',');
+}
+
+function logGroupDiffResult(payload: GroupDiffLogPayload) {
+  if (!DEBUG) {
+    return;
+  }
+
+  const onlyInSourceChatIds = toGroupDiffChatIds(payload.results.onlyInSource);
+  const onlyInTargetChatIds = toGroupDiffChatIds(payload.results.onlyInTarget);
+  const bothChatIds = toGroupDiffChatIds(payload.results.bothInSourceAndTarget);
+  const summary = {
+    source: payload.source,
+    target: payload.target,
+    activity: payload.activity,
+    durationMs: Math.round(payload.durationMs),
+    resultCounts: {
+      onlyInSource: payload.results.onlyInSource.length,
+      onlyInTarget: payload.results.onlyInTarget.length,
+      bothInSourceAndTarget: payload.results.bothInSourceAndTarget.length,
+    },
+  };
+
+  /* eslint-disable no-console */
+  console.groupCollapsed('[Toolbox:GroupDiff] 对比结果', summary);
+  console.log('summary', summary);
+  console.log('onlyInSourceChatIds / 仅 A 有', onlyInSourceChatIds);
+  console.log('onlyInTargetChatIds / 仅 B 有', onlyInTargetChatIds);
+  console.log('bothInSourceAndTargetChatIds / 两者共有', bothChatIds);
+  console.groupEnd();
+  /* eslint-enable no-console */
 }
 
 const UserSelector: FC<{
@@ -390,6 +450,7 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
 
     setError(undefined);
     setIsChecking(true);
+    const startedAt = performance.now();
 
     try {
       // 1. Get Source Chats
@@ -476,17 +537,47 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
         if (!inSource) onlyTgt.push(toMissingGroup(chat));
       });
 
-      setOnlyInSource(sortResults(onlySrc));
-      setOnlyInTarget(sortResults(onlyTgt));
-      setBothInSourceAndTarget(sortResults(both));
+      const sortedOnlySrc = sortResults(onlySrc);
+      const sortedOnlyTgt = sortResults(onlyTgt);
+      const sortedBoth = sortResults(both);
+      const sourceName = useMyGroups ? '我' : (sourceUser ? getDisplayName(sourceUser) || sourceUser.id : '未知来源');
+      const targetName = getDisplayName(targetUser) || targetUser.id;
+
+      setOnlyInSource(sortedOnlySrc);
+      setOnlyInTarget(sortedOnlyTgt);
+      setBothInSourceAndTarget(sortedBoth);
 
       setInviteStates({});
       setRemoveStates({});
       setBotLeaveStates({});
       setSelectedChatIds({});
       setLastRunInfo({
-        sourceName: useMyGroups ? '我' : (getDisplayName(sourceUser) || sourceUser!.id),
-        targetName: getDisplayName(targetUser) || targetUser.id,
+        sourceName,
+        targetName,
+      });
+      logGroupDiffResult({
+        source: {
+          id: sourceUser?.id,
+          name: sourceName,
+          count: sourceChats.length,
+          mode: useMyGroups ? 'my-groups' : 'friend-common-groups',
+        },
+        target: {
+          id: targetUser.id,
+          name: targetName,
+          count: targetChats.length,
+        },
+        activity: {
+          parsed: activityData.entries.length,
+          invalid: activityData.invalid,
+          enabled: hasActivityRanking,
+        },
+        results: {
+          onlyInSource: sortedOnlySrc,
+          onlyInTarget: sortedOnlyTgt,
+          bothInSourceAndTarget: sortedBoth,
+        },
+        durationMs: performance.now() - startedAt,
       });
     } catch (err: any) {
       setError(err?.message || '计算失败，请稍后重试。');
@@ -495,6 +586,8 @@ const GroupDiffTool: FC<StateProps> = ({ chatsById, usersById }) => {
     }
   }, [
     activityMap,
+    activityData.entries.length,
+    activityData.invalid,
     fetchAllCommonChats,
     groupChats,
     hasActivityRanking,
