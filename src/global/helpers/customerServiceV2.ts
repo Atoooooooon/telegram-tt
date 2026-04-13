@@ -1,13 +1,12 @@
-import type { GlobalState } from '../types';
-import type { CustomerServiceSettings } from '../types';
-import type { ApiFormattedText } from '../../api/types';
+import type { ApiFormattedText, ApiMessage } from '../../api/types';
+import type { CustomerServiceSettings, GlobalState } from '../types';
 
 import { CUSTOMER_SERVICE_CONFIG } from '../../config/customerService';
+import { selectCustomerServiceV2Settings } from '../selectors/customerServiceV2';
 import {
   loadCustomerServiceV2SettingsFromStorage,
   normalizeCustomerServiceQuickReplies,
 } from './customerServiceV2Settings';
-import { selectCustomerServiceV2Settings } from '../selectors/customerServiceV2';
 
 /**
  * Get effective customer service settings
@@ -99,6 +98,16 @@ export function isFilteredByRegex(messageText: string, global?: GlobalState): bo
   });
 }
 
+export function isFilteredCustomerServiceActionMessage(message: ApiMessage): boolean {
+  const actionType = message.content.action?.type;
+
+  return actionType === 'chatAddUser'
+    || actionType === 'chatDeleteUser'
+    || actionType === 'chatJoinedByLink'
+    || actionType === 'chatJoinedByRequest'
+    || actionType === 'channelJoined';
+}
+
 /**
  * Comprehensive check if message should be filtered
  */
@@ -107,7 +116,12 @@ export function shouldFilterMessage(
   senderId?: string,
   messageText?: ApiFormattedText,
   global?: GlobalState,
+  message?: ApiMessage,
 ): boolean {
+  if (message && isFilteredCustomerServiceActionMessage(message)) {
+    return true;
+  }
+
   // User is filtered, skip message
   if (senderId && isFilteredUser(senderId, global)) {
     return true;

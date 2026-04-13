@@ -420,7 +420,7 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
             return;
           }
 
-          const isFiltered = shouldFilterMessage(chatId, message.senderId, messageText, freshGlobal);
+          const isFiltered = shouldFilterMessage(chatId, message.senderId, messageText, freshGlobal, newMessage);
           if (isFiltered) {
             if (freshIsPaused) {
               console.log("Chat monitoring paused for filtered message:", chatId, "message:", message.id, "ignored (assist mode)");
