@@ -6,9 +6,10 @@ import { getServerTime } from '../util/serverTime';
 import { resetOpenedChannelShortpollState, syncOpenedShortpollChannelIds } from './openedChannelShortpoll';
 import { removePeerStory } from './reducers';
 import { selectTabState } from './selectors';
-import { getGlobal, setGlobal } from '.';
+import { getActions, getGlobal, setGlobal } from '.';
 
 const STORY_EXPIRATION_INTERVAL = 2 * 60 * 1000; // 2 min
+const CUSTOMER_SERVICE_CLOUD_SYNC_INTERVAL = 10 * 1000; // 10 sec
 
 let intervals: number[] = [];
 
@@ -69,4 +70,18 @@ function checkStoryExpiration() {
   });
 
   setGlobal(global);
+}
+
+function checkCustomerServiceCloudSync() {
+  const global = getGlobal();
+  if (!global.isInited) return;
+
+  const preference = loadCustomerServiceCloudSyncPreference();
+  if (!preference?.token) return;
+
+  const currentTabId = selectTabState(global)?.id;
+  getActions().autoSyncCustomerServiceV2Cloud({
+    tabId: currentTabId,
+    silent: true,
+  });
 }

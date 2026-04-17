@@ -4,17 +4,16 @@ import { getCurrentTabId } from '../../../util/establishMultitabRole';
 import { getTranslationFn } from '../../../util/localization';
 import { fetchCustomerServiceCloudConfig, uploadCustomerServiceCloudConfig } from '../../../api/customerServiceSync';
 import {
-  loadCustomerServiceV2SettingsFromStorage,
-  saveCustomerServiceV2SettingsToStorage,
-} from '../../helpers/customerServiceV2Settings';
-import {
   computeCustomerServiceSettingsHash,
   loadCustomerServiceCloudSyncPreference,
   maskCloudSyncToken,
   updateCustomerServiceCloudSyncPreferenceForToken,
 } from '../../helpers/customerServiceCloudSyncPreference';
+import {
+  loadCustomerServiceV2SettingsFromStorage,
+  saveCustomerServiceV2SettingsToStorage,
+} from '../../helpers/customerServiceV2Settings';
 import { addActionHandler, getGlobal, setGlobal } from '../../index';
-
 import {
   ensureCustomerServiceV2State,
   getDefaultCustomerServiceV2Settings,
@@ -24,11 +23,12 @@ import {
   updateCustomerServiceV2State,
 } from './customerServiceV2Helpers';
 
+let isAutoSyncCustomerServiceV2CloudInFlight = false;
+
 addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload): Promise<void> => {
   const translate = getTranslationFn();
   const {
     token,
-    tabId = getCurrentTabId(),
     operation = 'auto',
     existingData,
     localSettings,
@@ -44,12 +44,12 @@ addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload):
     return;
   }
 
-  let currentGlobal = global;
-  const currentUserId = currentGlobal.currentUserId ? String(currentGlobal.currentUserId) : undefined;
+  const currentUserId = global.currentUserId ? String(global.currentUserId) : undefined;
+  const preference = loadCustomerServiceCloudSyncPreference();
 
   const getLocalSettings = () => (
     localSettings
-    || currentGlobal.customerServiceV2?.settings
+    || global.customerServiceV2?.settings
     || loadCustomerServiceV2SettingsFromStorage()
     || getDefaultCustomerServiceV2Settings()
   );
@@ -77,12 +77,12 @@ addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload):
     const normalized = normalizeSettingsForSave(nextSettings);
     saveCustomerServiceV2SettingsToStorage(normalized);
 
-    currentGlobal = updateCustomerServiceV2State(currentGlobal, {
-      ...ensureCustomerServiceV2State(currentGlobal.customerServiceV2),
+    global = updateCustomerServiceV2State(global, {
+      ...ensureCustomerServiceV2State(global.customerServiceV2),
       settings: normalized,
     });
 
-    setGlobal(currentGlobal);
+    setGlobal(global);
     updatePreferenceMetadata(normalized, meta);
     onDownload?.({
       ownerId: meta?.ownerId,
@@ -99,6 +99,18 @@ addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload):
       }
 
       const normalizedLocal = normalizeSettingsForSave(getLocalSettings());
+      const localHash = computeCustomerServiceSettingsHash(normalizedLocal);
+      const shouldSkipUpload = preference?.token === trimmedToken
+        && preference.lastSettingsHash === localHash;
+
+      if (shouldSkipUpload) {
+        logCustomerServiceCloudSyncDebug('sync:skipUploadUnchanged', {
+          token: maskCloudSyncToken(trimmedToken),
+          ownerId: currentUserId,
+        });
+        return;
+      }
+
       const response = await uploadCustomerServiceCloudConfig(trimmedToken, {
         ownerId: currentUserId,
         settings: normalizedLocal,
@@ -195,7 +207,7 @@ addActionHandler('syncCustomerServiceV2Cloud', async (global, actions, payload):
 });
 
 addActionHandler('autoSyncCustomerServiceV2Cloud', async (global, actions, payload): Promise<void> => {
-  const { tabId = getCurrentTabId() } = payload || {};
+  const { tabId = getCurrentTabId(), silent = false } = payload || {};
   const preference = loadCustomerServiceCloudSyncPreference();
   if (!preference?.token) {
     return;
@@ -206,9 +218,19 @@ addActionHandler('autoSyncCustomerServiceV2Cloud', async (global, actions, paylo
     return;
   }
 
-  let currentGlobal = global;
-  const currentUserId = currentGlobal.currentUserId ? String(currentGlobal.currentUserId) : undefined;
+  const currentUserId = global.currentUserId ? String(global.currentUserId) : undefined;
   const translate = getTranslationFn();
+
+  if (isAutoSyncCustomerServiceV2CloudInFlight) {
+    logCustomerServiceCloudSyncDebug('autoSync:skipInFlight', {
+      tabId,
+      token: maskCloudSyncToken(trimmedToken),
+      silent,
+    });
+    return;
+  }
+
+  isAutoSyncCustomerServiceV2CloudInFlight = true;
 
   logCustomerServiceCloudSyncDebug('autoSync:start', {
     tabId,
@@ -217,6 +239,7 @@ addActionHandler('autoSyncCustomerServiceV2Cloud', async (global, actions, paylo
     preferenceHash: preference.lastSettingsHash,
     preferenceOwnerId: preference.ownerId,
     currentUserId,
+    silent,
   });
 
   const persistDownloadedSettings = (settings: CustomerServiceSettings, meta?: {
@@ -227,12 +250,12 @@ addActionHandler('autoSyncCustomerServiceV2Cloud', async (global, actions, paylo
     const normalized = normalizeSettingsForSave(settings);
     saveCustomerServiceV2SettingsToStorage(normalized);
 
-    currentGlobal = getGlobal();
-    currentGlobal = updateCustomerServiceV2State(currentGlobal, {
-      ...ensureCustomerServiceV2State(currentGlobal.customerServiceV2),
+    global = getGlobal();
+    global = updateCustomerServiceV2State(global, {
+      ...ensureCustomerServiceV2State(global.customerServiceV2),
       settings: normalized,
     });
-    setGlobal(currentGlobal);
+    setGlobal(global);
 
     updateCustomerServiceCloudSyncPreferenceForToken(trimmedToken, (prev) => ({
       ...prev,
@@ -249,10 +272,12 @@ addActionHandler('autoSyncCustomerServiceV2Cloud', async (global, actions, paylo
       updatedAt: meta?.updatedAt,
     });
 
-    actions.showNotification({
-      message: translate('CustomerServiceCloudSyncUpdated'),
-      tabId,
-    });
+    if (!silent) {
+      actions.showNotification({
+        message: translate('CustomerServiceCloudSyncUpdated'),
+        tabId,
+      });
+    }
   };
 
   try {
@@ -333,9 +358,13 @@ addActionHandler('autoSyncCustomerServiceV2Cloud', async (global, actions, paylo
       token: maskCloudSyncToken(preference.token),
       error,
     });
-    actions.showNotification({
-      message: translate('CustomerServiceCloudSyncFailed'),
-      tabId,
-    });
+    if (!silent) {
+      actions.showNotification({
+        message: translate('CustomerServiceCloudSyncFailed'),
+        tabId,
+      });
+    }
+  } finally {
+    isAutoSyncCustomerServiceV2CloudInFlight = false;
   }
 });

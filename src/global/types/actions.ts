@@ -71,7 +71,6 @@ import type {
   PrivacyVisibility,
 } from '../../api/types';
 import type { ApiCredentials } from '../../components/payment/PaymentModal';
-import type { CustomerServiceQuickReply, CustomerServiceSettings } from './customerServiceV2';
 import type { FoldersActions } from '../../hooks/reducers/useFoldersReducer';
 import type { ReducerAction } from '../../hooks/useReducer';
 import type { P2pMessage } from '../../lib/vibecalls';
@@ -116,6 +115,7 @@ import type {
 } from '../../types';
 import type { WebApp, WebAppModalStateType, WebAppOutboundEvent } from '../../types/webapp';
 import type { DownloadableMedia } from '../helpers';
+import type { CustomerServiceQuickReply, CustomerServiceSettings } from './customerServiceV2';
 import type { SharedState } from './sharedState';
 import type { TabState } from './tabState';
 
