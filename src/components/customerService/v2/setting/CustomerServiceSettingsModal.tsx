@@ -149,47 +149,6 @@ const buildNormalizedSettings = (settings: FilterSettings, currentUserId?: strin
   ),
 });
 
-const buildNormalizedSavedSettings = (
-  saved?: SavedSettings,
-  currentUserId?: string,
-): NormalizedSettings | undefined => {
-  if (!saved) {
-    return undefined;
-  }
-
-  return {
-    monitoredChatIds: saved.monitoredChatIds ? [...saved.monitoredChatIds] : [],
-    filteredUserIds: saved.filteredUserIds ? [...saved.filteredUserIds] : [],
-    regexFilters: saved.regexFilters
-      ? saved.regexFilters.map((filter) => ({ source: filter.source, flags: filter.flags }))
-      : [],
-    mode: saved.mode === 'assist' ? 'assist' : 'oncall',
-    autoRead: Boolean(saved.autoRead),
-    quickReplies: normalizeCustomerServiceQuickReplies(saved.quickReplies ?? []),
-    quickReplyPanelGlobal: Boolean(saved.quickReplyPanelGlobal),
-    rules: saved.rules?.length ? JSON.parse(JSON.stringify(saved.rules)) : [],
-    oncall: ensureOncallStaffIncludesCurrentUser(
-      normalizeCustomerServiceOncallSettings(saved.oncall),
-      currentUserId,
-    ),
-  };
-};
-
-const stripRuleEnabled = (rules: UserRule[]) => (
-  rules.map(({ enabled: _enabled, ...rest }) => rest)
-);
-
-const isOnlyRuleEnabledChanged = (prev: NormalizedSettings, next: NormalizedSettings): boolean => {
-  const prevWithoutEnabled = { ...prev, rules: stripRuleEnabled(prev.rules) };
-  const nextWithoutEnabled = { ...next, rules: stripRuleEnabled(next.rules) };
-
-  if (JSON.stringify(prevWithoutEnabled) !== JSON.stringify(nextWithoutEnabled)) {
-    return false;
-  }
-
-  return JSON.stringify(prev) !== JSON.stringify(next);
-};
-
 const CustomerServiceSettingsModal = ({
   isOpen,
   currentUserId,
@@ -317,12 +276,7 @@ const CustomerServiceSettingsModal = ({
 
   const handleSave = useLastCallback(() => {
     const normalizedSettings = buildNormalizedSettings(settings, currentUserId);
-    const previousNormalized = buildNormalizedSavedSettings(savedSettings, currentUserId);
-    const skipCloudSync = previousNormalized
-      ? isOnlyRuleEnabledChanged(previousNormalized, normalizedSettings)
-      : false;
-
-    saveCustomerServiceV2Settings({ settings: normalizedSettings, skipCloudSync });
+    saveCustomerServiceV2Settings({ settings: normalizedSettings });
     handleClose();
   });
 

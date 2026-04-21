@@ -292,10 +292,17 @@ addActionHandler('autoSyncCustomerServiceV2Cloud', async (global, actions, paylo
     const ownerId = cloud.ownerId ? String(cloud.ownerId) : undefined;
     const normalizedIncoming = normalizeSettingsForSave(cloud.settings as CustomerServiceSettings);
     const incomingHash = computeCustomerServiceSettingsHash(normalizedIncoming);
+    const normalizedLocal = normalizeSettingsForSave(
+      global.customerServiceV2?.settings
+      || loadCustomerServiceV2SettingsFromStorage()
+      || getDefaultCustomerServiceV2Settings(),
+    );
+    const localHash = computeCustomerServiceSettingsHash(normalizedLocal);
     const remoteVersion = typeof cloud.version === 'number' ? cloud.version : 0;
     const lastVersion = preference.lastVersion || 0;
     const hasRemoteChanged = preference.lastVersion !== remoteVersion
       || preference.lastSettingsHash !== incomingHash;
+    const hasLocalDrift = localHash !== incomingHash;
 
     const canUpdate = cloud.canUpdate ?? ownersMatch(ownerId, currentUserId);
 
@@ -307,11 +314,13 @@ addActionHandler('autoSyncCustomerServiceV2Cloud', async (global, actions, paylo
       canUpdate,
       hasRemoteChanged,
       incomingHash,
+      localHash,
+      hasLocalDrift,
       storedHash: preference.lastSettingsHash,
     });
 
     if (!canUpdate) {
-      if (hasRemoteChanged) {
+      if (hasRemoteChanged || hasLocalDrift) {
         persistDownloadedSettings(normalizedIncoming, {
           ownerId,
           version: remoteVersion,
@@ -334,6 +343,21 @@ addActionHandler('autoSyncCustomerServiceV2Cloud', async (global, actions, paylo
     }
 
     if (hasRemoteChanged && remoteVersion > lastVersion) {
+      persistDownloadedSettings(normalizedIncoming, {
+        ownerId: ownerId || currentUserId,
+        version: remoteVersion,
+        updatedAt: cloud.updatedAt,
+      });
+      return;
+    }
+
+    if (hasLocalDrift && preference.lastSettingsHash === incomingHash) {
+      logCustomerServiceCloudSyncDebug('autoSync:repairOwnerLocalDrift', {
+        token: maskCloudSyncToken(trimmedToken),
+        remoteVersion,
+        localHash,
+        incomingHash,
+      });
       persistDownloadedSettings(normalizedIncoming, {
         ownerId: ownerId || currentUserId,
         version: remoteVersion,

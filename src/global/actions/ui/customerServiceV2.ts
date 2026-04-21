@@ -14,24 +14,28 @@
  * - customerServiceV2Helpers.ts - Shared utilities
  */
 
+// Import side-effect modules to register their action handlers
+import './customerServiceV2Cloud';
+import './customerServiceV2Messages';
+
+import type { RequiredGlobalActions } from '../../index';
 import type { ActionReturnType } from '../../types';
 import type { CustomerServiceSettings } from '../../types/customerServiceV2';
 
-import { CUSTOMER_SERVICE_CONFIG } from '../../../config/customerService';
 import { EDITABLE_INPUT_ID } from '../../../config';
+import { CUSTOMER_SERVICE_CONFIG } from '../../../config/customerService';
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
 import { getTranslationFn } from '../../../util/localization';
+import { loadCustomerServiceCloudSyncPreference } from '../../helpers/customerServiceCloudSyncPreference';
 import {
   loadCustomerServiceV2SettingsFromStorage,
   normalizeCustomerServiceQuickReplies,
   saveCustomerServiceV2SettingsToStorage,
 } from '../../helpers/customerServiceV2Settings';
-import { loadCustomerServiceCloudSyncPreference } from '../../helpers/customerServiceCloudSyncPreference';
 import { addActionHandler } from '../../index';
 import { updateTabState } from '../../reducers/tabs';
 import { selectChat, selectCurrentMessageList } from '../../selectors';
 import { selectCustomerServiceV2Settings } from '../../selectors/customerServiceV2';
-
 import {
   ensureCustomerServiceV2State,
   getDefaultCustomerServiceV2Settings,
@@ -41,11 +45,45 @@ import {
   updateCustomerServiceV2State,
 } from './customerServiceV2Helpers';
 
-// Import side-effect modules to register their action handlers
-import './customerServiceV2Messages';
-import './customerServiceV2Cloud';
-
 let isCheckingPausedChatsStatus = false;
+
+function uploadCustomerServiceSettingsToCloudIfOwner(
+  actions: RequiredGlobalActions,
+  global: { currentUserId?: string | number },
+  settings: CustomerServiceSettings,
+  tabId: number,
+) {
+  const preference = loadCustomerServiceCloudSyncPreference();
+  const token = preference?.token?.trim();
+  const currentUserId = global.currentUserId ? String(global.currentUserId) : undefined;
+  const ownerId = preference?.ownerId;
+
+  if (!token || !currentUserId || !ownerId || !ownersMatch(ownerId, currentUserId)) {
+    return;
+  }
+
+  const lang = getTranslationFn();
+  void actions.syncCustomerServiceV2Cloud({
+    tabId,
+    token,
+    operation: 'upload',
+    localSettings: settings,
+    onUpload: (result) => {
+      actions.showNotification({
+        message: lang('CustomerServiceCloudSyncUploadSuccessVersion', {
+          version: String(result?.version ?? 1),
+        }),
+        tabId,
+      });
+    },
+    onError: () => {
+      actions.showNotification({
+        message: lang('CustomerServiceCloudSyncFailed'),
+        tabId,
+      });
+    },
+  });
+}
 
 /**
  * Set current context for customer service message
@@ -211,6 +249,7 @@ addActionHandler('closeCustomerServiceV2Settings', (global, actions, payload): A
 });
 
 addActionHandler('toggleCustomerServiceV2Mode', (global, actions, payload): ActionReturnType => {
+  const { tabId = getCurrentTabId() } = payload || {};
   const cs = ensureCustomerServiceV2State(global.customerServiceV2);
 
   const existingSettings = cs.settings
@@ -232,14 +271,19 @@ addActionHandler('toggleCustomerServiceV2Mode', (global, actions, payload): Acti
     ),
     quickReplyPanelGlobal: Boolean(existingSettings.quickReplyPanelGlobal),
     rules: existingSettings.rules,
+    oncall: existingSettings.oncall,
   });
   saveCustomerServiceV2SettingsToStorage(normalized);
 
-  return updateCustomerServiceV2State(global, {
+  const nextGlobal = updateCustomerServiceV2State(global, {
     ...cs,
     settings: normalized,
     pausedChats: nextMode === 'assist' ? cs.pausedChats : undefined,
   });
+
+  uploadCustomerServiceSettingsToCloudIfOwner(actions, nextGlobal, normalized, tabId);
+
+  return nextGlobal;
 });
 
 addActionHandler('checkPausedChatsStatusV2', (global, actions, payload): ActionReturnType => {
@@ -297,7 +341,7 @@ addActionHandler('checkPausedChatsStatusV2', (global, actions, payload): ActionR
 });
 
 addActionHandler('saveCustomerServiceV2Settings', (global, actions, payload): ActionReturnType => {
-  const { settings, tabId = getCurrentTabId(), skipCloudSync = false } = payload;
+  const { settings, tabId = getCurrentTabId() } = payload;
 
   const normalized = normalizeSettingsForSave(settings);
   saveCustomerServiceV2SettingsToStorage(normalized);
@@ -307,36 +351,7 @@ addActionHandler('saveCustomerServiceV2Settings', (global, actions, payload): Ac
     settings: normalized,
   });
 
-  // After saving locally, if current user is the owner of a managed cloud token,
-  // upload the latest settings in the background.
-  const preference = loadCustomerServiceCloudSyncPreference();
-  const token = preference?.token?.trim();
-  const currentUserId = nextGlobal.currentUserId ? String(nextGlobal.currentUserId) : undefined;
-  const ownerId = preference?.ownerId;
-
-  if (!skipCloudSync && token && currentUserId && ownerId && ownersMatch(ownerId, currentUserId)) {
-    const lang = getTranslationFn();
-    void actions.syncCustomerServiceV2Cloud({
-      tabId,
-      token,
-      operation: 'upload',
-      localSettings: normalized,
-      onUpload: (result) => {
-        actions.showNotification({
-          message: lang('CustomerServiceCloudSyncUploadSuccessVersion', {
-            version: String(result?.version ?? 1),
-          }),
-          tabId,
-        });
-      },
-      onError: () => {
-        actions.showNotification({
-          message: lang('CustomerServiceCloudSyncFailed'),
-          tabId,
-        });
-      },
-    });
-  }
+  uploadCustomerServiceSettingsToCloudIfOwner(actions, nextGlobal, normalized, tabId);
 
   return nextGlobal;
 });
