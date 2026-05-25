@@ -6,17 +6,22 @@
 import type { ApiMessage } from '../../api/types';
 import type { GlobalState } from '../types';
 import type {
+  ActionExecution,
   Capability,
   CapabilityInput,
   CapabilityOutput,
-  UserRule,
+  CustomerServiceRuleAuditLog,
+  CustomerServiceRuleAuditStep,
+  CustomerServiceRuleEventType,
+  CustomerServiceRuleExecutionResult,
+  CustomerServiceRulesProcessResult,
   PipelineStep,
-  ActionExecution,
+  UserRule,
 } from '../types/customerServiceV2';
 
-import { selectCustomerServiceV2Settings } from '../selectors/customerServiceV2';
-
 import { randomDelayMs, sleep } from '../../util/delays';
+import { selectCustomerServiceV2Settings } from '../selectors/customerServiceV2';
+import { renderTemplate } from './templateRenderer';
 
 // Delay configuration for simulating human behavior
 const ACTION_DELAY_MIN_MS = 2000;
@@ -34,10 +39,32 @@ function getFirstNonEmptyString(...values: Array<string | undefined | null>) {
   return values.find((value) => typeof value === 'string' && value.trim() !== '');
 }
 
+type RuleExecutionContext = {
+  eventType: CustomerServiceRuleEventType;
+  rulePhase?: UserRule['executionPhase'];
+};
+
+function createAuditId(rule: UserRule, message: ApiMessage): string {
+  return [
+    rule.id || 'rule',
+    message.chatId,
+    message.id,
+    Date.now(),
+    Math.random().toString(36).slice(2, 8),
+  ].join(':');
+}
+
+function getPipelineDataKeys(pipelineData: Record<string, any>): string[] {
+  return Object.keys(pipelineData)
+    .filter((key) => key !== 'message' && key !== 'executionLog' && key !== 'auditSteps')
+    .sort();
+}
+
 async function buildInitialPipelineData(
   message: ApiMessage,
   global: GlobalState,
   initialPipelineData?: Record<string, any>,
+  executionContext?: RuleExecutionContext,
 ) {
   const [
     { selectChat, selectPeer, selectSender },
@@ -57,6 +84,7 @@ async function buildInitialPipelineData(
   const chat = selectChat(global, message.chatId);
   const chatPeer = selectPeer(global, message.chatId) || chat;
   const sender = selectSender(global, message);
+  const isSenderBot = sender && 'type' in sender && sender.type === 'userTypeBot' ? 'true' : 'false';
   const rawText = getMessageText(message)?.text;
   const previewText = getMessageSummaryText(lang, message, getMessageStatefulContent(global, message));
 
@@ -94,12 +122,19 @@ async function buildInitialPipelineData(
     chatId: message.chatId,
     chatTitle,
     chatName: chatTitle,
+    messageId: message.id,
     senderId: message.senderId || '',
+    isSenderBot,
     sender: senderName,
     senderName,
     text,
     previewText: resolvedPreviewText,
+    date: typeof message.date === 'number' ? message.date : '',
+    createdAt: typeof message.date === 'number' ? message.date * 1000 : Date.now(),
+    eventType: executionContext?.eventType || initialPipelineData?.eventType || '',
+    rulePhase: executionContext?.rulePhase || initialPipelineData?.rulePhase || '',
     executionLog: [],
+    auditSteps: [],
   } as Record<string, any>;
 }
 
@@ -170,6 +205,7 @@ function registerDeferredTask(task: DeferredTask): void {
         );
       }
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error('[RuleEngine:Async] Deferred task failed:', error);
     }
   }, task.delay);
@@ -263,6 +299,64 @@ function logExecution(pipelineData: Record<string, any>, message: string, stepId
   console.log(`[RuleEngine]${stepInfo} ${message}`);
 }
 
+function appendAuditStep(pipelineData: Record<string, any>, step: CustomerServiceRuleAuditStep): void {
+  if (!Array.isArray(pipelineData.auditSteps)) {
+    pipelineData.auditSteps = [];
+  }
+
+  pipelineData.auditSteps.push(step);
+}
+
+function markOutputHandled(
+  capability: Capability,
+  result: CapabilityOutput,
+): boolean {
+  return result.handled ?? (capability.type === 'action' && result.success);
+}
+
+function buildRuleAuditLog(params: {
+  auditId: string;
+  rule: UserRule;
+  message: ApiMessage;
+  eventType: CustomerServiceRuleEventType;
+  startedAt: number;
+  pipelineData: Record<string, any>;
+  matched: boolean;
+  handled: boolean;
+  pending: boolean;
+  terminatedByFailure: boolean;
+  skipPostProcessing: boolean;
+  error?: string;
+}): CustomerServiceRuleAuditLog {
+  const executionLog = Array.isArray(params.pipelineData.executionLog)
+    ? params.pipelineData.executionLog.map(String)
+    : [];
+  const steps = Array.isArray(params.pipelineData.auditSteps)
+    ? params.pipelineData.auditSteps as CustomerServiceRuleAuditStep[]
+    : [];
+
+  return {
+    id: params.auditId,
+    ruleId: params.rule.id,
+    ruleName: params.rule.name,
+    chatId: params.message.chatId,
+    messageId: params.message.id,
+    eventType: params.eventType,
+    rulePhase: params.rule.executionPhase,
+    startedAt: params.startedAt,
+    finishedAt: Date.now(),
+    matched: params.matched,
+    handled: params.handled,
+    pending: params.pending,
+    terminatedByFailure: params.terminatedByFailure,
+    skipPostProcessing: params.skipPostProcessing,
+    error: params.error,
+    executionLog,
+    steps,
+    pipelineDataKeys: getPipelineDataKeys(params.pipelineData),
+  };
+}
+
 /**
  * Handle routing logic after a step execution
  */
@@ -275,10 +369,11 @@ async function handleRouting(
   global: GlobalState,
   actions: any,
   pipelineData: Record<string, any>,
-): Promise<{ nextStepIndex?: number; shouldContinue: boolean }> {
+): Promise<{ nextStepIndex?: number; shouldContinue: boolean; actionHandled: boolean }> {
   const routing = success ? step.onSuccess : step.onFailure;
   let nextStepIndex = currentIndex + 1;
   let shouldContinue = true;
+  let actionHandled = false;
 
   const input: CapabilityInput = {
     message,
@@ -290,15 +385,17 @@ async function handleRouting(
   };
 
   if (routing?.executeAction) {
-    await executeAction(routing.executeAction, input);
+    const actionResult = await executeAction(routing.executeAction, input);
+    actionHandled = Boolean(actionResult?.success && (actionResult.handled ?? true));
   }
 
   if (routing?.gotoStep) {
-    const targetIndex = pipeline.findIndex((s) => s.id === routing.gotoStep);
+    const targetStepId = renderTemplate(routing.gotoStep, pipelineData).trim();
+    const targetIndex = pipeline.findIndex((s) => s.id === targetStepId);
     if (targetIndex !== -1) {
       nextStepIndex = targetIndex;
     } else {
-      logExecution(pipelineData, `Routing error: Step "${routing.gotoStep}" not found`);
+      logExecution(pipelineData, `Routing error: Step "${targetStepId || routing.gotoStep}" not found`);
     }
   }
 
@@ -307,7 +404,7 @@ async function handleRouting(
     shouldContinue = false;
   }
 
-  return { nextStepIndex, shouldContinue };
+  return { nextStepIndex, shouldContinue, actionHandled };
 }
 
 /**
@@ -320,9 +417,11 @@ async function executePipelineInternal(
   global: GlobalState,
   actions: any,
   pipelineData: Record<string, any>,
-): Promise<{ ruleMatched: boolean; terminatedByFailure: boolean }> {
+): Promise<{ ruleMatched: boolean; ruleHandled: boolean; pending: boolean; terminatedByFailure: boolean }> {
   let currentStepIndex = startIndex;
   let ruleMatched = false;
+  let ruleHandled = false;
+  let pending = false;
   let terminatedByFailure = false;
 
   while (currentStepIndex < pipeline.length) {
@@ -337,6 +436,12 @@ async function executePipelineInternal(
     }
 
     logExecution(pipelineData, `Capability: ${capability.name}`, stepId);
+    const auditStep: CustomerServiceRuleAuditStep = {
+      stepId,
+      capabilityId: step.capabilityId,
+      capabilityName: capability.name,
+      startedAt: Date.now(),
+    };
 
     try {
       // Human-like delay only for action steps that may call Telegram APIs
@@ -354,7 +459,18 @@ async function executePipelineInternal(
 
       if (!currentMessage) {
         logExecution(pipelineData, 'Abort: Message was deleted by user during processing.', stepId);
-        return { ruleMatched, terminatedByFailure: true };
+        auditStep.finishedAt = Date.now();
+        auditStep.success = false;
+        auditStep.handled = false;
+        auditStep.error = 'Message was deleted by user during processing.';
+        appendAuditStep(pipelineData, auditStep);
+
+        return {
+          ruleMatched,
+          ruleHandled,
+          pending,
+          terminatedByFailure: true,
+        };
       }
       // ------------------------------------------------------------
 
@@ -368,21 +484,42 @@ async function executePipelineInternal(
       };
 
       const result: CapabilityOutput = await capability.execute(input);
+      const isHandled = markOutputHandled(capability, result);
 
       // Log step result
-      logExecution(pipelineData, `Step Result: ${result.success ? 'SUCCESS' : 'FAILURE'}${result.error ? ` - Error: ${result.error}` : ''}`, stepId);
+      logExecution(
+        pipelineData,
+        `Step Result: ${result.success ? 'SUCCESS' : 'FAILURE'}`
+        + `${isHandled ? ' (HANDLED)' : ''}${result.error ? ` - Error: ${result.error}` : ''}`,
+        stepId,
+      );
       if (result.data && Object.keys(result.data).length > 0) {
         logExecution(pipelineData, `Step Output: ${JSON.stringify(result.data)}`, stepId);
       }
+
+      auditStep.finishedAt = Date.now();
+      auditStep.success = result.success;
+      auditStep.handled = isHandled;
+      auditStep.error = result.error;
+      auditStep.outputKeys = result.data ? Object.keys(result.data).sort() : undefined;
+      appendAuditStep(pipelineData, auditStep);
 
       // Merge output data
       if (result.data) {
         Object.assign(pipelineData, result.data);
       }
 
+      if (result.success) {
+        ruleMatched = true;
+      }
+      if (isHandled) {
+        ruleHandled = true;
+      }
+
       // Handle async deferred execution
       if (result.deferred) {
         logExecution(pipelineData, `Step requested deferred execution (delay: ${result.deferred.delay}ms)`);
+        auditStep.pending = true;
         registerDeferredTask({
           delay: result.deferred.delay,
           checkFn: result.deferred.checkFn,
@@ -393,15 +530,12 @@ async function executePipelineInternal(
           pipelineData: { ...pipelineData }, // Ensure current step data is included
         });
         ruleMatched = true;
+        pending = true;
         break;
       }
 
-      if (result.success) {
-        ruleMatched = true;
-      }
-
       // Routing
-      const { nextStepIndex, shouldContinue } = await handleRouting(
+      const { nextStepIndex, shouldContinue, actionHandled } = await handleRouting(
         result.success,
         step,
         pipeline,
@@ -411,14 +545,23 @@ async function executePipelineInternal(
         actions,
         pipelineData,
       );
+      if (actionHandled) {
+        ruleHandled = true;
+      }
 
       if (nextStepIndex !== undefined && nextStepIndex !== currentStepIndex + 1) {
         const nextStep = pipeline[nextStepIndex];
-        logExecution(pipelineData, `Routing: jumping to step ${nextStepIndex + 1} (${nextStep?.id || nextStep?.capabilityId})`);
+        logExecution(
+          pipelineData,
+          `Routing: jumping to step ${nextStepIndex + 1} (${nextStep?.id || nextStep?.capabilityId})`,
+        );
       }
 
       if (!shouldContinue) {
-        logExecution(pipelineData, `Pipeline requested to STOP (Reason: ${result.success ? 'Success termination' : 'Failure termination'})`);
+        logExecution(
+          pipelineData,
+          `Pipeline requested to STOP (Reason: ${result.success ? 'Success termination' : 'Failure termination'})`,
+        );
         if (!result.success && step.onFailure?.stopPipeline) {
           terminatedByFailure = true;
         }
@@ -428,6 +571,11 @@ async function executePipelineInternal(
       currentStepIndex = nextStepIndex!;
     } catch (error) {
       logExecution(pipelineData, `Step failed with error: ${error instanceof Error ? error.message : String(error)}`);
+      auditStep.finishedAt = Date.now();
+      auditStep.success = false;
+      auditStep.handled = false;
+      auditStep.error = error instanceof Error ? error.message : String(error);
+      appendAuditStep(pipelineData, auditStep);
       if (step.onFailure?.stopPipeline !== false) {
         terminatedByFailure = true;
         break;
@@ -436,7 +584,12 @@ async function executePipelineInternal(
     }
   }
 
-  return { ruleMatched, terminatedByFailure };
+  return {
+    ruleMatched,
+    ruleHandled,
+    pending,
+    terminatedByFailure,
+  };
 }
 
 /**
@@ -448,12 +601,21 @@ export async function executeRule(
   global: GlobalState,
   actions: any,
   initialPipelineData?: Record<string, any>,
-): Promise<boolean> {
-  const pipelineData = await buildInitialPipelineData(message, global, initialPipelineData);
+  executionContext?: RuleExecutionContext,
+): Promise<CustomerServiceRuleExecutionResult> {
+  const auditId = createAuditId(rule, message);
+  const startedAt = Date.now();
+  const eventType = executionContext?.eventType || 'any_message';
+  const pipelineData = await buildInitialPipelineData(message, global, initialPipelineData, executionContext);
 
   logExecution(pipelineData, `Starting rule: ${rule.name} (${rule.id})`);
 
-  const { ruleMatched, terminatedByFailure } = await executePipelineInternal(
+  const {
+    ruleMatched,
+    ruleHandled,
+    pending,
+    terminatedByFailure,
+  } = await executePipelineInternal(
     rule.pipeline,
     0,
     message,
@@ -462,8 +624,35 @@ export async function executeRule(
     pipelineData,
   );
 
-  logExecution(pipelineData, `Rule finished. Matched: ${ruleMatched}, TerminatedByFailure: ${terminatedByFailure}`);
-  return ruleMatched && !terminatedByFailure;
+  const handled = ruleHandled && !terminatedByFailure;
+  const skipPostProcessing = handled && Boolean(rule.skipPostProcessing);
+
+  logExecution(
+    pipelineData,
+    `Rule finished. Matched: ${ruleMatched}, Handled: ${handled}, Pending: ${pending}, `
+    + `TerminatedByFailure: ${terminatedByFailure}`,
+  );
+
+  return {
+    matched: ruleMatched && !terminatedByFailure,
+    handled,
+    pending,
+    terminatedByFailure,
+    skipPostProcessing,
+    auditLog: buildRuleAuditLog({
+      auditId,
+      rule,
+      message,
+      eventType,
+      startedAt,
+      pipelineData,
+      matched: ruleMatched && !terminatedByFailure,
+      handled,
+      pending,
+      terminatedByFailure,
+      skipPostProcessing,
+    }),
+  };
 }
 
 /**
@@ -472,7 +661,7 @@ export async function executeRule(
 export async function executeAction(
   actionExecution: ActionExecution,
   input: CapabilityInput,
-): Promise<void> {
+): Promise<CapabilityOutput | undefined> {
   const actionId = typeof actionExecution === 'string'
     ? actionExecution
     : actionExecution.capabilityId;
@@ -483,7 +672,7 @@ export async function executeAction(
   const capability = capabilityRegistry.get(actionId);
   if (!capability || capability.type !== 'action') {
     logExecution(input.pipelineData, `Action error: Not found or not an action: ${actionId}`);
-    return;
+    return undefined;
   }
 
   try {
@@ -498,9 +687,28 @@ export async function executeAction(
     };
 
     logExecution(input.pipelineData, `Executing action: ${capability.name}`);
-    await capability.execute(actionInput);
+    const result = await capability.execute(actionInput);
+    const handled = markOutputHandled(capability, result);
+    logExecution(
+      input.pipelineData,
+      `Action Result: ${result.success ? 'SUCCESS' : 'FAILURE'}`
+      + `${handled ? ' (HANDLED)' : ''}${result.error ? ` - Error: ${result.error}` : ''}`,
+    );
+
+    return {
+      ...result,
+      handled,
+    };
   } catch (error) {
-    logExecution(input.pipelineData, `Action ${actionId} failed: ${error instanceof Error ? error.message : String(error)}`);
+    logExecution(
+      input.pipelineData,
+      `Action ${actionId} failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+      handled: false,
+    };
   }
 }
 
@@ -523,21 +731,32 @@ export async function executePipelineFromStep(
  */
 export async function processMessageWithRules(
   message: ApiMessage,
-  eventType: 'customer_message' | 'bot_reply' | 'any_message',
+  eventType: CustomerServiceRuleEventType,
   global: GlobalState,
   actions: any,
   customRules?: UserRule[],
   initialPipelineData?: Record<string, any>,
-): Promise<{ matched: boolean; skipPostProcessing: boolean }> {
+): Promise<CustomerServiceRulesProcessResult> {
   const settings = selectCustomerServiceV2Settings(global);
   const rules = customRules || (settings?.rules?.filter((r) => r.enabled)) || [];
 
   if (rules.length === 0) {
-    return { matched: false, skipPostProcessing: false };
+    return {
+      matched: false,
+      handled: false,
+      pending: false,
+      skipPostProcessing: false,
+      auditLogs: [],
+      errors: [],
+    };
   }
 
   let matched = false;
+  let handled = false;
+  let pending = false;
   let skipPostProcessing = false;
+  const auditLogs: CustomerServiceRuleAuditLog[] = [];
+  const errors: string[] = [];
 
   for (const rule of rules) {
     if (!checkTrigger(rule, message, eventType, global)) {
@@ -545,19 +764,45 @@ export async function processMessageWithRules(
     }
 
     try {
-      const handled = await executeRule(rule, message, global, actions, initialPipelineData);
-      matched = matched || handled;
+      const result = await executeRule(
+        rule,
+        message,
+        global,
+        actions,
+        initialPipelineData,
+        {
+          eventType,
+          rulePhase: rule.executionPhase,
+        },
+      );
+      if (result.auditLog) {
+        auditLogs.push(result.auditLog);
+      }
 
-      if (handled && rule.skipPostProcessing) {
+      matched = matched || result.matched;
+      handled = handled || result.handled;
+      pending = pending || result.pending;
+
+      if (result.skipPostProcessing) {
         skipPostProcessing = true;
         break;
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      errors.push(`${rule.id}: ${errorMessage}`);
+      // eslint-disable-next-line no-console
       console.error(`[RuleEngine] Rule ${rule.id} failed:`, error);
     }
   }
 
-  return { matched, skipPostProcessing };
+  return {
+    matched,
+    handled,
+    pending,
+    skipPostProcessing,
+    auditLogs,
+    errors,
+  };
 }
 
 /**
@@ -566,7 +811,7 @@ export async function processMessageWithRules(
 function checkTrigger(
   rule: UserRule,
   message: ApiMessage,
-  eventType: 'customer_message' | 'bot_reply' | 'any_message',
+  eventType: CustomerServiceRuleEventType,
   global: GlobalState,
 ): boolean {
   if (rule.trigger.eventType !== 'any_message') {

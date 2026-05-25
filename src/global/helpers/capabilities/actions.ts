@@ -41,7 +41,7 @@ function extractSentMessageId(result: unknown): number | undefined {
 
   if ('updates' in result && Array.isArray(result.updates)) {
     const idUpdate = result.updates.find(
-      (update): update is typeof update & { id: number } => ('id' in update && typeof update.id === 'number'),
+      (update): update is { id: number } => ('id' in update && typeof update.id === 'number'),
     );
 
     if (idUpdate) {
@@ -135,7 +135,8 @@ export const actionMarkReadCapability: Capability = {
       if (unreadCount > maxUnreadCount) {
         return {
           success: false,
-          error: `Prevented batch read: ${unreadCount} messages would be marked as read, exceeds maxUnreadCount (${maxUnreadCount}).`,
+          error: `Prevented batch read: ${unreadCount} messages would be marked as read, `
+            + `exceeds maxUnreadCount (${maxUnreadCount}).`,
         };
       }
 
@@ -225,6 +226,7 @@ export const actionAutoReplyCapability: Capability = {
           maxId: message.id,
         });
       } catch (markReadError) {
+        // eslint-disable-next-line no-console
         console.error('[RuleEngine] Auto reply mark read failed:', markReadError);
       }
 
@@ -237,6 +239,7 @@ export const actionAutoReplyCapability: Capability = {
           });
           typingActionActive = true;
         } catch (typingError) {
+          // eslint-disable-next-line no-console
           console.error('[RuleEngine] Typing indicator failed:', typingError);
         }
 
@@ -278,6 +281,7 @@ export const actionAutoReplyCapability: Capability = {
           threadId,
           action: { type: 'cancel' },
         }).catch((cancelError) => {
+          // eslint-disable-next-line no-console
           console.error('[RuleEngine] Typing cancel failed:', cancelError);
         });
       }
@@ -360,6 +364,7 @@ export const actionAddQueueCapability: Capability = {
 
       return {
         success: true,
+        handled: true,
         data: {
           addedToQueue: true,
         },
@@ -459,6 +464,7 @@ export const actionForwardCapability: Capability = {
           maxId: message.id,
         });
       } catch (markReadError) {
+        // eslint-disable-next-line no-console
         console.error('[RuleEngine] Forward mark read failed:', markReadError);
         // Continue even if mark read fails
       }
@@ -543,8 +549,11 @@ export const actionSendToCapability: Capability = {
 
   async execute({ message, config, pipelineData, global }) {
     const { toChatId, template } = config;
+    const resolvedToChatId = typeof toChatId === 'string'
+      ? renderTemplate(toChatId, pipelineData).trim()
+      : toChatId;
 
-    if (!toChatId) {
+    if (!resolvedToChatId) {
       return {
         success: false,
         error: 'Target chat ID is required',
@@ -562,7 +571,7 @@ export const actionSendToCapability: Capability = {
       const { callApi } = await import('../../../api/gramjs');
       const { selectChat } = await import('../../selectors');
 
-      const toChat = selectChat(global, toChatId);
+      const toChat = selectChat(global, resolvedToChatId);
 
       if (!toChat) {
         return {
@@ -583,7 +592,7 @@ export const actionSendToCapability: Capability = {
       return {
         success: true,
         data: {
-          sentTo: toChatId,
+          sentTo: resolvedToChatId,
           sentText: text,
           sentMessageId,
         },

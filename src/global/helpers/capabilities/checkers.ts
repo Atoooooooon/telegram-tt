@@ -5,8 +5,95 @@
 
 import type { ApiMessage } from '../../../api/types';
 import type { Capability } from '../../types/customerServiceV2';
+
 import { getMessageText } from '../messages';
-import { waitHumanLike } from '../../../util/delays';
+
+type SwitchRouteCase = {
+  match: string;
+  gotoStep?: string;
+  mode?: 'contains' | 'equals' | 'regex';
+  flags?: string;
+  set?: Record<string, unknown>;
+};
+
+function parseSwitchCases(rawCases: unknown): SwitchRouteCase[] {
+  if (Array.isArray(rawCases)) {
+    return rawCases.filter((item): item is SwitchRouteCase => {
+      return Boolean(
+        item
+        && typeof item === 'object'
+        && 'match' in item
+        && typeof item.match === 'string'
+        && (
+          !('gotoStep' in item)
+          || typeof item.gotoStep === 'string'
+        )
+        && (
+          !('set' in item)
+          || (
+            item.set
+            && typeof item.set === 'object'
+            && !Array.isArray(item.set)
+          )
+        ),
+      );
+    });
+  }
+
+  if (typeof rawCases !== 'string' || !rawCases.trim()) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(rawCases) as unknown;
+    return parseSwitchCases(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function switchCaseMatches(
+  value: string,
+  routeCase: SwitchRouteCase,
+  defaultMode: SwitchRouteCase['mode'],
+): boolean {
+  const mode = routeCase.mode || defaultMode || 'contains';
+
+  if (mode === 'equals') {
+    return value === routeCase.match;
+  }
+
+  if (mode === 'regex') {
+    try {
+      return new RegExp(routeCase.match, routeCase.flags || '').test(value);
+    } catch {
+      return false;
+    }
+  }
+
+  return value.includes(routeCase.match);
+}
+
+function parseSwitchData(rawData: unknown): Record<string, unknown> {
+  if (!rawData) {
+    return {};
+  }
+
+  if (typeof rawData === 'object' && !Array.isArray(rawData)) {
+    return rawData as Record<string, unknown>;
+  }
+
+  if (typeof rawData !== 'string' || !rawData.trim()) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(rawData) as unknown;
+    return parseSwitchData(parsed);
+  } catch {
+    return {};
+  }
+}
 
 /**
  * Check message content and properties
@@ -127,17 +214,24 @@ export const checkMessageCapability: Capability = {
       let varPassed = false;
       const actualString = String(actualValue || '');
 
-      // Security Check: If expectedValue is empty but operator is contains/equals/regex, 
+      // Security Check: If expectedValue is empty but operator is contains/equals/regex,
       // it's likely a missing variable. Don't allow it to pass to prevent false positives.
-      if (!expectedValue && (variableOperator === 'contains' || variableOperator === 'equals' || variableOperator === 'regex')) {
+      if (
+        !expectedValue
+        && (variableOperator === 'contains' || variableOperator === 'equals' || variableOperator === 'regex')
+      ) {
         varPassed = false;
       } else {
         switch (variableOperator) {
           case 'exists':
-            varPassed = actualValue !== undefined && actualValue !== null && actualValue !== '';
+            varPassed = actualValue !== undefined
+              && (typeof actualValue !== 'object' || Boolean(actualValue))
+              && actualValue !== '';
             break;
           case 'not_exists':
-            varPassed = actualValue === undefined || actualValue === null || actualValue === '';
+            varPassed = actualValue === undefined
+              || (typeof actualValue === 'object' && !actualValue)
+              || actualValue === '';
             break;
           case 'equals':
             varPassed = actualString === expectedValue;
@@ -207,6 +301,8 @@ export const waitForReplyCapability: Capability = {
   },
 
   async execute({ message, config, pipelineData }) {
+    await Promise.resolve();
+
     const {
       chatId = message.chatId,
       messageIdField = 'sentMessageId',
@@ -234,7 +330,7 @@ export const waitForReplyCapability: Capability = {
         checkFn: async () => {
           const { getGlobal } = await import('../../index');
           const { selectChatMessages } = await import('../../selectors');
-          const { getMessageText } = await import('../messages');
+          const { getMessageText: getReplyMessageText } = await import('../messages');
           const { sleep } = await import('../../../util/delays');
 
           while (Date.now() - startTime < timeout * 1000) {
@@ -246,37 +342,39 @@ export const waitForReplyCapability: Capability = {
                 return m.replyInfo?.type === 'message' && m.replyInfo.replyToMsgId === targetMessageId;
               });
 
-                        if (replies.length > 0) {
-                          const lastReply = replies[replies.length - 1];
-                          const replyText = getMessageText(lastReply)?.text || '';
-                          // eslint-disable-next-line no-console
-                          console.log(`[wait_for_reply] Found reply: ${replyText}`);
-              
-                          // Mark the reply as read (human-like behavior)
-                          try {
-                            const { callApi } = await import('../../../api/gramjs');
-                            const { selectChat } = await import('../../selectors');
-                            const chat = selectChat(freshGlobal, chatId);
-                            if (chat) {
-                              const threadId = (lastReply as any).threadId || 0;
-                              await callApi('markMessageListRead', {
-                                chat,
-                                threadId,
-                                maxId: lastReply.id,
-                              });
-                            }
-                          } catch (e) {
-                            console.error('[wait_for_reply] Mark read failed:', e);
-                          }
-              
-                          return {
-                            success: true,
-                            data: {
-                              botReplyText: replyText,
-                              botReplyMessageId: lastReply.id,
-                            },
-                          };
-                        }            }
+              if (replies.length > 0) {
+                const lastReply = replies[replies.length - 1];
+                const replyText = getReplyMessageText(lastReply)?.text || '';
+                // eslint-disable-next-line no-console
+                console.log(`[wait_for_reply] Found reply: ${replyText}`);
+
+                // Mark the reply as read (human-like behavior)
+                try {
+                  const { callApi } = await import('../../../api/gramjs');
+                  const { selectChat } = await import('../../selectors');
+                  const chat = selectChat(freshGlobal, chatId);
+                  if (chat) {
+                    const threadId = (lastReply as { threadId?: number }).threadId || 0;
+                    await callApi('markMessageListRead', {
+                      chat,
+                      threadId,
+                      maxId: lastReply.id,
+                    });
+                  }
+                } catch (error) {
+                  // eslint-disable-next-line no-console
+                  console.error('[wait_for_reply] Mark read failed:', error);
+                }
+
+                return {
+                  success: true,
+                  data: {
+                    botReplyText: replyText,
+                    botReplyMessageId: lastReply.id,
+                  },
+                };
+              }
+            }
 
             // Wait for next poll
             await sleep(pollInterval * 1000);
@@ -288,6 +386,103 @@ export const waitForReplyCapability: Capability = {
         },
       },
     };
+  },
+};
+
+/**
+ * Route the pipeline to one of many steps based on a variable value.
+ */
+export const switchRouteCapability: Capability = {
+  id: 'switch_route',
+  name: '多分支路由',
+  type: 'checker',
+  description: '根据 pipelineData 字段匹配多个 case, 输出可用于 gotoStep 的目标步骤',
+
+  configSchema: {
+    inputField: {
+      type: 'string',
+      label: '输入字段',
+      default: 'text',
+      placeholder: '例如 botReplyText',
+    },
+    casesJson: {
+      type: 'textarea',
+      label: '分支 JSON',
+      required: true,
+      placeholder: '[{"match":"供应商A","gotoStep":"supplier_a","set":{"targetChatId":"-100..."}}]',
+    },
+    defaultGotoStep: {
+      type: 'string',
+      label: '默认步骤',
+      placeholder: '没有命中时跳转的步骤 ID',
+    },
+    defaultSetJson: {
+      type: 'textarea',
+      label: '默认变量 JSON',
+      placeholder: '{"targetChatId":"-100..."}',
+    },
+    outputField: {
+      type: 'string',
+      label: '输出字段',
+      default: 'switchGotoStep',
+    },
+    defaultMode: {
+      type: 'select',
+      label: '默认匹配模式',
+      options: ['contains', 'equals', 'regex'],
+      default: 'contains',
+    },
+  },
+
+  execute({ config, pipelineData }) {
+    const {
+      inputField = 'text',
+      casesJson,
+      defaultGotoStep,
+      defaultSetJson,
+      outputField = 'switchGotoStep',
+      defaultMode = 'contains',
+    } = config;
+
+    const value = String(pipelineData[inputField] || '');
+    const cases = parseSwitchCases(casesJson);
+
+    if (cases.length === 0) {
+      return Promise.resolve({
+        success: false,
+        error: 'No valid switch cases configured',
+      });
+    }
+
+    const matchedCase = cases.find((routeCase) => switchCaseMatches(
+      value,
+      routeCase,
+      defaultMode,
+    ));
+
+    const gotoStep = matchedCase?.gotoStep || defaultGotoStep;
+    const switchData = matchedCase?.set || (!matchedCase ? parseSwitchData(defaultSetJson) : {});
+    const hasSwitchData = Object.keys(switchData).length > 0;
+
+    if (!gotoStep && !hasSwitchData) {
+      return Promise.resolve({
+        success: false,
+        data: {
+          switchMatched: false,
+        },
+      });
+    }
+
+    return Promise.resolve({
+      success: true,
+      data: {
+        ...switchData,
+        [outputField]: gotoStep,
+        switchGotoStep: gotoStep,
+        switchMatched: Boolean(matchedCase),
+        switchMatchedValue: matchedCase?.match || '',
+      },
+    });
   },
 };
 
@@ -311,15 +506,16 @@ export const checkHasReplyCapability: Capability = {
     },
   },
 
-  async execute({ message, config }) {
+  execute({ message, config }) {
     const { timeWindow = 300 } = config;
 
     // eslint-disable-next-line no-console
     console.log(`[check_has_reply] Scheduling reply check for message ${message.id} in ${timeWindow} seconds`);
 
     // Return deferred task - async executor will handle it
-    return {
+    return Promise.resolve({
       success: true, // Initial success, actual result determined by checkFn
+      handled: true,
       data: {
         scheduled: true,
         timeWindow,
@@ -353,11 +549,13 @@ export const checkHasReplyCapability: Capability = {
           const hasReply = replies.length > 0;
 
           // eslint-disable-next-line no-console
-          console.log(`[check_has_reply] After ${timeWindow}s delay: message ${message.id} has ${replies.length} replies`);
+          console.log(
+            `[check_has_reply] After ${timeWindow}s delay: message ${message.id} has ${replies.length} replies`,
+          );
 
           return hasReply;
         },
       },
-    };
+    });
   },
 };

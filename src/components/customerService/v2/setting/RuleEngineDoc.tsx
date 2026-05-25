@@ -1,6 +1,8 @@
 import type { FC } from '../../../../lib/teact/teact';
 import { memo } from '../../../../lib/teact/teact';
 
+import { CUSTOMER_SERVICE_PIPELINE_VARIABLES } from '../../../../global/types/customerServiceV2';
+
 import Icon from '../../../common/icons/Icon';
 
 import styles from './tabs/RuleEngineTab.module.scss';
@@ -132,7 +134,7 @@ const RuleEngineDoc: FC = () => {
                   {' '}
                   或
                   {' '}
-                  <code>{"{ capabilityId, config }"}</code>
+                  <code>{'{ capabilityId, config }'}</code>
                   )
                 </li>
               </ul>
@@ -156,7 +158,7 @@ const RuleEngineDoc: FC = () => {
                   {' '}
                   或
                   {' '}
-                  <code>{"{ capabilityId, config }"}</code>
+                  <code>{'{ capabilityId, config }'}</code>
                   )
                 </li>
               </ul>
@@ -168,30 +170,14 @@ const RuleEngineDoc: FC = () => {
           <h5>默认上下文 (pipelineData)</h5>
           <p>每条消息进入规则引擎时会初始化以下字段,后续能力输出会继续合并到同一个上下文对象中:</p>
           <ul>
-            <li>
-              <code>message</code>
-              : 当前消息对象
-            </li>
-            <li>
-              <code>chatId</code>
-              : 消息所在聊天ID
-            </li>
-            <li>
-              <code>chatTitle</code>
-              : 聊天标题(来自消息入口上下文)
-            </li>
-            <li>
-              <code>senderId</code>
-              : 发送者ID
-            </li>
-            <li>
-              <code>senderName</code>
-              : 发送者名称(便于模板拼接)
-            </li>
-            <li>
-              <code>text</code>
-              : 消息文本(入口预填充,也可被 OCR/文本处理步骤覆盖)
-            </li>
+            {CUSTOMER_SERVICE_PIPELINE_VARIABLES.map((variable) => (
+              <li key={variable.key}>
+                <code>{variable.key}</code>
+                :
+                {' '}
+                {variable.description}
+              </li>
+            ))}
             <li>
               <code>executionLog</code>
               : 引擎执行日志数组
@@ -210,17 +196,55 @@ const RuleEngineDoc: FC = () => {
             </h6>
             <p>检查消息属性、Pipeline 变量或系统元数据。支持多条件组合。</p>
             <ul>
-              <li><strong>基础检查:</strong> <code>textPattern</code> (支持包含/正则/全等), <code>checkHasPhoto</code>, <code>checkHasVideo</code>, <code>checkIsReply</code></li>
+              <li>
+                <strong>基础检查:</strong>
+                {' '}
+                <code>textPattern</code>
+                {' '}
+                (支持包含/正则/全等),
+                {' '}
+                <code>checkHasPhoto</code>
+                ,
+                {' '}
+                <code>checkHasVideo</code>
+                ,
+                {' '}
+                <code>checkIsReply</code>
+              </li>
               <li>
                 <strong>变量对比 (Advanced):</strong>
                 <ul>
-                  <li><code>variableKey</code>: 要检查的变量名 (如 <code>botReplyText</code> 或 <code>chat.title</code>)</li>
-                  <li><code>variableOperator</code>: 操作符 (contains, equals, regex, exists, not_exists)</li>
-                  <li><code>variableExpectedValue</code>: 期望值 (支持 <code>{"{{变量}}"}</code> 语法)</li>
+                  <li>
+                    <code>variableKey</code>
+                    : 要检查的变量名 (如
+                    {' '}
+                    <code>botReplyText</code>
+                    {' '}
+                    或
+                    {' '}
+                    <code>chat.title</code>
+                    )
+                  </li>
+                  <li>
+                    <code>variableOperator</code>
+                    : 操作符 (contains, equals, regex, exists, not_exists)
+                  </li>
+                  <li>
+                    <code>variableExpectedValue</code>
+                    : 期望值 (支持
+                    {' '}
+                    <code>{'{{变量}}'}</code>
+                    {' '}
+                    语法)
+                  </li>
                 </ul>
               </li>
             </ul>
-            <p><strong>逻辑:</strong> 所有启用的检查项必须全部通过 (AND 逻辑) 才会返回 success。</p>
+            <p>
+              <strong>逻辑:</strong>
+              {' '}
+              所有启用的检查项必须全部通过 (AND 逻辑) 才会返回 success。
+            </p>
           </div>
 
           <div className={styles.capabilityItem}>
@@ -355,7 +379,10 @@ const RuleEngineDoc: FC = () => {
               </li>
               <li>
                 <code>extractPattern</code>
-                : 正则表达式 (string, 如 数字模式 <code>{"([0-9]{8,})"}</code>)
+                : 正则表达式 (string, 如 数字模式
+                {' '}
+                <code>{'([0-9]{8,})'}</code>
+                )
               </li>
               <li>
                 <code>extractFlags</code>
@@ -464,30 +491,46 @@ const RuleEngineDoc: FC = () => {
               <li>
                 <code>/ds 511684153654</code>
                 {' '}
-                → <code>511684153654</code>
+                →
                 {' '}
-                → <code>511684153654</code>
+                <code>511684153654</code>
+                {' '}
+                →
+                {' '}
+                <code>511684153654</code>
               </li>
               <li>
                 <code>/ds 511684153654你好请问</code>
                 {' '}
-                → <code>511684153654</code>
+                →
                 {' '}
-                → <code>511684153654</code>
+                <code>511684153654</code>
+                {' '}
+                →
+                {' '}
+                <code>511684153654</code>
               </li>
               <li>
                 <code>/df 12532532534</code>
                 {' '}
-                → <code>12532532534</code>
+                →
                 {' '}
-                → <code>12532532534</code>
+                <code>12532532534</code>
+                {' '}
+                →
+                {' '}
+                <code>12532532534</code>
               </li>
               <li>
                 <code>6203564895</code>
                 {' '}
-                → <code>6203564895</code>
+                →
                 {' '}
-                → <code>6203564895</code>
+                <code>6203564895</code>
+                {' '}
+                →
+                {' '}
+                <code>6203564895</code>
               </li>
             </ul>
           </div>
@@ -971,13 +1014,39 @@ const RuleEngineDoc: FC = () => {
           <h6>常用精简示例</h6>
           <ul>
             <li>
-              <strong>AI 已解决自动已读</strong>: 监听 <code>bot_reply</code>，使用 <code>check_message</code> 正则匹配关键词，最后 <code>action_mark_read</code>。
+              <strong>AI 已解决自动已读</strong>
+              : 监听
+              <code>bot_reply</code>
+              ，使用
+              <code>check_message</code>
+              {' '}
+              正则匹配关键词，最后
+              <code>action_mark_read</code>
+              。
             </li>
             <li>
-              <strong>5分钟超时转人工</strong>: 使用 <code>check_has_reply</code> 设置 300秒，在 <code>onFailure</code> 中执行 <code>action_add_queue</code>；如需同时进入后端保障，可设置 <code>syncToOncall: true</code>。
+              <strong>5分钟超时转人工</strong>
+              : 使用
+              <code>check_has_reply</code>
+              {' '}
+              设置 300秒，在
+              <code>onFailure</code>
+              {' '}
+              中执行
+              <code>action_add_queue</code>
+              ；如需同时进入后端保障，可设置
+              <code>syncToOncall: true</code>
+              。
             </li>
             <li>
-              <strong>关键词转发</strong>: <code>check_message</code> 匹配敏感词，<code>action_forward</code> 到管理群。
+              <strong>关键词转发</strong>
+              :
+              <code>check_message</code>
+              {' '}
+              匹配敏感词，
+              <code>action_forward</code>
+              {' '}
+              到管理群。
             </li>
           </ul>
         </section>
@@ -1067,7 +1136,11 @@ const RuleEngineDoc: FC = () => {
             <li>
               <strong>JSON 格式:</strong>
               {' '}
-              不支持注释,使用"格式化"按钮检查语法错误
+              不支持注释,使用
+              {' '}
+              <code>格式化</code>
+              {' '}
+              按钮检查语法错误
             </li>
             <li>
               <strong>调试技巧:</strong>

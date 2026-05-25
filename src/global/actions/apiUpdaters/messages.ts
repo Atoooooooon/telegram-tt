@@ -10,13 +10,8 @@ import type {
 import { MAIN_THREAD_ID } from '../../../api/types';
 
 import { SERVICE_NOTIFICATIONS_USER_ID } from '../../../config';
-import { isMonitoredChat, isFilteredUser, shouldFilterMessage } from '../../helpers/customerServiceV2';
-import { reportCustomerServiceStaffReply, reportCustomerServiceUsefulMessage } from '../../helpers/customerServiceOncall';
-import { callApi } from '../../../api/gramjs';
-import { processMessageWithRules } from '../../helpers/ruleEngine';
-import { registerAllCapabilities } from '../../helpers/capabilities';
-import { getHumanDelayMs } from '../../../util/delays';
 import { areDeepEqual } from '../../../util/areDeepEqual';
+import { getHumanDelayMs } from '../../../util/delays';
 import { isUserId } from '../../../util/entities/ids';
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
 import {
@@ -26,6 +21,7 @@ import { getMessageKey, isLocalMessageId } from '../../../util/keys/messageKey';
 import { notifyAboutMessage } from '../../../util/notifications';
 import { onTickEnd } from '../../../util/schedulers';
 import { getServerTime } from '../../../util/serverTime';
+import { callApi } from '../../../api/gramjs';
 import {
   addPaidReaction,
   checkIfHasUnreadReactions,
@@ -40,7 +36,14 @@ import {
   isUserBot,
   pickMatchingTypingDraftMessage,
 } from '../../helpers';
+import { registerAllCapabilities } from '../../helpers/capabilities';
+import {
+  reportCustomerServiceStaffReply,
+  reportCustomerServiceUsefulMessage,
+} from '../../helpers/customerServiceOncall';
+import { isFilteredUser, isMonitoredChat, shouldFilterMessage } from '../../helpers/customerServiceV2';
 import { getMessageReplyInfo, getStoryReplyInfo } from '../../helpers/replies';
+import { processMessageWithRules } from '../../helpers/ruleEngine';
 import {
   addActionHandler,
   getGlobal,
@@ -394,17 +397,59 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
           text: messageText?.text || '',
         };
 
-        const preFilterPromise = preFilterRules.length > 0
-          ? processMessageWithRules(newMessage, eventType, global, actions, preFilterRules, initialRuleContext)
-          : Promise.resolve({ matched: false, skipPostProcessing: false });
-
-        preFilterPromise.then(({ skipPostProcessing: skipByPreFilter }) => {
-          if (skipByPreFilter) {
-            // eslint-disable-next-line no-console
-            console.log('[RuleEngine] Pre-filter rule skipped post-processing for message:', message.id);
+        const persistRuleAuditLogs = (
+          auditLogs: Awaited<ReturnType<typeof processMessageWithRules>>['auditLogs'],
+        ) => {
+          if (!auditLogs.length) {
             return;
           }
 
+          global = getGlobal();
+          global = appendCustomerServiceRuleAuditLogs(global, auditLogs);
+          setGlobal(global);
+        };
+
+        const reportUsefulMessage = (actionGlobal: GlobalState) => {
+          const actionSettings = actionGlobal.customerServiceV2?.settings;
+          if (!actionSettings?.oncall?.enabled) {
+            return;
+          }
+
+          reportCustomerServiceUsefulMessage({
+            chatId,
+            messageId: newMessage.id,
+            createdAt: typeof newMessage.date === 'number' ? newMessage.date * 1000 : Date.now(),
+            chatTitle: chat?.title,
+            senderId: newMessage.senderId,
+            text: messageText?.text,
+            previewText: messageText?.text,
+            oncallConfig: actionSettings.oncall,
+          });
+        };
+
+        const addMessageToQueueOrReportOnly = (reason: string) => {
+          const actionGlobal = getGlobal();
+          const actionCs = actionGlobal.customerServiceV2;
+          const actionSettings = actionCs?.settings;
+          const actionIsPaused = actionSettings?.mode === 'assist' && Boolean(actionCs?.pausedChats?.[chatId]);
+
+          reportUsefulMessage(actionGlobal);
+
+          if (actionIsPaused) {
+            // eslint-disable-next-line no-console
+            console.log(
+              `Chat monitoring paused for useful message: ${chatId} message: ${message.id}`
+              + ` reported to oncall only (${reason})`,
+            );
+            return;
+          }
+
+          // eslint-disable-next-line no-console
+          console.log(`Adding to customer service queue (${reason}):`, message.id);
+          actions.addToCustomerServiceV2({ message: newMessage, chatId, tabId: getCurrentTabId() });
+        };
+
+        const runDefaultCustomerServiceFlow = () => {
           // Re-read live global at each async boundary — avoids stale closure reads
           const freshGlobal = getGlobal();
           const freshCs = freshGlobal.customerServiceV2;
@@ -416,21 +461,31 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
 
           // Phase 2: Basic filtering
           if (!isMonitoredChat(chatId, freshGlobal)) {
-            console.log("Message from non-monitored chat:", chatId, "message:", message.id, "ignored");
+            // eslint-disable-next-line no-console
+            console.log('Message from non-monitored chat:', chatId, 'message:', message.id, 'ignored');
             return;
           }
 
           const isFiltered = shouldFilterMessage(chatId, message.senderId, messageText, freshGlobal, newMessage);
           if (isFiltered) {
             if (freshIsPaused) {
-              console.log("Chat monitoring paused for filtered message:", chatId, "message:", message.id, "ignored (assist mode)");
+              // eslint-disable-next-line no-console
+              console.log(
+                'Chat monitoring paused for filtered message:',
+                chatId,
+                'message:',
+                message.id,
+                'ignored (assist mode)',
+              );
               return;
             }
 
-            console.log("Message filtered by basic filters:", message.id, "in chat:", chatId);
+            // eslint-disable-next-line no-console
+            console.log('Message filtered by basic filters:', message.id, 'in chat:', chatId);
 
             if (freshSettings?.autoRead) {
-              console.log("Auto-reading filtered message in monitored chat:", message.id);
+              // eslint-disable-next-line no-console
+              console.log('Auto-reading filtered message in monitored chat:', message.id);
               const monitoredChat = selectChat(freshGlobal, chatId);
               if (monitoredChat) {
                 const delayMs = getHumanDelayMs({ minMs: 900, maxMs: 1700 });
@@ -440,9 +495,11 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
                     threadId: MAIN_THREAD_ID,
                     maxId: message.id,
                   }).then(() => {
-                    console.log("Auto-read successful for filtered message:", message.id, "after", delayMs, "ms");
+                    // eslint-disable-next-line no-console
+                    console.log('Auto-read successful for filtered message:', message.id, 'after', delayMs, 'ms');
                   }).catch((error) => {
-                    console.error("Auto-read failed for filtered message:", message.id, error);
+                    // eslint-disable-next-line no-console
+                    console.error('Auto-read failed for filtered message:', message.id, error);
                   });
                 }, delayMs);
               }
@@ -452,69 +509,69 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
 
           // Phase 3: Post-filter rules
           const postFilterPromise = freshPostFilterRules.length > 0
-            ? processMessageWithRules(newMessage, eventType, freshGlobal, actions, freshPostFilterRules, initialRuleContext)
-            : Promise.resolve({ matched: false, skipPostProcessing: false });
+            ? processMessageWithRules(newMessage, eventType, freshGlobal, actions, freshPostFilterRules, {
+              ...initialRuleContext,
+              rulePhase: 'post-filter',
+            })
+            : Promise.resolve({
+              matched: false,
+              handled: false,
+              pending: false,
+              skipPostProcessing: false,
+              auditLogs: [],
+              errors: [],
+            });
 
-          postFilterPromise.then(({ matched: handledByRules }) => {
-            const actionGlobal = getGlobal();
-            const actionCs = actionGlobal.customerServiceV2;
-            const actionSettings = actionCs?.settings;
-            const actionIsPaused = actionSettings?.mode === 'assist' && Boolean(actionCs?.pausedChats?.[chatId]);
+          postFilterPromise.then((postFilterResult) => {
+            persistRuleAuditLogs(postFilterResult.auditLogs);
 
-            if (!handledByRules) {
-              if (actionSettings?.oncall?.enabled) {
-                reportCustomerServiceUsefulMessage({
-                  chatId,
-                  messageId: newMessage.id,
-                  createdAt: typeof newMessage.date === 'number' ? newMessage.date * 1000 : Date.now(),
-                  chatTitle: chat?.title,
-                  senderId: newMessage.senderId,
-                  text: messageText?.text,
-                  previewText: messageText?.text,
-                  oncallConfig: actionSettings.oncall,
-                });
-              }
-
-              if (actionIsPaused) {
-                console.log("Chat monitoring paused for useful message:", chatId, "message:", message.id, "reported to oncall only");
-                return;
-              }
-
-              console.log("No rules matched, adding to customer service queue:", message.id);
-              actions.addToCustomerServiceV2({ message: newMessage, chatId, tabId: getCurrentTabId() });
-            } else {
-              console.log("Message handled by rule engine:", message.id);
-            }
-          }).catch((error) => {
-            console.error('[RuleEngine] Post-filter processing failed:', error);
-
-            const actionGlobal = getGlobal();
-            const actionCs = actionGlobal.customerServiceV2;
-            const actionSettings = actionCs?.settings;
-            const actionIsPaused = actionSettings?.mode === 'assist' && Boolean(actionCs?.pausedChats?.[chatId]);
-
-            if (actionSettings?.oncall?.enabled) {
-              reportCustomerServiceUsefulMessage({
-                chatId,
-                messageId: newMessage.id,
-                createdAt: typeof newMessage.date === 'number' ? newMessage.date * 1000 : Date.now(),
-                chatTitle: chat?.title,
-                senderId: newMessage.senderId,
-                text: messageText?.text,
-                previewText: messageText?.text,
-                oncallConfig: actionSettings.oncall,
-              });
-            }
-
-            if (actionIsPaused) {
-              console.log("Chat monitoring paused after post-filter error:", chatId, "message:", message.id, "reported to oncall only");
+            if (!postFilterResult.handled && !postFilterResult.pending) {
+              addMessageToQueueOrReportOnly(
+                postFilterResult.errors.length ? 'post-filter rule error fallback' : 'no rule handled message',
+              );
               return;
             }
 
-            actions.addToCustomerServiceV2({ message: newMessage, chatId, tabId: getCurrentTabId() });
+            // eslint-disable-next-line no-console
+            console.log(
+              postFilterResult.pending ? 'Message pending in rule engine:' : 'Message handled by rule engine:',
+              message.id,
+            );
+          }).catch((error) => {
+            // eslint-disable-next-line no-console
+            console.error('[RuleEngine] Post-filter processing failed:', error);
+            addMessageToQueueOrReportOnly('post-filter exception fallback');
           });
+        };
+
+        const preFilterPromise = preFilterRules.length > 0
+          ? processMessageWithRules(newMessage, eventType, global, actions, preFilterRules, {
+            ...initialRuleContext,
+            rulePhase: 'pre-filter',
+          })
+          : Promise.resolve({
+            matched: false,
+            handled: false,
+            pending: false,
+            skipPostProcessing: false,
+            auditLogs: [],
+            errors: [],
+          });
+
+        preFilterPromise.then((preFilterResult) => {
+          persistRuleAuditLogs(preFilterResult.auditLogs);
+
+          if (preFilterResult.skipPostProcessing) {
+            // eslint-disable-next-line no-console
+            console.log('[RuleEngine] Pre-filter rule skipped post-processing for message:', message.id);
+            return;
+          }
+
+          runDefaultCustomerServiceFlow();
         }).catch((error) => {
+          // eslint-disable-next-line no-console
           console.error('[RuleEngine] Pre-filter processing failed:', error);
+          runDefaultCustomerServiceFlow();
         });
       }
 

@@ -16,6 +16,7 @@ import {
 import {
   checkHasReplyCapability,
   checkMessageCapability,
+  switchRouteCapability,
   waitForReplyCapability,
 } from './checkers';
 // Import extractors
@@ -28,6 +29,7 @@ export function registerAllCapabilities(): void {
   registerCapability(checkMessageCapability);
   registerCapability(checkHasReplyCapability);
   registerCapability(waitForReplyCapability);
+  registerCapability(switchRouteCapability);
 
   // Extractors
   registerCapability(textProcessorCapability);
@@ -47,6 +49,7 @@ export {
   checkMessageCapability,
   checkHasReplyCapability,
   waitForReplyCapability,
+  switchRouteCapability,
   // Extractors
   textProcessorCapability,
   ocrImageCapability,

@@ -1,12 +1,18 @@
 import type { GlobalState } from '../../types';
-import type { CustomerServiceSettings, CustomerServiceV2State } from '../../types/customerServiceV2';
+import type {
+  CustomerServiceRuleAuditLog,
+  CustomerServiceSettings,
+  CustomerServiceV2State,
+} from '../../types/customerServiceV2';
 
 import { CUSTOMER_SERVICE_CONFIG } from '../../../config/customerService';
-import { selectChat } from '../../selectors';
 import {
   normalizeCustomerServiceOncallSettings,
   normalizeCustomerServiceQuickReplies,
 } from '../../helpers/customerServiceV2Settings';
+import { selectChat } from '../../selectors';
+
+const MAX_CUSTOMER_SERVICE_AUDIT_LOGS = 200;
 
 export function ownersMatch(left?: string, right?: string): boolean {
   if (!left || !right) {
@@ -26,6 +32,7 @@ export function ensureCustomerServiceV2State(state?: CustomerServiceV2State): Cu
   return state ?? {
     messages: [],
     messagesByChatId: {},
+    auditLogs: [],
     lastSyncTimestamp: Date.now(),
     messageCount: 0,
   };
@@ -36,6 +43,27 @@ export function updateCustomerServiceV2State<T extends GlobalState>(
   nextState: CustomerServiceV2State,
 ): T {
   return { ...global, customerServiceV2: nextState };
+}
+
+export function appendCustomerServiceRuleAuditLogs<T extends GlobalState>(
+  global: T,
+  auditLogs: CustomerServiceRuleAuditLog[],
+): T {
+  if (!auditLogs.length) {
+    return global;
+  }
+
+  const cs = ensureCustomerServiceV2State(global.customerServiceV2);
+  const nextAuditLogs = [
+    ...(cs.auditLogs || []),
+    ...auditLogs,
+  ].slice(-MAX_CUSTOMER_SERVICE_AUDIT_LOGS);
+
+  return updateCustomerServiceV2State(global, {
+    ...cs,
+    auditLogs: nextAuditLogs,
+    lastSyncTimestamp: Date.now(),
+  });
 }
 
 export function logCustomerServiceCloudSyncDebug(...args: unknown[]) {

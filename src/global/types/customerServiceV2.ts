@@ -87,6 +87,7 @@ export type CustomerServiceV2State = {
   messagesByChatId: Record<string, ApiMessage[]>;
   settings?: CustomerServiceSettings;
   pausedChats?: Record<string, PausedChat>;
+  auditLogs?: CustomerServiceRuleAuditLog[];
   lastSyncTimestamp: number;
   messageCount: number;
 };
@@ -141,16 +142,14 @@ export type CapabilityType = 'checker' | 'extractor' | 'action';
 /**
  * Configuration schema for capability parameters
  */
-export type CapabilityConfigSchema = {
-  [key: string]: {
-    type: 'string' | 'number' | 'boolean' | 'select' | 'textarea';
-    label: string;
-    default?: any;
-    options?: string[];
-    placeholder?: string;
-    required?: boolean;
-  };
-};
+export type CapabilityConfigSchema = Record<string, {
+  type: 'string' | 'number' | 'boolean' | 'select' | 'textarea';
+  label: string;
+  default?: any;
+  options?: string[];
+  placeholder?: string;
+  required?: boolean;
+}>;
 
 /**
  * Capability execution input
@@ -171,6 +170,11 @@ export type CapabilityOutput = {
   success: boolean;
   data?: Record<string, any>;
   error?: string;
+  /**
+   * Marks the message as fully handled by this capability.
+   * Action capabilities default to handled on success; checkers/extractors do not.
+   */
+  handled?: boolean;
   /**
    * Deferred execution for async capabilities
    * When set, the sync engine will stop and register this task to async executor
@@ -239,4 +243,170 @@ export type UserRule = {
     senderIds?: string[];
   };
   pipeline: PipelineStep[];
+};
+
+export type CustomerServiceRuleEventType = 'customer_message' | 'bot_reply' | 'any_message';
+
+export type CustomerServicePipelineVariableDefinition = {
+  key: string;
+  label: string;
+  description: string;
+  source: 'message' | 'chat' | 'sender' | 'runtime' | 'capability';
+  example?: string;
+};
+
+export const CUSTOMER_SERVICE_PIPELINE_VARIABLES = [
+  {
+    key: 'chatId',
+    label: 'Source chat ID',
+    description: 'Telegram chat ID where the original message arrived.',
+    source: 'chat',
+    example: '-1001234567890',
+  },
+  {
+    key: 'chatTitle',
+    label: 'Source chat title',
+    description: 'Readable title for the source chat.',
+    source: 'chat',
+    example: 'Customer Support Group',
+  },
+  {
+    key: 'chatName',
+    label: 'Source chat name',
+    description: 'Alias of chatTitle for compatibility with older rules.',
+    source: 'chat',
+    example: 'Customer Support Group',
+  },
+  {
+    key: 'messageId',
+    label: 'Message ID',
+    description: 'Telegram message ID of the original message.',
+    source: 'message',
+    example: '12345',
+  },
+  {
+    key: 'senderId',
+    label: 'Sender ID',
+    description: 'Telegram user ID of the message sender when available.',
+    source: 'sender',
+    example: '777000',
+  },
+  {
+    key: 'sender',
+    label: 'Sender name',
+    description: 'Readable sender display name.',
+    source: 'sender',
+    example: 'Alice',
+  },
+  {
+    key: 'senderName',
+    label: 'Sender name',
+    description: 'Alias of sender for compatibility with older rules.',
+    source: 'sender',
+    example: 'Alice',
+  },
+  {
+    key: 'isSenderBot',
+    label: 'Sender is bot',
+    description: 'String value "true" or "false" for template and checker use.',
+    source: 'sender',
+    example: 'false',
+  },
+  {
+    key: 'text',
+    label: 'Message text',
+    description: 'Best available text for the message, falling back to preview text for non-text messages.',
+    source: 'message',
+    example: 'Hello, I need help',
+  },
+  {
+    key: 'previewText',
+    label: 'Preview text',
+    description: 'Telegram message summary text.',
+    source: 'message',
+    example: 'Photo',
+  },
+  {
+    key: 'date',
+    label: 'Message timestamp',
+    description: 'Original Telegram message timestamp in seconds when available.',
+    source: 'message',
+    example: '1712678400',
+  },
+  {
+    key: 'createdAt',
+    label: 'Message timestamp ms',
+    description: 'Message timestamp in milliseconds, or current time when message date is unavailable.',
+    source: 'message',
+    example: '1712678400000',
+  },
+  {
+    key: 'eventType',
+    label: 'Rule event type',
+    description: 'Current rule event type: customer_message, bot_reply, or any_message.',
+    source: 'runtime',
+    example: 'customer_message',
+  },
+  {
+    key: 'rulePhase',
+    label: 'Rule phase',
+    description: 'Processing phase that invoked the rule.',
+    source: 'runtime',
+    example: 'post-filter',
+  },
+] satisfies CustomerServicePipelineVariableDefinition[];
+
+export type CustomerServicePipelineVariableKey =
+  typeof CUSTOMER_SERVICE_PIPELINE_VARIABLES[number]['key'];
+
+export type CustomerServiceRuleAuditStep = {
+  stepId: string;
+  capabilityId: string;
+  capabilityName?: string;
+  startedAt: number;
+  finishedAt?: number;
+  success?: boolean;
+  handled?: boolean;
+  pending?: boolean;
+  error?: string;
+  outputKeys?: string[];
+};
+
+export type CustomerServiceRuleAuditLog = {
+  id: string;
+  ruleId: string;
+  ruleName: string;
+  chatId: string;
+  messageId: number;
+  eventType: CustomerServiceRuleEventType;
+  rulePhase?: UserRule['executionPhase'];
+  startedAt: number;
+  finishedAt: number;
+  matched: boolean;
+  handled: boolean;
+  pending: boolean;
+  terminatedByFailure: boolean;
+  skipPostProcessing: boolean;
+  error?: string;
+  executionLog: string[];
+  steps: CustomerServiceRuleAuditStep[];
+  pipelineDataKeys: string[];
+};
+
+export type CustomerServiceRuleExecutionResult = {
+  matched: boolean;
+  handled: boolean;
+  pending: boolean;
+  terminatedByFailure: boolean;
+  skipPostProcessing: boolean;
+  auditLog?: CustomerServiceRuleAuditLog;
+};
+
+export type CustomerServiceRulesProcessResult = {
+  matched: boolean;
+  handled: boolean;
+  pending: boolean;
+  skipPostProcessing: boolean;
+  auditLogs: CustomerServiceRuleAuditLog[];
+  errors: string[];
 };

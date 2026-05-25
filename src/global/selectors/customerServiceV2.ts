@@ -1,8 +1,8 @@
 import type { ApiMessage } from '../../api/types';
 import type { GlobalState } from '../types';
-import type { CustomerServiceV2State } from '../types/customerServiceV2';
-
+import type { CustomerServiceRuleAuditLog, CustomerServiceV2State } from '../types/customerServiceV2';
 import { CUSTOMER_SERVICE_VIRTUAL_CHAT_ID } from '../types/customerServiceV2';
+
 import { selectTabState } from './tabs';
 
 export function selectCustomerServiceV2State(
@@ -27,6 +27,12 @@ export function selectCustomerServiceV2MessageCount(
   global: GlobalState,
 ): number {
   return global.customerServiceV2?.messageCount || 0;
+}
+
+export function selectCustomerServiceV2RuleAuditLogs(
+  global: GlobalState,
+): CustomerServiceRuleAuditLog[] {
+  return global.customerServiceV2?.auditLogs || [];
 }
 
 export function selectIsCustomerServiceV2Open(
