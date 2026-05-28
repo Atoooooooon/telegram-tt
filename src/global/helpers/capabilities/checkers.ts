@@ -13,7 +13,7 @@ type SwitchRouteCase = {
   gotoStep?: string;
   mode?: 'contains' | 'equals' | 'regex';
   flags?: string;
-  set?: Record<string, unknown>;
+  data?: Record<string, unknown>;
 };
 
 function parseSwitchCases(rawCases: unknown): SwitchRouteCase[] {
@@ -29,11 +29,11 @@ function parseSwitchCases(rawCases: unknown): SwitchRouteCase[] {
           || typeof item.gotoStep === 'string'
         )
         && (
-          !('set' in item)
+          !('data' in item)
           || (
-            item.set
-            && typeof item.set === 'object'
-            && !Array.isArray(item.set)
+            item.data
+            && typeof item.data === 'object'
+            && !Array.isArray(item.data)
           )
         ),
       );
@@ -72,27 +72,6 @@ function switchCaseMatches(
   }
 
   return value.includes(routeCase.match);
-}
-
-function parseSwitchData(rawData: unknown): Record<string, unknown> {
-  if (!rawData) {
-    return {};
-  }
-
-  if (typeof rawData === 'object' && !Array.isArray(rawData)) {
-    return rawData as Record<string, unknown>;
-  }
-
-  if (typeof rawData !== 'string' || !rawData.trim()) {
-    return {};
-  }
-
-  try {
-    const parsed = JSON.parse(rawData) as unknown;
-    return parseSwitchData(parsed);
-  } catch {
-    return {};
-  }
 }
 
 /**
@@ -409,22 +388,22 @@ export const switchRouteCapability: Capability = {
       type: 'textarea',
       label: '分支 JSON',
       required: true,
-      placeholder: '[{"match":"供应商A","gotoStep":"supplier_a","set":{"targetChatId":"-100..."}}]',
+      placeholder: '[{"match":"供应商A","gotoStep":"supplier_a","data":{"targetChatId":"-100..."}}]',
     },
     defaultGotoStep: {
       type: 'string',
       label: '默认步骤',
       placeholder: '没有命中时跳转的步骤 ID',
     },
-    defaultSetJson: {
-      type: 'textarea',
-      label: '默认变量 JSON',
-      placeholder: '{"targetChatId":"-100..."}',
-    },
     outputField: {
       type: 'string',
       label: '输出字段',
       default: 'switchGotoStep',
+    },
+    dataOutputField: {
+      type: 'string',
+      label: '数据输出字段',
+      default: 'switchData',
     },
     defaultMode: {
       type: 'select',
@@ -439,8 +418,8 @@ export const switchRouteCapability: Capability = {
       inputField = 'text',
       casesJson,
       defaultGotoStep,
-      defaultSetJson,
       outputField = 'switchGotoStep',
+      dataOutputField = 'switchData',
       defaultMode = 'contains',
     } = config;
 
@@ -461,10 +440,9 @@ export const switchRouteCapability: Capability = {
     ));
 
     const gotoStep = matchedCase?.gotoStep || defaultGotoStep;
-    const switchData = matchedCase?.set || (!matchedCase ? parseSwitchData(defaultSetJson) : {});
-    const hasSwitchData = Object.keys(switchData).length > 0;
+    const switchData = matchedCase?.data || {};
 
-    if (!gotoStep && !hasSwitchData) {
+    if (!gotoStep && Object.keys(switchData).length === 0) {
       return Promise.resolve({
         success: false,
         data: {
@@ -476,9 +454,10 @@ export const switchRouteCapability: Capability = {
     return Promise.resolve({
       success: true,
       data: {
-        ...switchData,
         [outputField]: gotoStep,
+        [dataOutputField]: switchData,
         switchGotoStep: gotoStep,
+        switchData,
         switchMatched: Boolean(matchedCase),
         switchMatchedValue: matchedCase?.match || '',
       },

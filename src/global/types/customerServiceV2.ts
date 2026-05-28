@@ -206,6 +206,15 @@ export type ActionExecution = string | {
   config?: Record<string, any>;
 };
 
+export type PipelineSetConfig = Record<string, unknown>;
+
+export type PipelineRoute = {
+  stopPipeline?: boolean;
+  gotoStep?: string;
+  executeAction?: ActionExecution;
+  set?: PipelineSetConfig;
+};
+
 /**
  * Pipeline step in a rule
  */
@@ -213,16 +222,9 @@ export type PipelineStep = {
   id: string;
   capabilityId: string;
   config: Record<string, any>;
-  onSuccess?: {
-    stopPipeline?: boolean;
-    gotoStep?: string;
-    executeAction?: ActionExecution;
-  };
-  onFailure?: {
-    stopPipeline?: boolean;
-    gotoStep?: string;
-    executeAction?: ActionExecution;
-  };
+  set?: PipelineSetConfig;
+  onSuccess?: PipelineRoute;
+  onFailure?: PipelineRoute;
 };
 
 /**

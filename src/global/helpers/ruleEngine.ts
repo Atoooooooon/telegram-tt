@@ -15,6 +15,8 @@ import type {
   CustomerServiceRuleEventType,
   CustomerServiceRuleExecutionResult,
   CustomerServiceRulesProcessResult,
+  PipelineRoute,
+  PipelineSetConfig,
   PipelineStep,
   UserRule,
 } from '../types/customerServiceV2';
@@ -314,6 +316,45 @@ function markOutputHandled(
   return result.handled ?? (capability.type === 'action' && result.success);
 }
 
+function renderPipelineSetValue(value: unknown, pipelineData: Record<string, any>): unknown {
+  if (typeof value === 'string') {
+    return renderTemplate(value, pipelineData);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => renderPipelineSetValue(item, pipelineData));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nestedValue]) => [
+        key,
+        renderPipelineSetValue(nestedValue, pipelineData),
+      ]),
+    );
+  }
+
+  return value;
+}
+
+function applyPipelineSet(
+  pipelineData: Record<string, any>,
+  setConfig: PipelineSetConfig | undefined,
+): string[] {
+  if (!setConfig || Object.keys(setConfig).length === 0) {
+    return [];
+  }
+
+  const updatedKeys: string[] = [];
+
+  Object.entries(setConfig).forEach(([key, value]) => {
+    pipelineData[key] = renderPipelineSetValue(value, pipelineData);
+    updatedKeys.push(key);
+  });
+
+  return updatedKeys;
+}
+
 function buildRuleAuditLog(params: {
   auditId: string;
   rule: UserRule;
@@ -374,6 +415,16 @@ async function handleRouting(
   let nextStepIndex = currentIndex + 1;
   let shouldContinue = true;
   let actionHandled = false;
+
+  const stepSetKeys = applyPipelineSet(pipelineData, step.set);
+  if (stepSetKeys.length > 0) {
+    logExecution(pipelineData, `Applied step set keys: ${stepSetKeys.sort().join(', ')}`);
+  }
+
+  const routeSetKeys = applyPipelineSet(pipelineData, routing?.set);
+  if (routeSetKeys.length > 0) {
+    logExecution(pipelineData, `Applied route set keys: ${routeSetKeys.sort().join(', ')}`);
+  }
 
   const input: CapabilityInput = {
     message,
