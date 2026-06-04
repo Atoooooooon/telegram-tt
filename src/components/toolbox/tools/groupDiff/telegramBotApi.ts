@@ -45,14 +45,14 @@ async function requestTelegramBotApi<T>(
       body: JSON.stringify(payload || {}),
     });
   } catch (error) {
-    throw new Error(getErrorMessage(`调用 Telegram Bot API ${method} 失败`, error));
+    throw new Error(getErrorMessage(`调用 Telegram Bot API ${method} 失败`, error), { cause: error });
   }
 
   let data: TelegramBotApiResponse<T>;
   try {
     data = await response.json() as TelegramBotApiResponse<T>;
   } catch (error) {
-    throw new Error(getErrorMessage(`Telegram Bot API ${method} 返回了不可解析的响应`, error));
+    throw new Error(getErrorMessage(`Telegram Bot API ${method} 返回了不可解析的响应`, error), { cause: error });
   }
 
   if (!response.ok || !data.ok || data.result === undefined) {

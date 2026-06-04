@@ -1,4 +1,5 @@
-import type { ChangeEvent, FC } from '../../../../../lib/teact/teact';
+import type React from 'react';
+import type { FC } from '../../../../../lib/teact/teact';
 import { memo, useMemo, useState } from '../../../../../lib/teact/teact';
 
 import useLang from '../../../../../hooks/useLang';
@@ -33,7 +34,7 @@ const MessageFiltersTab: FC<Props> = ({
     { pattern: 'bot$', description: lang('CustomerServiceRegexExample4') },
   ]), [lang]);
 
-  const handleRegexFilterChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleRegexFilterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.currentTarget.value;
     setNewRegexFilter(value);
 

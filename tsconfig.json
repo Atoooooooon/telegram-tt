@@ -38,6 +38,7 @@
     "src",
     "tests",
     "plugins",
+    "server",
     "dev",
     "*.config.ts",
     "*.config.js",

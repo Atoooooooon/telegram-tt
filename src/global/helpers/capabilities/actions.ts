@@ -102,6 +102,7 @@ export const actionMarkReadCapability: Capability = {
     try {
       const { callApi } = await import('../../../api/gramjs');
       const { selectChat, selectChatMessages } = await import('../../selectors');
+      const { selectThreadReadState } = await import('../../selectors/threads');
 
       const chat = selectChat(global, message.chatId);
       if (!chat) {
@@ -114,7 +115,8 @@ export const actionMarkReadCapability: Capability = {
       const threadId = (message as { threadId?: number }).threadId ?? MAIN_THREAD_ID;
 
       // Check unread count before marking as read
-      const lastReadInboxMessageId = chat.lastReadInboxMessageId || 0;
+      const readState = selectThreadReadState(global, message.chatId, MAIN_THREAD_ID);
+      const lastReadInboxMessageId = readState?.lastReadInboxMessageId || 0;
       const messages = selectChatMessages(global, message.chatId);
 
       // Count unread messages between lastReadInboxMessageId and targetId

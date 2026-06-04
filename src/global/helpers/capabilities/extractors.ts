@@ -131,7 +131,7 @@ export const textProcessorCapability: Capability = {
     },
   },
 
-  async execute({ config, pipelineData }) {
+  execute({ config, pipelineData }) {
     const {
       inputField = 'text',
       outputField = 'extractedText',
@@ -168,7 +168,7 @@ export const textProcessorCapability: Capability = {
     // Clean
     if (cleanEnabled) {
       if (cleanPrefixes) {
-        const prefixes = cleanPrefixes.split(',').map((p) => p.trim()).filter(Boolean);
+        const prefixes = cleanPrefixes.split(',').map((p: string) => p.trim()).filter(Boolean);
         for (const prefix of prefixes) {
           value = value.replace(new RegExp(`^${prefix}[\\s]*`, 'i'), '');
         }
@@ -187,16 +187,19 @@ export const textProcessorCapability: Capability = {
           ? (extractGroupIndex! > 0 ? match[extractGroupIndex!] ?? match[0] : match[0])
           : (extractFallback ?? '');
       } catch (error) {
-        return { success: false, error: 'Invalid extract pattern' };
+        return Promise.resolve({ success: false, error: 'Invalid extract pattern' });
       }
     }
 
     // Transform
     if (transformEnabled) {
-      if (transformCase === 'upper') value = value.toUpperCase();
-      else if (transformCase === 'lower') value = value.toLowerCase();
-      else if (transformCase === 'capitalize')
+      if (transformCase === 'upper') {
+        value = value.toUpperCase();
+      } else if (transformCase === 'lower') {
+        value = value.toLowerCase();
+      } else if (transformCase === 'capitalize') {
         value = value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+      }
 
       if (transformReplaceFrom !== undefined && transformReplaceTo !== undefined) {
         value = value.replaceAll(transformReplaceFrom, transformReplaceTo);
@@ -211,18 +214,18 @@ export const textProcessorCapability: Capability = {
         (!validateNumeric || /^\d+$/.test(value));
 
       if (!valid) {
-        return {
+        return Promise.resolve({
           success: false,
           data: {
             [outputField]: value,
             matchedText: value,
             validated: false,
           },
-        };
+        });
       }
     }
 
-    return {
+    return Promise.resolve({
       success: true,
       data: {
         [outputField]: value,
@@ -231,6 +234,6 @@ export const textProcessorCapability: Capability = {
         orderNumber: value,
         validated: validateEnabled,
       },
-    };
+    });
   },
 };

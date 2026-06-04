@@ -2822,7 +2822,7 @@ export async function getCommonChats({
     };
   }
 
-  const chats = response.chats.map(buildApiChatFromPreview).filter(Boolean);
+  const chats = response.chats.map((chat) => buildApiChatFromPreview(chat)).filter(Boolean);
   const nextChat = response.chats[response.chats.length - 1];
 
   return {

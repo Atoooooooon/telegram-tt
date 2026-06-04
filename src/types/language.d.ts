@@ -1966,6 +1966,59 @@ export interface LangPair {
   'CustomerServiceClearMessagesTitle': undefined;
   'CustomerServiceAddUserIdPlaceholder': undefined;
   'CustomerServiceSearchUsers': undefined;
+  'CustomerServiceMode': undefined;
+  'CustomerServiceOnCallMode': undefined;
+  'CustomerServiceOnCallModeDescription': undefined;
+  'CustomerServiceAssistMode': undefined;
+  'CustomerServiceAssistModeDescription': undefined;
+  'CustomerServiceAutoRead': undefined;
+  'CustomerServiceAutoReadDescription': undefined;
+  'CustomerServiceExportSettings': undefined;
+  'CustomerServiceImportSettings': undefined;
+  'CustomerServiceExportDescription': undefined;
+  'CustomerServiceImportDescription': undefined;
+  'CustomerServiceCloudSyncTitle': undefined;
+  'CustomerServiceCloudSyncHint': undefined;
+  'CustomerServiceCloudSyncPlaceholder': undefined;
+  'CustomerServiceCloudSyncRequired': undefined;
+  'CustomerServiceCloudSyncDetected': undefined;
+  'CustomerServiceCloudSyncDownloadSuccess': undefined;
+  'CustomerServiceCloudSyncUploadSuccess': undefined;
+  'CustomerServiceCloudSyncSync': undefined;
+  'CustomerServiceCloudSyncUpdate': undefined;
+  'CustomerServiceCloudSyncStart': undefined;
+  'CustomerServiceCloudSyncFailed': undefined;
+  'CustomerServiceCloudSyncButton': undefined;
+  'CustomerServiceCloudSyncCancel': undefined;
+  'CustomerServiceCloudSyncPleaseWait': undefined;
+  'CustomerServiceCloudSyncListenLabel': undefined;
+  'CustomerServiceCloudSyncListenDescription': undefined;
+  'CustomerServiceCloudSyncListenLabelOwner': undefined;
+  'CustomerServiceCloudSyncListenDescriptionOwner': undefined;
+  'CustomerServiceCloudSyncListenLabelNonOwner': undefined;
+  'CustomerServiceCloudSyncListenDescriptionNonOwner': undefined;
+  'CustomerServiceCloudSyncChecking': undefined;
+  'CustomerServiceCloudSyncUpdated': undefined;
+  'CustomerServiceCloudSyncNoChange': undefined;
+  'CustomerServiceCloudSyncNotLoggedIn': undefined;
+  'CustomerServiceCloudSyncConfigNotFound': undefined;
+  'CustomerServiceImportSuccess': undefined;
+  'CustomerServiceExportSuccess': undefined;
+  'CustomerServiceSearchGroups': undefined;
+  'CustomerServiceSearchGroupsRegex': undefined;
+  'CustomerServiceSwitchToTextSearch': undefined;
+  'CustomerServiceSwitchToRegexSearch': undefined;
+  'CustomerServiceEmpty': undefined;
+  'CustomerServiceEmptyHint': undefined;
+  'CustomerServiceNonEmptyHint': undefined;
+  'RemoveFromCustomerService': undefined;
+  'CustomerServiceSyncError': undefined;
+  'CustomerServiceMessageRemoved': undefined;
+  'ViewContext': undefined;
+  'CloseContext': undefined;
+  'ContextView': undefined;
+  'CustomerServiceUnknownUser': undefined;
+  'DeletedChat': undefined;
   'LinkDescriptionRatingBack': undefined;
   'LinkDescriptionRatingPreview': undefined;
   'ErrorFocusInaccessibleMessage': undefined;
@@ -3704,6 +3757,34 @@ export interface LangPairWithVariables<V = LangVariable> {
   'RatingLevel': {
     'level': V;
   };
+  'CustomerServiceClearMessagesConfirm': {
+    'count': V;
+  };
+  'CustomerServiceCloudSyncDetectedOwner': {
+    'owner': V;
+  };
+  'CustomerServiceCloudSyncDownloadSuccessOwner': {
+    'owner': V;
+  };
+  'CustomerServiceCloudSyncUploadSuccessVersion': {
+    'version': V;
+  };
+  'CustomerServiceImportError': {
+    'error': V;
+  };
+  'CustomerServiceMessagesCount': {
+    'count': V;
+  };
+  'CustomerServicePerformanceHint': {
+    'count': V;
+  };
+  'CustomerServiceFromChat': {
+    'chatName': V;
+    'senderName': V;
+  };
+  'CustomerServiceFromChatChatOnly': {
+    'chatName': V;
+  };
   'GiftAuctionForSaleOnFragment': {
     'count': V;
   };
@@ -3901,24 +3982,12 @@ export interface LangPairWithVariables<V = LangVariable> {
   'UnofficialSecurityRisk': {
     'peer': V;
   };
-  'CustomerServiceMessagesCount': {
-    'count': V;
-  };
-  'CustomerServicePerformanceHint': {
-    'count': V;
-  };
-  'CustomerServiceFromChat': {
-    'chatName': V;
-    'senderName': V;
-  };
-  'CustomerServiceFromChatChatOnly': {
-    'chatName': V;
-  };
 }
 
 export interface LangPairPlural {
   'DeleteForMeChatHint': undefined;
   'DeleteForEveryoneHint': undefined;
+  'i18n': undefined;
   'MediaReplaceInvalidError': undefined;
 }
 
@@ -4316,6 +4385,9 @@ export interface LangPairPluralWithVariables<V = LangVariable> {
     'time': V;
     'points': V;
     'link': V;
+  };
+  'CustomerServiceGroupMessageCount': {
+    'count': V;
   };
   'MediaSizeB': {
     'size': V;

@@ -14,7 +14,7 @@ export default {
   ],
   testEnvironment: 'jsdom',
   transform: {
-    '\\.(jsx?|tsx?)$': 'babel-jest',
+    '\\.(mjs|jsx?|tsx?)$': 'babel-jest',
     '\\.txt$': '@glen/jest-raw-loader',
   },
   globals: {

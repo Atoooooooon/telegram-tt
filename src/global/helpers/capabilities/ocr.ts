@@ -4,8 +4,9 @@
  */
 
 import type { ApiDocument, ApiMessage, ApiPhoto } from '../../../api/types';
-import { ApiMediaFormat } from '../../../api/types';
 import type { Capability } from '../../types/customerServiceV2';
+import { ApiMediaFormat } from '../../../api/types';
+
 import { blobToDataUri, fetchBlob } from '../../../util/files';
 import * as mediaLoader from '../../../util/mediaLoader';
 import {
@@ -16,8 +17,6 @@ import {
   hasMediaLocalBlobUrl,
   isDocumentPhoto,
 } from '../messageMedia';
-
-type OcrProvider = 'baidu' | 'tencent';
 
 const DEFAULT_OCR_OUTPUT_FIELD = 'ocrText';
 const DEFAULT_OCR_LINES_FIELD = 'ocrLines';
@@ -162,7 +161,11 @@ async function signTencentRequest(
   const secretSigning = await hmacSha256(secretService, 'tc3_request');
   const signature = bufferToHex(await hmacSha256(secretSigning, stringToSign));
 
-  return `${algorithm} Credential=${secretId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+  return [
+    `${algorithm} Credential=${secretId}/${credentialScope}`,
+    `SignedHeaders=${signedHeaders}`,
+    `Signature=${signature}`,
+  ].join(', ');
 }
 
 export const ocrImageCapability: Capability = {
@@ -295,7 +298,7 @@ export const ocrImageCapability: Capability = {
   },
 
   async execute({ message, config, pipelineData }) {
-    const provider = (config?.provider || 'baidu') as OcrProvider;
+    const provider = typeof config?.provider === 'string' ? config.provider : 'baidu';
     const outputField = config?.outputField || DEFAULT_OCR_OUTPUT_FIELD;
     const linesField = config?.linesField || DEFAULT_OCR_LINES_FIELD;
     const rawField = config?.rawField || DEFAULT_OCR_RAW_FIELD;

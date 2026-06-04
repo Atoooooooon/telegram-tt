@@ -190,7 +190,7 @@ export const checkMessageCapability: Capability = {
       const { renderTemplate } = await import('../templateRenderer');
       const expectedValue = variableExpectedValue ? renderTemplate(variableExpectedValue, pipelineData) : '';
 
-      let varPassed = false;
+      let varPassed: boolean;
       const actualString = String(actualValue || '');
 
       // Security Check: If expectedValue is empty but operator is contains/equals/regex,

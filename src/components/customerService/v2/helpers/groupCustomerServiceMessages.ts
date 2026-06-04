@@ -60,7 +60,7 @@ export function groupCustomerServiceMessages(
           lastMessageDate: message.date,
           messageCount: 1,
         };
-      } else {
+      } else if (currentGroup) {
         // Add to current group
         currentGroup.messages.push(message);
         currentGroup.lastMessageDate = message.date;

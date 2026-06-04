@@ -21,6 +21,7 @@ import './customerServiceV2Messages';
 import type { RequiredGlobalActions } from '../../index';
 import type { ActionReturnType } from '../../types';
 import type { CustomerServiceSettings } from '../../types/customerServiceV2';
+import { MAIN_THREAD_ID } from '../../../api/types';
 
 import { EDITABLE_INPUT_ID } from '../../../config';
 import { CUSTOMER_SERVICE_CONFIG } from '../../../config/customerService';
@@ -36,6 +37,7 @@ import { addActionHandler } from '../../index';
 import { updateTabState } from '../../reducers/tabs';
 import { selectChat, selectCurrentMessageList } from '../../selectors';
 import { selectCustomerServiceV2Settings } from '../../selectors/customerServiceV2';
+import { selectThreadReadState } from '../../selectors/threads';
 import {
   ensureCustomerServiceV2State,
   getDefaultCustomerServiceV2Settings,
@@ -316,10 +318,11 @@ addActionHandler('checkPausedChatsStatusV2', (global, actions, payload): ActionR
         continue;
       }
 
+      const readState = selectThreadReadState(global, chatId, MAIN_THREAD_ID);
       const isRead = Boolean(
-        chat.lastReadInboxMessageId && chat.lastReadInboxMessageId >= pauseInfo.lastMessageId,
+        readState?.lastReadInboxMessageId && readState.lastReadInboxMessageId >= pauseInfo.lastMessageId,
       );
-      const hasUnread = chat.unreadCount && chat.unreadCount > 0;
+      const hasUnread = readState?.unreadCount && readState.unreadCount > 0;
 
       if (isRead || !hasUnread) {
         delete updatedPausedChats[chatId];

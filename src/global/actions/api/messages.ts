@@ -174,6 +174,8 @@ import {
   selectThreadReadState,
 } from '../../selectors/threads';
 import { deleteMessages, updateWithLocalMedia } from '../apiUpdaters/messages';
+import { resumeCustomerServicePausedChat } from '../ui/customerServiceV2Helpers';
+
 const AUTOLOGIN_TOKEN_KEY = 'autologin_token';
 
 const uploadProgressCallbacks = new Map<MessageKey, ApiOnProgress>();

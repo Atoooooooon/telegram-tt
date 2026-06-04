@@ -202,8 +202,6 @@ const LeftMainHeader = ({
     }
   });
 
-
-
   const isSearchRelevant = Boolean(globalSearchChatId)
     || content === LeftColumnContent.GlobalSearch
     || content === LeftColumnContent.Contacts;

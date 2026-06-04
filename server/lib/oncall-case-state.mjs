@@ -198,7 +198,7 @@ export function hasHoldingReply(caseRecord) {
       !caseRecord.lastStaffReplyAt
       || caseRecord.lastHoldingReplyAt >= caseRecord.lastStaffReplyAt
     )
-    && !hasEffectiveReply(caseRecord)
+    && !hasEffectiveReply(caseRecord),
   );
 }
 
@@ -630,13 +630,13 @@ export function applyUsefulMessageEvent(state, payload, config, now) {
   const hadEffectiveReplyForCurrentTurn = Boolean(
     caseRecord.lastStaffReplyAt
     && latestCustomerMessageAt
-    && caseRecord.lastStaffReplyAt >= latestCustomerMessageAt
+    && caseRecord.lastStaffReplyAt >= latestCustomerMessageAt,
   );
   const hadHoldingReplyForCurrentTurn = Boolean(
     caseRecord.lastHoldingReplyAt
     && latestCustomerMessageAt
     && caseRecord.lastHoldingReplyAt >= latestCustomerMessageAt
-    && !hadEffectiveReplyForCurrentTurn
+    && !hadEffectiveReplyForCurrentTurn,
   );
 
   updateCustomerMessageSnapshot(caseRecord, payload, eventAt, config);

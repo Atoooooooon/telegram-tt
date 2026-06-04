@@ -32,7 +32,6 @@ import InfiniteScroll from '../../ui/InfiniteScroll';
 import Loading from '../../ui/Loading';
 import Archive from './Archive';
 import Chat from './Chat';
-import CustomerServiceListItem from '../../customerService/v2/left/CustomerServiceListItem';
 import EmptyFolder from './EmptyFolder';
 import ChatListPanes from './panes/ChatListPanes';
 
@@ -59,8 +58,6 @@ type OwnProps = {
 
 const INTERSECTION_THROTTLE = 200;
 const RESERVED_HOTKEYS = new Set(['9', '0']);
-const CS_ENTRY_HEIGHT = 72; // 4.5rem = 72px
-
 const ChatList = ({
   className,
   folderType,
@@ -103,7 +100,6 @@ const ChatList = ({
   const orderedIds = useFolderManagerForOrderedIds(resolvedFolderId);
   usePeerStoriesPolling(orderedIds);
 
-  const csEntryHeight = CS_ENTRY_HEIGHT;
   const chatsHeight = (orderedIds?.length || 0) * CHAT_HEIGHT_PX;
   const archiveHeight = shouldDisplayArchive
     ? archiveSettings?.isMinimized ? ARCHIVE_MINIMIZED_HEIGHT : CHAT_HEIGHT_PX : 0;

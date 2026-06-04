@@ -9,7 +9,7 @@ import { callApi } from '../../../api/gramjs';
 import { loadCustomerServiceV2SettingsFromStorage } from '../../helpers/customerServiceV2Settings';
 import { addActionHandler, getGlobal, setGlobal } from '../../index';
 import { selectChat } from '../../selectors';
-
+import { selectThreadReadState } from '../../selectors/threads';
 import {
   ensureCustomerServiceV2State,
   getDefaultCustomerServiceV2Settings,
@@ -36,17 +36,17 @@ addActionHandler('addToCustomerServiceV2', (global, actions, payload): ActionRet
     }
 
     // In assist mode, remove previous messages from this chat if they were read
-    const chat = selectChat(global, chatId);
+    const readState = selectThreadReadState(global, chatId, MAIN_THREAD_ID);
     const existingChatMessages = baseState.messagesByChatId[chatId] || [];
+    const lastReadInboxMessageId = readState?.lastReadInboxMessageId;
 
     // In assist mode, remove read messages from customer service window when new message arrives
-    if (baseState.settings?.mode === 'assist' && chat?.lastReadInboxMessageId) {
+    if (baseState.settings?.mode === 'assist' && lastReadInboxMessageId) {
       const readMessageIds = existingChatMessages
-        .filter((msg) => msg.id <= chat.lastReadInboxMessageId!)
+        .filter((msg) => msg.id <= lastReadInboxMessageId)
         .map((msg) => msg.id);
 
       if (readMessageIds.length > 0) {
-
         messages = messages.filter(
           (msg) => !(msg.chatId === chatId && readMessageIds.includes(msg.id)),
         );
@@ -84,8 +84,8 @@ addActionHandler('addToCustomerServiceV2', (global, actions, payload): ActionRet
       // Update lookup map by chat ID
       // Filter out read messages from existing chat messages
       let chatMessages = existingChatMessages;
-      if (isAssistMode && chat?.lastReadInboxMessageId) {
-        chatMessages = chatMessages.filter((msg) => msg.id > chat.lastReadInboxMessageId!);
+      if (isAssistMode && lastReadInboxMessageId) {
+        chatMessages = chatMessages.filter((msg) => msg.id > lastReadInboxMessageId);
       }
 
       // Add new message to chat messages

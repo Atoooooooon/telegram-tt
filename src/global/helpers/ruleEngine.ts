@@ -15,7 +15,6 @@ import type {
   CustomerServiceRuleEventType,
   CustomerServiceRuleExecutionResult,
   CustomerServiceRulesProcessResult,
-  PipelineRoute,
   PipelineSetConfig,
   PipelineStep,
   UserRule,

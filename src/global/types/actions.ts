@@ -3252,6 +3252,95 @@ export interface ActionPayloads {
     messageId: number;
   };
 
+  addToCustomerServiceV2: {
+    chatId: string;
+    message: ApiMessage;
+  } & WithTabId;
+
+  removeFromCustomerServiceV2: {
+    chatId: string;
+    messageId: number;
+  } & WithTabId;
+
+  removeCustomerServiceV2Messages: {
+    messageIds: number[];
+    chatId?: string;
+  };
+
+  clearCustomerServiceV2Messages: ({ shouldMarkRead?: boolean } & WithTabId) | undefined;
+  syncCustomerServiceV2Cloud: {
+    tabId?: number;
+    token: string;
+    operation?: 'auto' | 'download' | 'upload';
+    localSettings?: CustomerServiceSettings;
+    existingData?: {
+      settings: CustomerServiceSettings;
+      ownerId?: string;
+      version?: number;
+      updatedAt?: number;
+      canUpdate?: boolean;
+    };
+    onExisting?: (info: {
+      ownerId?: string;
+      version?: number;
+      updatedAt?: number;
+      settings: CustomerServiceSettings;
+      canUpdate?: boolean;
+    }) => void;
+    onDownload?: (info: {
+      ownerId?: string;
+      version?: number;
+      updatedAt?: number;
+      canUpdate?: boolean;
+    }) => void;
+    onUpload?: (info?: { version?: number; updatedAt?: number }) => void;
+    onError?: (error: Error) => void;
+  } | undefined;
+  autoSyncCustomerServiceV2Cloud: ({ silent?: boolean } & WithTabId) | undefined;
+
+  syncCustomerServiceV2Message: {
+    message: ApiMessage;
+  };
+
+  setCustomerServiceV2Context: {
+    chatId?: string;
+    messageId?: number;
+  } & WithTabId;
+
+  pauseCustomerServiceV2Chat: {
+    chatId: string;
+    messageId: number;
+  } & WithTabId;
+
+  resumeCustomerServiceV2Chat: {
+    chatId: string;
+  } & WithTabId;
+
+  initCustomerServiceV2: WithTabId | undefined;
+
+  initializeCustomerServiceV2Settings: WithTabId;
+
+  saveCustomerServiceV2Settings: {
+    settings: CustomerServiceSettings;
+  } & WithTabId;
+
+  exportCustomerServiceV2Settings: {} & WithTabId;
+
+  importCustomerServiceV2Settings: {
+    fileContent: string;
+  } & WithTabId;
+
+  openCustomerServiceV2Settings: WithTabId | undefined;
+  applyCustomerServiceQuickReply: {
+    quickReply: CustomerServiceQuickReply;
+  } & WithTabId;
+
+  closeCustomerServiceV2Settings: WithTabId | undefined;
+
+  toggleCustomerServiceV2Mode: WithTabId | undefined;
+
+  checkPausedChatsStatusV2: WithTabId | undefined;
+
   openCocoonModal: WithTabId | undefined;
   closeCocoonModal: WithTabId | undefined;
 

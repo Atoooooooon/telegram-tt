@@ -19,6 +19,7 @@ export function renderTemplate(
     const trimmedPath = String(doubleBracePath || singleBracePath).trim();
     const value = getNestedValue(data, trimmedPath);
 
+    // eslint-disable-next-line no-null/no-null
     if (value === undefined || value === null) {
       return '';
     }
@@ -36,6 +37,7 @@ function getNestedValue(obj: Record<string, any>, path: string): any {
   let current = obj;
 
   for (const key of keys) {
+    // eslint-disable-next-line no-null/no-null
     if (current === undefined || current === null) {
       return undefined;
     }

@@ -36,7 +36,6 @@ import {
   isUserBot,
   pickMatchingTypingDraftMessage,
 } from '../../helpers';
-import { registerAllCapabilities } from '../../helpers/capabilities';
 import {
   reportCustomerServiceStaffReply,
   reportCustomerServiceUsefulMessage,
@@ -121,6 +120,7 @@ import {
   selectThreadLocalStateParam,
   selectThreadReadState,
 } from '../../selectors/threads';
+import { appendCustomerServiceRuleAuditLogs } from '../ui/customerServiceV2Helpers';
 
 const ANIMATION_DELAY = 350;
 const SNAP_ANIMATION_DELAY = 1000;
@@ -796,6 +796,7 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
       }
 
       global = updateWithLocalMedia(global, chatId, id, false, message);
+      const newMessage = selectChatMessage(global, chatId, id)!;
 
       setGlobal(global);
 

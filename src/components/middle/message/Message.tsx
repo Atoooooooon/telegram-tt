@@ -1,3 +1,4 @@
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import {
   memo,
   useCallback,
@@ -135,7 +136,6 @@ import { isUserId } from '../../../util/entities/ids';
 import { getMessageKey } from '../../../util/keys/messageKey';
 import { parseTranslationCacheKey } from '../../../util/keys/translationKey';
 import { getServerTime } from '../../../util/serverTime';
-import stopEvent from '../../../util/stopEvent';
 import { isElementInViewport } from '../../../util/visibility/isElementInViewport';
 import { calculateDimensionsForMessageMedia, getStickerDimensions, REM } from '../../common/helpers/mediaDimensions';
 import renderText from '../../common/helpers/renderText';
@@ -247,6 +247,8 @@ type OwnProps = {
   observeIntersectionForLoading?: ObserveFn;
   observeIntersectionForPlaying?: ObserveFn;
   onMessageUnmount?: (messageId: number) => void;
+  onMetaClick?: (e: ReactMouseEvent<Element>) => void;
+  onReplyClick?: (e: ReactMouseEvent<Element>) => void;
 } & MessagePositionProperties;
 
 type StateProps = {
@@ -479,6 +481,8 @@ const Message = ({
   observeIntersectionForPlaying,
   isQuickPreview,
   onMessageUnmount,
+  onMetaClick,
+  onReplyClick,
 }: OwnProps & StateProps) => {
   const {
     toggleMessageSelection,

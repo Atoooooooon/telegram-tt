@@ -42,6 +42,7 @@ import { processDeepLink } from '../../util/deeplink';
 import { Bundles, loadBundle } from '../../util/moduleLoader';
 import { parseInitialLocationHash, parseLocationHash } from '../../util/routing';
 import updateIcon from '../../util/updateIcon';
+import { ToolboxModal } from '../toolbox';
 
 import useInterval from '../../hooks/schedulers/useInterval';
 import useTimeout from '../../hooks/schedulers/useTimeout';
@@ -69,14 +70,12 @@ import LeftColumn from '../left/LeftColumn';
 import MediaViewer from '../mediaViewer/MediaViewer.async';
 import ReactionPicker from '../middle/message/reactions/ReactionPicker.async';
 import MessageListHistoryHandler from '../middle/MessageListHistoryHandler';
-import MiddleColumnContainer from './MiddleColumnContainer';
 import AudioPlayer from '../middle/panes/AudioPlayer';
 import ModalContainer from '../modals/ModalContainer';
 import PaymentModal from '../payment/PaymentModal.async';
 import ReceiptModal from '../payment/ReceiptModal.async';
 import RightColumn from '../right/RightColumn';
 import StoryViewer from '../story/StoryViewer.async';
-import { ToolboxModal } from '../toolbox';
 import AttachBotRecipientPicker from './AttachBotRecipientPicker.async';
 import BotTrustModal from './BotTrustModal.async';
 import DeleteFolderDialog from './DeleteFolderDialog.async';
@@ -87,6 +86,7 @@ import FoldersSidebar from './FoldersSidebar';
 import ForwardRecipientPicker from './ForwardRecipientPicker.async';
 import GameModal from './GameModal';
 import HistoryCalendar from './HistoryCalendar.async';
+import MiddleColumnContainer from './MiddleColumnContainer';
 import NewContactModal from './NewContactModal.async';
 import PremiumLimitReachedModal from './premium/common/PremiumLimitReachedModal.async';
 import GiveawayModal from './premium/GiveawayModal.async';
@@ -243,7 +243,6 @@ const Main = ({
     loadGenericEmojiEffects,
     closePaymentModal,
     clearReceipt,
-    closeCustomerService,
     checkAppVersion,
     openThread,
     toggleLeftColumn,
@@ -543,7 +542,6 @@ const Main = ({
       setIsNarrowMessageList(isRightColumnOpen);
     });
   }, [isMiddleColumnOpen, isRightColumnOpen, noRightColumnAnimation, forceUpdate]);
-
 
   const className = buildClassName(
     willAnimateLeftColumnRef.current && 'left-column-animating',

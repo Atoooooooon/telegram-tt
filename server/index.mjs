@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import 'dotenv/config';
+
 import Fastify from 'fastify';
 
-import { sendJson, setCorsHeaders } from './lib/http.mjs';
+import { sendJson } from './lib/http.mjs';
 import { createOncallService } from './lib/oncall-service.mjs';
 import baiduOcrRoute from './routes/baidu-ocr.mjs';
 import customerServiceCloudConfigGetRoute from './routes/customer-service-cloud-config-get.mjs';
@@ -59,7 +60,7 @@ const app = Fastify({
 app.removeAllContentTypeParsers();
 
 function stringBodyParser(_request, body, done) {
-  done(null, body);
+  done(undefined, body);
 }
 
 app.addContentTypeParser('application/json', { parseAs: 'string' }, stringBodyParser);
@@ -67,7 +68,7 @@ app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string
 app.addContentTypeParser('text/plain', { parseAs: 'string' }, stringBodyParser);
 app.addContentTypeParser('*', { parseAs: 'string' }, stringBodyParser);
 
-app.addHook('onRequest', async (request, reply) => {
+app.addHook('onRequest', (request, reply) => {
   applyCorsHeaders(reply);
 
   if (request.method === 'OPTIONS') {
@@ -75,7 +76,7 @@ app.addHook('onRequest', async (request, reply) => {
   }
 });
 
-app.get('/healthz', async (_request, reply) => {
+app.get('/healthz', (_request, reply) => {
   applyCorsHeaders(reply);
   return reply.code(200).send({ ok: true });
 });
@@ -104,7 +105,13 @@ for (const route of routes) {
         });
 
         if (!reply.raw.writableEnded) {
-          sendJson(reply.raw, 500, { error: 'Proxy error', detail: getErrorMessage(error) }, ALLOW_ORIGIN, ALLOW_HEADERS);
+          sendJson(
+            reply.raw,
+            500,
+            { error: 'Proxy error', detail: getErrorMessage(error) },
+            ALLOW_ORIGIN,
+            ALLOW_HEADERS,
+          );
         }
       }
 
@@ -115,12 +122,12 @@ for (const route of routes) {
   });
 }
 
-app.setNotFoundHandler(async (request, reply) => {
+app.setNotFoundHandler((request, reply) => {
   applyCorsHeaders(reply);
   return reply.code(404).send({ error: 'Not found' });
 });
 
-app.setErrorHandler(async (error, request, reply) => {
+app.setErrorHandler((error, request, reply) => {
   log('Fastify request error', {
     method: request.method,
     path: request.url,

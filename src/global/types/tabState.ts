@@ -64,8 +64,6 @@ import type {
   ApiUser,
   ApiVideo,
 } from '../../api/types';
-import type { CustomerServiceV2Context } from './customerServiceV2';
-import type { ToolboxState } from './toolbox';
 import type { FoldersActions } from '../../hooks/reducers/useFoldersReducer';
 import type { ReducerAction } from '../../hooks/useReducer';
 import type {
@@ -108,6 +106,8 @@ import type { SearchResultKey } from '../../util/keys/searchResultKey';
 import type { RegularLangFnParameters } from '../../util/localization';
 import type { ProfileCollectionKey } from '../selectors/payments';
 import type { CallbackAction } from './actions';
+import type { CustomerServiceV2Context } from './customerServiceV2';
+import type { ToolboxState } from './toolbox';
 
 export type PollVote = {
   peerId: string;

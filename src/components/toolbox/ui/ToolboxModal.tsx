@@ -3,13 +3,16 @@ import {
   memo, useCallback, useEffect, useMemo, useState,
 } from '../../../lib/teact/teact';
 import { getActions, withGlobal } from '../../../global';
+
+import { selectIsToolboxOpen, selectToolboxActiveToolId } from '../../../global/selectors/toolbox';
+import { getCurrentTabId } from '../../../util/establishMultitabRole';
+import { TOOLS } from '../tools/registry';
+
+import Icon from '../../common/icons/Icon';
 import Modal from '../../ui/Modal';
 import SearchInput from '../../ui/SearchInput';
-import { TOOLS } from '../tools/registry';
-import { selectIsToolboxOpen, selectToolboxActiveToolId } from '../../../global/selectors/toolbox';
+
 import styles from './ToolboxModal.module.scss';
-import { getCurrentTabId } from '../../../util/establishMultitabRole';
-import Icon from '../../common/icons/Icon';
 
 type StateProps = {
   isOpen: boolean;
@@ -53,8 +56,8 @@ const ToolboxModal: FC<StateProps> = ({ isOpen, activeToolId }) => {
     }
   }, [isOpen, activeToolId, filteredTools, setToolboxActiveTool, tabId]);
 
-  const activeTool = useMemo(() => 
-    TOOLS.find((t) => t.id === activeToolId), 
+  const activeTool = useMemo(() =>
+    TOOLS.find((t) => t.id === activeToolId),
   [activeToolId]);
 
   const ActiveComponent = activeTool?.component;
@@ -63,10 +66,6 @@ const ToolboxModal: FC<StateProps> = ({ isOpen, activeToolId }) => {
   const hasTools = TOOLS.length > 0;
   const shouldShowSearchEmptyState = hasSearchTerm && !hasSearchResults;
 
-  if (!isOpen) {
-    return null;
-  }
-
   const handleClose = () => closeToolbox({ tabId });
   const handleToolSelect = useCallback((toolId: string) => {
     setToolboxActiveTool({ toolId, tabId });
@@ -74,6 +73,10 @@ const ToolboxModal: FC<StateProps> = ({ isOpen, activeToolId }) => {
   const handleResetSearch = useCallback(() => {
     setSearchValue('');
   }, []);
+
+  if (!isOpen) {
+    return undefined;
+  }
 
   return (
     <Modal
@@ -175,7 +178,7 @@ const ToolboxModal: FC<StateProps> = ({ isOpen, activeToolId }) => {
   );
 };
 
-export default memo(withGlobal<{}>(
+export default memo(withGlobal<Record<never, never>>(
   (global): StateProps => {
     const tabId = getCurrentTabId();
     return {

@@ -3,7 +3,6 @@ import type { ActionReturnType } from '../../types';
 import { MAIN_THREAD_ID } from '../../../api/types';
 
 import { ARCHIVED_FOLDER_ID, MAX_ACTIVE_PINNED_CHATS, SERVICE_NOTIFICATIONS_USER_ID } from '../../../config';
-import { getCurrentTabId } from '../../../util/establishMultitabRole';
 import { buildCollectionByKey, omit } from '../../../util/iteratees';
 import { isLocalMessageId } from '../../../util/keys/messageKey';
 import { closeMessageNotifications, notifyAboutMessage } from '../../../util/notifications';

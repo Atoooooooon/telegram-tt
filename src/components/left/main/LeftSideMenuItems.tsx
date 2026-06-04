@@ -83,7 +83,6 @@ const LeftSideMenuItems = ({
     openChatByUsername,
     openUrl,
     openChatWithInfo,
-    openToolbox,
   } = getActions();
   const lang = useLang();
 

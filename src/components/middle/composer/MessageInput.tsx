@@ -198,7 +198,8 @@ const MessageInput = ({
           return undefined;
         }
 
-        const currentHeight = Number(scroller.style.height.replace('px', ''));
+        const scrollerElement = scroller;
+        const currentHeight = Number(scrollerElement.style.height.replace('px', ''));
         const { scrollHeight } = clone;
         const newHeight = Math.min(scrollHeight, maxInputHeight);
 
@@ -212,9 +213,9 @@ const MessageInput = ({
           const transitionDuration = Math.round(
             TRANSITION_DURATION_FACTOR * Math.log(Math.abs(newHeight - currentHeight)),
           );
-          scroller.style.height = `${newHeight}px`;
-          scroller.style.transitionDuration = `${transitionDuration}ms`;
-          scroller.classList.toggle('overflown', isOverflown);
+          scrollerElement.style.height = `${newHeight}px`;
+          scrollerElement.style.transitionDuration = `${transitionDuration}ms`;
+          scrollerElement.classList.toggle('overflown', isOverflown);
         }
 
         if (willSend) {

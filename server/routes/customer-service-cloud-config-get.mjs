@@ -1,5 +1,5 @@
-import { sendJson } from '../lib/http.mjs';
 import { fetchCustomerServiceCloudRecord } from '../lib/customer-service-cloud-sync.mjs';
+import { sendJson } from '../lib/http.mjs';
 
 export default {
   method: 'GET',

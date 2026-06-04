@@ -2,29 +2,27 @@ import type { FC } from '../../../../lib/teact/teact';
 import { memo, useMemo } from '../../../../lib/teact/teact';
 import { getActions, withGlobal } from '../../../../global';
 
-import type { GlobalState } from '../../../../global/types';
 import type { CustomPeer } from '../../../../types';
-
 import { CUSTOMER_SERVICE_VIRTUAL_CHAT_ID } from '../../../../global/types/customerServiceV2';
-import buildClassName from '../../../../util/buildClassName';
-import { getCurrentTabId } from '../../../../util/establishMultitabRole';
-import { formatIntegerCompact } from '../../../../util/textFormat';
 
 import {
   selectCustomerServiceV2MessageCount,
   selectIsCustomerServiceV2Open,
 } from '../../../../global/selectors/customerServiceV2';
+import buildClassName from '../../../../util/buildClassName';
+import { getCurrentTabId } from '../../../../util/establishMultitabRole';
+import { formatIntegerCompact } from '../../../../util/textFormat';
 
 import useLang from '../../../../hooks/useLang';
 import useLastCallback from '../../../../hooks/useLastCallback';
 
 import Avatar from '../../../common/Avatar';
 import FullNameTitle from '../../../common/FullNameTitle';
-import ListItem from '../../../ui/ListItem';
 import Badge from '../../../ui/Badge';
+import ListItem from '../../../ui/ListItem';
 
-import styles from './CustomerServiceListItem.module.scss';
 import '../../../left/main/Chat.scss';
+import styles from './CustomerServiceListItem.module.scss';
 
 type OwnProps = {
   className?: string;

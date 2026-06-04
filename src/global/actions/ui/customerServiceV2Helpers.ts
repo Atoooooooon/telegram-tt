@@ -4,13 +4,14 @@ import type {
   CustomerServiceSettings,
   CustomerServiceV2State,
 } from '../../types/customerServiceV2';
+import { MAIN_THREAD_ID } from '../../../api/types';
 
 import { CUSTOMER_SERVICE_CONFIG } from '../../../config/customerService';
 import {
   normalizeCustomerServiceOncallSettings,
   normalizeCustomerServiceQuickReplies,
 } from '../../helpers/customerServiceV2Settings';
-import { selectChat } from '../../selectors';
+import { selectThreadReadState } from '../../selectors/threads';
 
 const MAX_CUSTOMER_SERVICE_AUDIT_LOGS = 200;
 
@@ -187,9 +188,9 @@ export function resumeCustomerServicePausedChat<T extends GlobalState>(
     return global;
   }
 
-  const chat = selectChat(global, chatId);
-  const effectiveLastRead = options?.lastReadInboxMessageId ?? chat?.lastReadInboxMessageId ?? 0;
-  const hasUnread = options?.hasUnread ?? Boolean(chat?.unreadCount && chat.unreadCount > 0);
+  const readState = selectThreadReadState(global, chatId, MAIN_THREAD_ID);
+  const effectiveLastRead = options?.lastReadInboxMessageId ?? readState?.lastReadInboxMessageId ?? 0;
+  const hasUnread = options?.hasUnread ?? Boolean(readState?.unreadCount && readState.unreadCount > 0);
 
   if (!effectiveLastRead && hasUnread) {
     return global;

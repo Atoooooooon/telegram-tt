@@ -1,11 +1,10 @@
-import type { ChangeEvent, FC } from '../../../../../lib/teact/teact';
+import type React from 'react';
+import type { FC } from '../../../../../lib/teact/teact';
 import {
   memo, useCallback, useMemo, useState,
 } from '../../../../../lib/teact/teact';
 
 import type { ApiChat } from '../../../../../api/types';
-
-import buildClassName from '../../../../../util/buildClassName';
 
 import useLang from '../../../../../hooks/useLang';
 
@@ -30,6 +29,10 @@ type Props = {
   onChange: (next: string[]) => void;
 };
 
+const EMPTY_USERS: Record<string, any> = {};
+const EMPTY_CHATS: Record<string, ApiChat> = {};
+const EMPTY_FILTERED_USER_IDS: string[] = [];
+
 const UserFiltersTab: FC<Props> = ({
   users,
   chats,
@@ -41,9 +44,9 @@ const UserFiltersTab: FC<Props> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
 
-  const safeUsers = users || {};
-  const safeChats = chats || {};
-  const safeFilteredUserIds = filteredUserIds || [];
+  const safeUsers = users || EMPTY_USERS;
+  const safeChats = chats || EMPTY_CHATS;
+  const safeFilteredUserIds = filteredUserIds || EMPTY_FILTERED_USER_IDS;
 
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) {
@@ -128,7 +131,7 @@ const UserFiltersTab: FC<Props> = ({
     };
   }, [safeUsers, safeChats]);
 
-  const handleSearchChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.currentTarget.value;
     setSearchQuery(value);
     setIsSearchDropdownOpen(Boolean(value));

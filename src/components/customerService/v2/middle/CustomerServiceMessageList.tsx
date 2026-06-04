@@ -1,12 +1,10 @@
 import type { FC } from '../../../../lib/teact/teact';
-
 import { memo, useCallback, useMemo } from '../../../../lib/teact/teact';
 import { getActions, withGlobal } from '../../../../global';
 
 import type { ApiMessage } from '../../../../api/types';
-import { MAIN_THREAD_ID } from '../../../../api/types';
-import type { ObserveFn } from '../../../../hooks/useIntersectionObserver';
 import type { CustomerServiceMessageGroup } from '../../../../global/types/customerServiceV2';
+import type { ObserveFn } from '../../../../hooks/useIntersectionObserver';
 
 import {
   selectCustomerServiceV2ContextChatId,
@@ -114,22 +112,6 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
   // Performance optimization: Memoize message rendering threshold
   const hasLargeMessageCount = useMemo(() => messageCount > 1000, [messageCount]);
 
-  if (messageCount === 0) {
-    return (
-      <div className={buildClassName(styles.emptyState, className)}>
-        <div className={styles.emptyIcon}>
-          <Icon name="animals" />
-        </div>
-        <h3 className={styles.emptyTitle}>
-          {lang('CustomerServiceEmpty')}
-        </h3>
-        <p className={styles.emptyHint}>
-          {lang('CustomerServiceEmptyHint')}
-        </p>
-      </div>
-    );
-  }
-
   // Render message group
   const renderMessageGroup = useCallback((group: CustomerServiceMessageGroup) => {
     const handleRemoveGroup = () => {
@@ -161,7 +143,9 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
             onClick={handleViewGroupContext}
           />
           <span className={styles.groupMessageCount}>
-            {lang('CustomerServiceGroupMessageCount', { count: group.messageCount })}
+            {lang('CustomerServiceGroupMessageCount', { count: group.messageCount }, {
+              pluralValue: group.messageCount,
+            })}
           </span>
           <Button
             className={styles.groupRemoveButton}
@@ -214,7 +198,30 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
         </div>
       </div>
     );
-  }, [activeContextChatId, activeContextMessageId, handleRemoveMessage, handleViewContext, lang, observeIntersectionForLoading]);
+  }, [
+    activeContextChatId,
+    activeContextMessageId,
+    handleRemoveMessage,
+    handleViewContext,
+    lang,
+    observeIntersectionForLoading,
+  ]);
+
+  if (messageCount === 0) {
+    return (
+      <div className={buildClassName(styles.emptyState, className)}>
+        <div className={styles.emptyIcon}>
+          <Icon name="animals" />
+        </div>
+        <h3 className={styles.emptyTitle}>
+          {lang('CustomerServiceEmpty')}
+        </h3>
+        <p className={styles.emptyHint}>
+          {lang('CustomerServiceEmptyHint')}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className={buildClassName(styles.root, className)}>

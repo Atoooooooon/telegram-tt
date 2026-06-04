@@ -3,6 +3,7 @@ import { addCallback } from '../lib/teact/teactn';
 import type { GlobalState } from './types';
 
 import { getServerTime } from '../util/serverTime';
+import { loadCustomerServiceCloudSyncPreference } from './helpers/customerServiceCloudSyncPreference';
 import { resetOpenedChannelShortpollState, syncOpenedShortpollChannelIds } from './openedChannelShortpoll';
 import { removePeerStory } from './reducers';
 import { selectTabState } from './selectors';
@@ -43,6 +44,7 @@ function startIntervals(global: GlobalState) {
 
   resetOpenedChannelShortpollState();
   intervals.push(window.setInterval(checkStoryExpiration, STORY_EXPIRATION_INTERVAL));
+  intervals.push(window.setInterval(checkCustomerServiceCloudSync, CUSTOMER_SERVICE_CLOUD_SYNC_INTERVAL));
   syncOpenedShortpollChannelIds(global);
 }
 

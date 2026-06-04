@@ -259,6 +259,9 @@ function MiddleColumn({
   const lang = useLang();
   const [dropAreaState, setDropAreaState] = useState(DropAreaState.None);
   const [isScrollDownNeeded, setIsScrollDownNeeded] = useState(false);
+  const [isCustomerServiceResizing, setIsCustomerServiceResizing] = useState(false);
+  const customerServiceInitialMouseXRef = useRef(0);
+  const customerServiceInitialWidthRef = useRef(0);
   const isScrollDownShown = isScrollDownNeeded && (!isMobile || !hasActiveMiddleSearch);
   const [isNotchShown, setIsNotchShown] = useState<boolean | undefined>();
   const [isUnpinModalOpen, setIsUnpinModalOpen] = useState(false);
@@ -434,8 +437,11 @@ function MiddleColumn({
       document.removeEventListener('blur', stopResize, false);
     };
 
+    // eslint-disable-next-line @eslint-react/web-api/no-leaked-event-listener
     document.addEventListener('mousemove', handleMouseMove, false);
+    // eslint-disable-next-line @eslint-react/web-api/no-leaked-event-listener
     document.addEventListener('mouseup', stopResize, false);
+    // eslint-disable-next-line @eslint-react/web-api/no-leaked-event-listener
     document.addEventListener('blur', stopResize, false);
 
     return stopResize;

@@ -1,12 +1,12 @@
-import type { RefObject } from 'react';
-import type { FC } from '../../lib/teact/teact';
+import type { ElementRef, FC } from '../../lib/teact/teact';
 import { memo, useRef } from '../../lib/teact/teact';
 import { withGlobal } from '../../global';
+
+import { CUSTOMER_SERVICE_VIRTUAL_CHAT_ID } from '../../global/types/customerServiceV2';
 
 import { selectCurrentMessageList } from '../../global/selectors';
 import { selectIsCustomerServiceV2Open } from '../../global/selectors/customerServiceV2';
 import { selectTabState } from '../../global/selectors/tabs';
-import { CUSTOMER_SERVICE_VIRTUAL_CHAT_ID } from '../../global/types/customerServiceV2';
 
 import CustomerServiceQuickReplyPanel from '../customerService/v2/composer/CustomerServiceQuickReplyPanel';
 import CustomerServiceMiddleColumn from '../customerService/v2/middle/CustomerServiceMiddleColumn';
@@ -15,7 +15,7 @@ import MiddleColumn from '../middle/MiddleColumn';
 import styles from './MiddleColumnContainer.module.scss';
 
 type OwnProps = {
-  leftColumnRef: RefObject<HTMLDivElement>;
+  leftColumnRef: ElementRef<HTMLDivElement>;
   isMobile?: boolean;
 };
 

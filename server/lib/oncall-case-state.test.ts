@@ -1,4 +1,6 @@
-import { normalizeOncallConfig } from './oncall-config.mjs';
+/// <reference types="jest" />
+// @ts-nocheck
+
 import {
   applyCaseStatusEvent,
   applyDeadlineEvent,
@@ -8,6 +10,7 @@ import {
   createEmptyOncallState,
   getNotificationStage,
 } from './oncall-case-state.mjs';
+import { normalizeOncallConfig } from './oncall-config.mjs';
 
 function createConfig(overrides = {}) {
   return normalizeOncallConfig({
@@ -122,7 +125,8 @@ describe('oncall-case-state', () => {
     expect(getNotificationStage(result.caseRecord)).toBe('holding');
   });
 
-  it('keeps processing state for follow-up after an effective reply and restarts escalation from the new customer turn', () => {
+  it('keeps processing state for follow-up after an effective reply and restarts escalation from the new customer'
+    + ' turn', () => {
     const state = createEmptyOncallState();
     const config = createConfig({
       firstResponseTimeoutMs: 1_000,

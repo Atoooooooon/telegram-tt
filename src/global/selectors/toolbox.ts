@@ -1,4 +1,4 @@
-import type { GlobalState, TabState } from '../types';
+import type { GlobalState } from '../types';
 import type { ToolboxState } from '../types/toolbox';
 
 export function selectToolboxState(global: GlobalState, tabId: number): ToolboxState | undefined {

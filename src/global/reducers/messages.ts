@@ -77,6 +77,20 @@ export function updateCurrentMessageList<T extends GlobalState>(
 ): T {
   const { messageLists } = selectTabState(global, tabId);
   let newMessageLists: MessageList[];
+
+  const current = messageLists[messageLists.length - 1];
+  const isSameList = Boolean(
+    current
+    && current.chatId === chatId
+    && current.threadId === threadId
+    && current.type === type,
+  );
+  const resolvedIsHalfScreen = isHalfScreen !== undefined
+    ? isHalfScreen
+    : isSameList
+      ? current?.isHalfScreen
+      : undefined;
+
   if (shouldReplaceHistory || (IS_TEST && !IS_MOCKED_CLIENT)) {
     newMessageLists = chatId
       ? [{
@@ -450,7 +464,16 @@ export function deleteChatMessages<T extends GlobalState>(
         const originalPost = selectChatMessage(global, fromChatId!, fromMessageId!);
 
         if (canDeleteCurrentThread && currentThreadId === message.id) {
-          global = updateCurrentMessageList(global, chatId, undefined, undefined, undefined, undefined, tabId);
+          global = updateCurrentMessageList(
+            global,
+            chatId,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            tabId,
+          );
         }
         if (originalPost) {
           global = deleteThread(global, fromChatId!, fromMessageId!);

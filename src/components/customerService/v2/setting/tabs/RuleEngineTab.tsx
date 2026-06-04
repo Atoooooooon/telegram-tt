@@ -4,16 +4,17 @@ import { memo, useRef, useState } from '../../../../../lib/teact/teact';
 
 import type { UserRule } from '../../../../../global/types/customerServiceV2';
 
-import { getAllRegisteredCapabilityIds, isCapabilityRegistered } from '../../../../../global/helpers/ruleEngine';
 import { registerAllCapabilities } from '../../../../../global/helpers/capabilities';
+import { getAllRegisteredCapabilityIds, isCapabilityRegistered } from '../../../../../global/helpers/ruleEngine';
+
 import useLang from '../../../../../hooks/useLang';
 import useLastCallback from '../../../../../hooks/useLastCallback';
 
 import Icon from '../../../../common/icons/Icon';
 import Button from '../../../../ui/Button';
+import Modal from '../../../../ui/Modal';
 import Switcher from '../../../../ui/Switcher';
 import TextArea from '../../../../ui/TextArea';
-import Modal from '../../../../ui/Modal';
 import RuleEngineDoc from '../RuleEngineDoc';
 
 import layoutStyles from '../CustomerServiceSettingsModal.module.scss';
@@ -139,7 +140,7 @@ const RuleEngineTab: FC<Props> = ({
       return;
     }
     setEditingRuleId(ruleId);
-    setEditingRuleJson(JSON.stringify(targetRule, null, 2));
+    setEditingRuleJson(JSON.stringify(targetRule, undefined, 2));
     setRuleEditError(undefined);
     setIsRuleEditModalOpen(true);
   });
@@ -152,7 +153,7 @@ const RuleEngineTab: FC<Props> = ({
   const handleFormatRuleJson = useLastCallback(() => {
     try {
       const parsed = JSON.parse(editingRuleJson || '{}');
-      setEditingRuleJson(JSON.stringify(parsed, null, 2));
+      setEditingRuleJson(JSON.stringify(parsed, undefined, 2));
       setRuleEditError(undefined);
     } catch (error) {
       setRuleEditError(error instanceof Error ? error.message : String(error));
@@ -200,7 +201,7 @@ const RuleEngineTab: FC<Props> = ({
             (registeredCapabilities.length > 0
               ? `\n\n可用能力:\n${registeredCapabilities.join('\n')}`
               : '') +
-            '\n\n请检查能力 ID 是否正确,或查看文档了解可用能力列表。',
+              '\n\n请检查能力 ID 是否正确,或查看文档了解可用能力列表。',
           );
           return;
         }
@@ -458,13 +459,13 @@ const RuleEngineTab: FC<Props> = ({
                 </div>
               </div>
             </div>
-          <TextArea
-            className={styles.ruleEditTextArea}
-            value={editingRuleJson}
-            onChange={handleRuleJsonChange}
-            noReplaceNewlines
-            autoResize={false}
-          />
+            <TextArea
+              className={styles.ruleEditTextArea}
+              value={editingRuleJson}
+              onChange={handleRuleJsonChange}
+              noReplaceNewlines
+              autoResize={false}
+            />
             <div className={styles.ruleEditFooter}>
               {ruleEditError && (
                 <div className={styles.ruleEngineError}>

@@ -237,7 +237,7 @@ const QuickRepliesTab: FC<Props> = ({
                 <button
                   type="button"
                   className={styles.quickReplyDragHandle}
-                  aria-label={lang('i18n_dragToSort')}
+                  aria-label={lang('DragToSortAria')}
                   disabled={safeQuickReplies.length <= 1}
                   onMouseDown={markDragHandleActive}
                   onTouchStart={markDragHandleActive}

@@ -130,6 +130,7 @@ const Button = ({
   onMouseLeave,
   onFocus,
   onTransitionEnd,
+  loadingLabelKey = 'Cache.ClearProgress',
 }: OwnProps) => {
   let elementRef = useRef<HTMLButtonElement | HTMLAnchorElement>();
   if (ref) {

@@ -43,7 +43,7 @@ export default {
   path: '/api/ocr/baidu',
   async handler(req, res, ctx) {
     const { allowOrigin, allowHeaders, maxBodyBytes, log } = ctx;
-    let bodyText = '';
+    let bodyText;
     try {
       bodyText = await readBody(req, maxBodyBytes);
     } catch (error) {
@@ -93,7 +93,8 @@ export default {
     if (paragraph) params.set('paragraph', 'true');
     if (probability) params.set('probability', 'true');
 
-    const url = `https://aip.baidubce.com/rest/2.0/ocr/v1/general_basic?access_token=${encodeURIComponent(accessToken)}`;
+    const url = 'https://aip.baidubce.com/rest/2.0/ocr/v1/general_basic'
+      + `?access_token=${encodeURIComponent(accessToken)}`;
     log('Baidu OCR request', { bytes: bodyText.length });
 
     const response = await fetch(url, {

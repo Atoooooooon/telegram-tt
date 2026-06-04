@@ -159,12 +159,11 @@ export function updateCustomerServiceCloudSyncPreferenceForToken(
 function djb2Hash(str: string): string {
   let hash = 5381;
   for (let i = 0; i < str.length; i++) {
-    // eslint-disable-next-line no-bitwise
     hash = ((hash << 5) + hash) + str.charCodeAt(i);
-    // eslint-disable-next-line no-bitwise
+
     hash |= 0;
   }
-  // eslint-disable-next-line no-bitwise
+
   return (hash >>> 0).toString(16);
 }
 

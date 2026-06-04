@@ -1,4 +1,5 @@
-import type { ChangeEvent, FC } from '../../../../../lib/teact/teact';
+import type React from 'react';
+import type { FC } from '../../../../../lib/teact/teact';
 import {
   memo, useEffect, useMemo, useState,
 } from '../../../../../lib/teact/teact';
@@ -28,6 +29,10 @@ type Props = {
 };
 
 const DEFAULT_TAG_OPTION = '-1';
+const EMPTY_CHATS: Record<string, ApiChat> = {};
+const EMPTY_CHAT_FULL_INFOS: Record<string, ApiChatFullInfo> = {};
+const EMPTY_CHAT_FOLDERS: Record<number, any> = {};
+const EMPTY_MONITORED_CHAT_IDS: string[] = [];
 
 const GroupFiltersTab: FC<Props> = ({
   chats,
@@ -43,10 +48,10 @@ const GroupFiltersTab: FC<Props> = ({
   const [groupSearchQuery, setGroupSearchQuery] = useState('');
   const [isAllSelected, setIsAllSelected] = useState(false);
 
-  const safeChats = chats || {};
-  const safeChatFolders = chatFolders || {};
-  const safeMonitoredChatIds = monitoredChatIds || [];
-  const safeChatFullInfos = chatFullInfos || {};
+  const safeChats = chats || EMPTY_CHATS;
+  const safeChatFolders = chatFolders || EMPTY_CHAT_FOLDERS;
+  const safeMonitoredChatIds = monitoredChatIds || EMPTY_MONITORED_CHAT_IDS;
+  const safeChatFullInfos = chatFullInfos || EMPTY_CHAT_FULL_INFOS;
 
   const migratedLegacyChatIds = useMemo(() => {
     const legacyIds = new Set<string>();
@@ -89,7 +94,7 @@ const GroupFiltersTab: FC<Props> = ({
     });
   }, [safeChats, migratedLegacyChatIds]);
 
- const tagOptions = useMemo(() => {
+  const tagOptions = useMemo(() => {
     const options = [{
       value: DEFAULT_TAG_OPTION,
       text: lang('CustomerServiceAllTags'),
@@ -179,13 +184,13 @@ const GroupFiltersTab: FC<Props> = ({
     setIsAllSelected(selectedCount === allGroupIds.length);
   }, [groupChats, safeMonitoredChatIds]);
 
-  const handleGroupSearchChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleGroupSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setGroupSearchQuery(e.currentTarget.value);
   };
 
-const handleClearGroupSearch = () => {
-  setGroupSearchQuery('');
-};
+  const handleClearGroupSearch = () => {
+    setGroupSearchQuery('');
+  };
 
   const handleChatToggle = (chatId: string, isChecked: boolean) => {
     if (isChecked) {

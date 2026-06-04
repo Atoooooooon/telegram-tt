@@ -1,9 +1,9 @@
-import { addActionHandler } from '../../index';
-import type { ActionReturnType } from '../../types';
-import type { GlobalState } from '../../types';
+import type { ActionReturnType, GlobalState } from '../../types';
 import type { ToolboxState } from '../../types/toolbox';
-import { updateTabState } from '../../reducers/tabs';
+
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
+import { addActionHandler } from '../../index';
+import { updateTabState } from '../../reducers/tabs';
 
 addActionHandler('openToolbox', (global, actions, payload): ActionReturnType => {
   const { tabId = getCurrentTabId() } = payload || {};

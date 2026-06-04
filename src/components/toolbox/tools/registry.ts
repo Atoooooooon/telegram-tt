@@ -1,5 +1,6 @@
-import GroupDiffTool from './groupDiff/GroupDiffTool';
 import type { ToolDefinition } from '../../../global/types/toolbox';
+
+import GroupDiffTool from './groupDiff/GroupDiffTool';
 
 export const TOOLS: ToolDefinition[] = [
   {

@@ -6,23 +6,25 @@ import { getActions, withGlobal } from '../../../../global';
 
 import type { CustomerServiceQuickReply } from '../../../../global/types/customerServiceV2';
 
-import { CUSTOMER_SERVICE_CONFIG } from '../../../../config/customerService';
 import { DEBUG, EDITABLE_INPUT_ID } from '../../../../config';
+import { CUSTOMER_SERVICE_CONFIG } from '../../../../config/customerService';
 import { normalizeCustomerServiceQuickReplies } from '../../../../global/helpers/customerServiceV2Settings';
 import {
   selectCustomerServiceV2Settings,
   selectIsCustomerServiceV2Open,
 } from '../../../../global/selectors/customerServiceV2';
-import { getCurrentTabId } from '../../../../util/establishMultitabRole';
-import useLastCallback from '../../../../hooks/useLastCallback';
-import useLang from '../../../../hooks/useLang';
 import buildClassName from '../../../../util/buildClassName';
+import { getCurrentTabId } from '../../../../util/establishMultitabRole';
 import focusEditableElement from '../../../../util/focusEditableElement';
+
+import useLang from '../../../../hooks/useLang';
+import useLastCallback from '../../../../hooks/useLastCallback';
+
 import Portal from '../../../ui/Portal';
 
 import styles from './CustomerServiceQuickReplyPanel.module.scss';
 
-type OwnProps = {};
+type OwnProps = Record<never, never>;
 
 type StateProps = {
   quickReplies: CustomerServiceQuickReply[];
@@ -54,7 +56,7 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
   const { applyCustomerServiceQuickReply } = getActions();
   const lang = useLang();
 
-  const [panelPosition, setPanelPositionState] = useState<PanelPosition | undefined>();
+  const [panelPositionState, setPanelPositionState] = useState<PanelPosition | undefined>();
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -248,7 +250,7 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
     let observer: MutationObserver | undefined;
 
     const attachListeners = () => {
-      const input = document.getElementById(EDITABLE_INPUT_ID) as HTMLElement | null;
+      const input = document.getElementById(EDITABLE_INPUT_ID);
       if (!input) {
         return false;
       }
@@ -271,7 +273,9 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
         });
       };
 
+      // eslint-disable-next-line @eslint-react/web-api/no-leaked-event-listener
       input.addEventListener('focus', handleFocus);
+      // eslint-disable-next-line @eslint-react/web-api/no-leaked-event-listener
       input.addEventListener('blur', handleBlur);
 
       if (document.activeElement === input) {
@@ -437,7 +441,8 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
         return;
       }
 
-      const viewportWidth = document.documentElement?.clientWidth || window.innerWidth || panelPositionRef.current.width;
+      const viewportWidth = document.documentElement?.clientWidth || window.innerWidth
+        || panelPositionRef.current.width;
       const viewportHeight = document.documentElement?.clientHeight || window.innerHeight
         || panelPositionRef.current.height
         || DEFAULT_PANEL_HEIGHT;
@@ -508,7 +513,6 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
       document.removeEventListener('touchcancel', handleEnd);
       document.removeEventListener('blur', handleEnd);
       document.body.classList.remove('cursor-grabbing');
-
     };
   }, [isDragging, persistPosition, setPanelPosition]);
 
@@ -522,7 +526,8 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
         return;
       }
 
-      const viewportWidth = document.documentElement?.clientWidth || window.innerWidth || panelPositionRef.current.width;
+      const viewportWidth = document.documentElement?.clientWidth || window.innerWidth
+        || panelPositionRef.current.width;
       const viewportHeight = document.documentElement?.clientHeight || window.innerHeight
         || panelPositionRef.current.height
         || DEFAULT_PANEL_HEIGHT;
@@ -631,7 +636,7 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
     };
   }, [updatePanelPosition]);
 
-  if (!isVisible || !panelPosition) {
+  if (!isVisible || !panelPositionState) {
     return undefined;
   }
 
@@ -645,7 +650,12 @@ const CustomerServiceQuickReplyPanel: FC<OwnProps & StateProps> = ({
           isDragging && styles.panelDragging,
           isResizing && styles.panelResizing,
         )}
-        style={`left: ${panelPosition.left}px; top: ${panelPosition.top}px; width: ${panelPosition.width}px; height: ${panelPosition.height}px;`}
+        style={`
+          left: ${panelPositionState.left}px;
+          top: ${panelPositionState.top}px;
+          width: ${panelPositionState.width}px;
+          height: ${panelPositionState.height}px;
+        `}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >

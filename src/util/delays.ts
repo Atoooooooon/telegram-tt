@@ -1,5 +1,5 @@
-import { pause } from './schedulers';
 import { randomInt } from './math';
+import { pause } from './schedulers';
 
 export function sleep(ms: number): Promise<void> {
   return pause(ms);

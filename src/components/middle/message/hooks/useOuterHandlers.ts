@@ -22,6 +22,13 @@ const QUICK_REACTION_DOUBLE_TAP_DELAY = 200;
 const QUICK_REACTION_AREA_WIDTH = 3 * REM;
 const QUICK_REACTION_AREA_HEIGHT = Number(REM);
 const GROUP_MESSAGE_HOVER_ATTRIBUTE = 'data-is-document-group-hover';
+const SELECTABLE_TEXT_SELECTOR = [
+  '.text-content',
+  '.messageContent',
+  '.message-text',
+  '.can-select-text',
+  '.message-content-wrapper',
+].join(', ');
 
 export default function useOuterHandlers(
   selectMessage: (e?: React.MouseEvent<HTMLDivElement, MouseEvent>, groupedId?: string) => void,
@@ -47,7 +54,7 @@ export default function useOuterHandlers(
   function handleMouseDown(e: React.MouseEvent<HTMLDivElement, MouseEvent>) {
     // 检查是否在可选择的文本区域内
     const target = e.target as HTMLElement;
-    const isInTextContent = target.closest('.text-content, .messageContent, .message-text, .can-select-text, .message-content-wrapper');
+    const isInTextContent = target.closest(SELECTABLE_TEXT_SELECTOR);
 
     // 如果在文本内容区域，完全跳过所有事件处理，允许默认的文本选择行为
     if (isInTextContent) {
@@ -113,7 +120,7 @@ export default function useOuterHandlers(
   function handleClick(e: React.MouseEvent<HTMLDivElement, MouseEvent>) {
     // 检查是否在可选择的文本区域内 - 优先级最高
     const target = e.target as HTMLElement;
-    const isInTextContent = target.closest('.text-content, .messageContent, .message-text, .can-select-text, .message-content-wrapper');
+    const isInTextContent = target.closest(SELECTABLE_TEXT_SELECTOR);
 
     // 如果在文本内容区域，完全跳过点击处理，允许文本选择
     if (isInTextContent) {
@@ -165,7 +172,7 @@ export default function useOuterHandlers(
     // 如果在文本内容区域，不触发回复
     if (e) {
       const target = e.target as HTMLElement;
-      const isInTextContent = target.closest('.text-content, .messageContent, .message-text, .can-select-text, .message-content-wrapper');
+      const isInTextContent = target.closest(SELECTABLE_TEXT_SELECTOR);
       if (isInTextContent) {
         return;
       }
@@ -179,7 +186,7 @@ export default function useOuterHandlers(
   function stopPropagation(e: React.MouseEvent<HTMLDivElement, MouseEvent>) {
     // 检查是否在文本内容区域，如果是则不阻止传播
     const target = e.target as HTMLElement;
-    const isInTextContent = target.closest('.text-content, .messageContent, .message-text, .can-select-text, .message-content-wrapper');
+    const isInTextContent = target.closest(SELECTABLE_TEXT_SELECTOR);
 
     if (isInTextContent) {
       return;
@@ -237,7 +244,9 @@ export default function useOuterHandlers(
     handleMouseDown: !isInSelectMode ? handleMouseDown : undefined,
     handleClick,
     handleContextMenu: !isInSelectMode ? handleContextMenu : (isProtected ? stopEvent : undefined),
-    handleDoubleClick: !isInSelectMode ? (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => handleContainerDoubleClick(e) : undefined,
+    handleDoubleClick: !isInSelectMode
+      ? (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => handleContainerDoubleClick(e)
+      : undefined,
     handleContentDoubleClick: !IS_TOUCH_ENV ? stopPropagation : undefined,
     handleMouseMove,
     handleSendQuickReaction,

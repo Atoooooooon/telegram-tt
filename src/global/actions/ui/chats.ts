@@ -110,7 +110,7 @@ addActionHandler('openChatInNewTab', (global, actions, payload): ActionReturnTyp
 addActionHandler('openPreviousChat', (global, actions, payload): ActionReturnType => {
   const { tabId = getCurrentTabId() } = payload || {};
   actions.updatePageTitle({ tabId });
-  return updateCurrentMessageList(global, undefined, undefined, undefined, undefined, undefined, tabId);
+  return updateCurrentMessageList(global, undefined, undefined, undefined, undefined, undefined, undefined, tabId);
 });
 
 addActionHandler('openChatWithInfo', (global, actions, payload): ActionReturnType => {

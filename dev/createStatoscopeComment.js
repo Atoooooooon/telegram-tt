@@ -1,5 +1,6 @@
 import { readFileSync } from 'fs';
 
+// eslint-disable-next-line import-x/no-unresolved
 import template from '../.github/workflows/statoscope-comment.js';
 import createPRComment from './createPRComment.js';
 

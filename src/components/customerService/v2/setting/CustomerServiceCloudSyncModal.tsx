@@ -2,19 +2,19 @@ import type { FC } from '../../../../lib/teact/teact';
 import { memo, useEffect, useState } from '../../../../lib/teact/teact';
 import { getActions } from '../../../../global';
 
+import type { GlobalState } from '../../../../global/types';
 import type { CustomerServiceSettings } from '../../../../global/types/customerServiceV2';
 
+import { ownersMatch } from '../../../../global/actions/ui/customerServiceV2Helpers';
 import {
   clearCustomerServiceCloudSyncPreference,
   loadCustomerServiceCloudSyncPreference,
   saveCustomerServiceCloudSyncPreference,
 } from '../../../../global/helpers/customerServiceCloudSyncPreference';
-import { ownersMatch } from '../../../../global/actions/ui/customerServiceV2Helpers';
-import useLastCallback from '../../../../hooks/useLastCallback';
+
 import useSelector from '../../../../hooks/data/useSelector';
 import useLang from '../../../../hooks/useLang';
-
-import type { GlobalState } from '../../../../global/types';
+import useLastCallback from '../../../../hooks/useLastCallback';
 
 import Icon from '../../../common/icons/Icon';
 import Button from '../../../ui/Button';
@@ -332,7 +332,7 @@ const CustomerServiceCloudSyncModal: FC<Props> = ({ isOpen, onClose, onDownloade
                   color="translucent"
                   onClick={handleUploadExisting}
                   disabled={isLoading}
-                  loadingLabelKey={lang("CustomerServiceCloudSyncPleaseWait")}
+                  loadingLabelKey={lang('CustomerServiceCloudSyncPleaseWait')}
                   isLoading={isLoading}
                 >
                   <Icon name="reload" />
@@ -344,7 +344,7 @@ const CustomerServiceCloudSyncModal: FC<Props> = ({ isOpen, onClose, onDownloade
                 color="primary"
                 onClick={handleDownloadExisting}
                 isLoading={isLoading}
-                loadingLabelKey={lang("CustomerServiceCloudSyncPleaseWait")}
+                loadingLabelKey={lang('CustomerServiceCloudSyncPleaseWait')}
               >
                 <Icon name="cloud-download" />
                 {lang('CustomerServiceCloudSyncSync')}
@@ -356,7 +356,7 @@ const CustomerServiceCloudSyncModal: FC<Props> = ({ isOpen, onClose, onDownloade
               color="primary"
               onClick={handleDetectOrUpload}
               isLoading={isLoading}
-              loadingLabelKey={lang("CustomerServiceCloudSyncPleaseWait")}
+              loadingLabelKey={lang('CustomerServiceCloudSyncPleaseWait')}
             >
               <Icon name="cloud-download" />
               {lang('CustomerServiceCloudSyncStart')}

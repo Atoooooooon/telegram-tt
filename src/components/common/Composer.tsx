@@ -318,6 +318,7 @@ type StateProps = {
   starsBalance: number;
   isStarsBalanceModalOpen: boolean;
   disallowedGifts?: ApiDisallowedGifts;
+  disableClipboardPaste?: boolean;
   isAccountFrozen?: boolean;
   isAppConfigLoaded?: boolean;
   insertingPeerIdMention?: string;
@@ -419,6 +420,7 @@ const Composer = ({
   editableInputId,
   inputId,
   className,
+  disableClipboardPaste,
   availableReactions,
   topReactions,
   canBuyPremium,
@@ -2865,6 +2867,7 @@ export default memo(withGlobal<OwnProps>(
       insertingPeerIdMention,
       shouldOpenMessageMediaEditor,
       replyToMessage,
+      disableClipboardPaste,
     };
   },
 )(Composer));
