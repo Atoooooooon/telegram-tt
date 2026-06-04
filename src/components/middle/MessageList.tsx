@@ -69,6 +69,7 @@ import { debounce, onTickEnd } from '../../util/schedulers';
 import getOffsetToContainer from '../../util/visibility/getOffsetToContainer';
 import { REM } from '../common/helpers/mediaDimensions';
 import { groupMessages } from './helpers/groupMessages';
+import { buildMessageListRenderKey } from './helpers/messageListKeys';
 import { requestMessageListReflow } from './helpers/messageListReflow';
 import { preventMessageInputBlur } from './helpers/preventMessageInputBlur';
 
@@ -1122,6 +1123,8 @@ const MessageList = ({
   );
 
   function renderContent() {
+    const messageListContentKey = buildMessageListRenderKey(chatId, threadId, type, 'content');
+
     return activeKey === Content.Restricted ? (
       <div className="empty">
         <span>
@@ -1146,6 +1149,7 @@ const MessageList = ({
       />
     ) : activeKey === Content.MessageList ? (
       <MessageListContent
+        key={messageListContentKey}
         canShowAds={areAdsEnabled && isChannelChat}
         chatId={chatId}
         isComments={isComments}

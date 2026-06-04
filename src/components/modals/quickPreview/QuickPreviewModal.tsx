@@ -10,6 +10,7 @@ import { selectTheme, selectThemeValues } from '../../../global/selectors';
 import buildClassName from '../../../util/buildClassName';
 import buildStyle from '../../../util/buildStyle';
 import captureEscKeyListener from '../../../util/captureEscKeyListener';
+import { buildMessageListRenderKey } from '../../middle/helpers/messageListKeys';
 
 import useCurrentOrPrev from '../../../hooks/useCurrentOrPrev';
 import useCustomBackground from '../../../hooks/useCustomBackground';
@@ -73,6 +74,9 @@ const QuickPreviewModal: FC<OwnProps & StateProps> = ({
   });
 
   const { chatId: renderingChatId, threadId: renderingThreadId } = useCurrentOrPrev(modal, true) || {};
+  const renderingMessageListKey = renderingChatId
+    ? buildMessageListRenderKey(renderingChatId, renderingThreadId || MAIN_THREAD_ID, 'thread', 'quick-preview')
+    : undefined;
 
   const bgClassName = buildClassName(
     backgroundStyles.background,
@@ -107,6 +111,7 @@ const QuickPreviewModal: FC<OwnProps & StateProps> = ({
         />
         <div className={styles.messagesLayout}>
           <MessageList
+            key={renderingMessageListKey}
             chatId={renderingChatId}
             threadId={renderingThreadId || MAIN_THREAD_ID}
             type="thread"

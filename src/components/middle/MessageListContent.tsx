@@ -29,6 +29,7 @@ import { compact } from '../../util/iteratees';
 import { formatMessageListDate } from '../../util/localization/dateFormat';
 import { formatStarsAsText, formatTonAsText } from '../../util/localization/format';
 import { isAlbum, isDocumentGroup } from './helpers/groupMessages';
+import { buildMessageListRenderKey } from './helpers/messageListKeys';
 import { preventMessageInputBlur } from './helpers/preventMessageInputBlur';
 import { renderPeerLink } from './message/helpers/messageActions';
 
@@ -187,9 +188,13 @@ const MessageListContent = ({
 
   const oldLang = useOldLang();
   const lang = useLang();
+  const buildScopedKey = (localKey: string | number) => buildMessageListRenderKey(chatId, threadId, type, localKey);
 
   const unreadDivider = (
-    <div className={buildClassName(UNREAD_DIVIDER_CLASS, 'local-action-message')} key="unread-messages">
+    <div
+      className={buildClassName(UNREAD_DIVIDER_CLASS, 'local-action-message')}
+      key={buildScopedKey('unread-messages')}
+    >
       <span>{oldLang('UnreadMessages')}</span>
     </div>
   );
@@ -200,7 +205,7 @@ const MessageListContent = ({
       return (
         <div
           className={buildClassName('local-action-message')}
-          key={`paid-messages-action-${message.id}`}
+          key={buildScopedKey(`paid-messages-action-${message.id}`)}
         >
           <span>
             {
@@ -256,7 +261,7 @@ const MessageListContent = ({
       return (
         <div
           className={buildClassName('local-action-message')}
-          key={`suggested-post-action-${message.id}`}
+          key={buildScopedKey(`suggested-post-action-${message.id}`)}
         >
           <span className={actionMessageStyles.suggestedPostContainer}>
             <div
@@ -280,7 +285,10 @@ const MessageListContent = ({
   const renderBotForumTopicAction = () => {
     if (!canManageBotForumTopics || threadId !== MAIN_THREAD_ID) return undefined;
     return (
-      <div className={buildClassName('local-action-message', actionMessageStyles.root)} key="botforum-new-topic">
+      <div
+        className={buildClassName('local-action-message', actionMessageStyles.root)}
+        key={buildScopedKey('botforum-new-topic')}
+      >
         <div className={actionMessageStyles.contentBox}>
           <Icon className={actionMessageStyles.botForumTopicIcon} name="topic-new" />
           <h3 className={actionMessageStyles.botForumTopicTitle}>{lang('BotForumActionNew')}</h3>
@@ -327,7 +335,7 @@ const MessageListContent = ({
         return compact([
           message.id === memoUnreadDividerBeforeIdRef.current && unreadDivider,
           <ActionMessage
-            key={message.id}
+            key={buildScopedKey(message.id)}
             message={message}
             threadId={threadId}
             observeIntersectionForBottom={observeIntersectionForReading}
@@ -374,7 +382,7 @@ const MessageListContent = ({
             message.paidMessageStars && !withUsers && renderPaidMessageAction(message, album),
             message.suggestedPostInfo && renderSuggestedPostInfoAction(message),
             <Message
-              key={key}
+              key={buildScopedKey(key)}
               message={message}
               observeIntersectionForBottom={observeIntersectionForReading}
               observeIntersectionForLoading={observeIntersectionForLoading}
@@ -492,14 +500,14 @@ const MessageListContent = ({
       const shouldShowGuestAvatar = isPrivate && !withUsers && Boolean(lastMessage.guestChatViaId);
       if (!withUsers && !shouldShowGuestAvatar) return senderGroupElements;
 
-      const key = `${firstMessageId}-${lastMessageId}`;
+      const key = `message-group-${firstMessageId}-${lastMessageId}`;
       const id = (firstMessageId === lastMessageId) ? `message-group-${firstMessageId}`
         : `message-group-${firstMessageId}-${lastMessageId}`;
 
       const withAvatar = (withUsers || shouldShowGuestAvatar) && !isOwn && (!isThreadTopMessage || !isComments);
       return compact([
         <SenderGroupContainer
-          key={key}
+          key={buildScopedKey(key)}
           id={id}
           message={lastMessage}
           withAvatar={withAvatar}
@@ -509,7 +517,7 @@ const MessageListContent = ({
           {senderGroupElements}
         </SenderGroupContainer>,
         isThreadTopMessage && (
-          <div className="local-action-message" key={`discussion-started-${lastMessageId}`}>
+          <div className="local-action-message" key={buildScopedKey(`discussion-started-${lastMessageId}`)}>
             <span>
               {oldLang(isEmptyThread
                 ? (isComments ? 'NoComments' : 'NoReplies') : 'DiscussionStarted')}
@@ -524,7 +532,7 @@ const MessageListContent = ({
     return (
       <div
         className={buildClassName('sticky-date', areDatesClickable && 'interactive')}
-        key="date-header"
+        key={buildScopedKey(`date-header-${dateGroup.datetime}`)}
         onMouseDown={preventMessageInputBlur}
         onClick={areDatesClickable ? () => openHistoryCalendar({ selectedAt: dateGroup.datetime }) : undefined}
       >
@@ -550,7 +558,7 @@ const MessageListContent = ({
     return (
       <div
         className={buildClassName('message-date-group', shouldAddFirstClass && 'first-message-date-group')}
-        key={`${dateGroup.datetime}-${keySuffix}`}
+        key={buildScopedKey(`${dateGroup.datetime}-${keySuffix}`)}
         onMouseDown={preventMessageInputBlur}
         teactFastList
       >
