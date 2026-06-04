@@ -97,7 +97,8 @@ const ChatList = ({
   );
 
   const shouldDisplayArchive = isAllFolder && canDisplayArchive && archiveSettings;
-  const customerServiceHeight = isAllFolder ? CHAT_HEIGHT_PX : 0;
+  const shouldDisplayCustomerService = isAllFolder || folderType === 'folder';
+  const customerServiceHeight = shouldDisplayCustomerService ? CHAT_HEIGHT_PX : 0;
 
   const orderedIds = useFolderManagerForOrderedIds(resolvedFolderId);
   usePeerStoriesPolling(orderedIds);
@@ -252,7 +253,7 @@ const ChatList = ({
       onLoadMore={getMore}
       onScroll={onScroll}
     >
-      {isAllFolder && <CustomerServiceListItem key="customer-service" />}
+      {shouldDisplayCustomerService && <CustomerServiceListItem key="customer-service" />}
       {isAllFolder && <ChatListPanes key="panes" onHeightChange={setPanesHeight} />}
       {shouldDisplayArchive && (
         <Archive
