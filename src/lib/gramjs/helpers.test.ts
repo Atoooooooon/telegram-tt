@@ -91,6 +91,11 @@ describe('toSignedLittleBuffer', () => {
       expect(buffer).toEqual(Buffer.from([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]));
     });
 
+    it('should convert safe integer values', () => {
+      const buffer = toSignedLittleBuffer(1234567890, 8);
+      expect(buffer).toEqual(Buffer.from([0xD2, 0x02, 0x96, 0x49, 0x00, 0x00, 0x00, 0x00]));
+    });
+
     it('should convert max signed 64-bit value', () => {
       const buffer = toSignedLittleBuffer(0x7FFFFFFFFFFFFFFFn, 8);
       expect(buffer).toEqual(Buffer.from([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x7F]));
@@ -142,6 +147,12 @@ describe('readBufferFromBigInt', () => {
 
     it('should write signed positive little endian', () => {
       const buffer = readBufferFromBigInt(1234567890n, 8, true, true);
+      const read = readBigIntFromBuffer(buffer, true, true);
+      expect(read).toBe(1234567890n);
+    });
+
+    it('should write safe integer values', () => {
+      const buffer = readBufferFromBigInt(1234567890, 8, true, true);
       const read = readBigIntFromBuffer(buffer, true, true);
       expect(read).toBe(1234567890n);
     });
@@ -207,6 +218,11 @@ describe('readBufferFromBigInt', () => {
       const largeValue = 0x1FFFFFFFFFFFFFFFFn; // Too large for 8 bytes
       expect(() => readBufferFromBigInt(largeValue, 8, true, false))
         .toThrow('Value 36893488147419103231 does not fit in 8 unsigned bytes');
+    });
+
+    it('should throw when number value is not a safe integer', () => {
+      expect(() => readBufferFromBigInt(Number.MAX_SAFE_INTEGER + 1, 8, true, false))
+        .toThrow('value must be a bigint or safe integer');
     });
   });
 

@@ -29,7 +29,18 @@ export function readBigIntFromBuffer(buffer: Buffer, little = true, signed = fal
   return x;
 }
 
-export function toSignedLittleBuffer(big: bigint, number = 8) {
+function ensureBigInt(value: bigint | number, name: string) {
+  if (typeof value === 'bigint') return value;
+
+  if (Number.isSafeInteger(value)) {
+    return BigInt(value);
+  }
+
+  throw new TypeError(`${name} must be a bigint or safe integer`);
+}
+
+export function toSignedLittleBuffer(big: bigint | number, number = 8) {
+  big = ensureBigInt(big, 'big');
   const buffer = Buffer.allocUnsafe(number);
 
   // Use Buffer method for 8-byte buffers
@@ -47,11 +58,13 @@ export function toSignedLittleBuffer(big: bigint, number = 8) {
 }
 
 export function readBufferFromBigInt(
-  value: bigint,
+  value: bigint | number,
   bytesNumber: number,
   little = true,
   signed = false,
 ): Buffer<ArrayBuffer> {
+  value = ensureBigInt(value, 'value');
+
   if (!Number.isInteger(bytesNumber) || bytesNumber <= 0) {
     throw new RangeError('bytesNumber must be a positive integer');
   }
