@@ -642,10 +642,11 @@ class TelegramClient {
         }
 
         return sender;
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (this._shouldDebugExportedSenders) {
+          const message = err instanceof Error ? err.message : String(err);
           // eslint-disable-next-line no-console
-          console.error(`☠️ ERROR! idx=${index} dcId=${dcId} ${err.message}`);
+          console.error(`☠️ ERROR! idx=${index} dcId=${dcId} ${message}`);
         }
         // eslint-disable-next-line no-console
         console.error(err);

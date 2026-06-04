@@ -107,7 +107,18 @@ export function checkErrorType(error: unknown): error is Error {
   return true;
 }
 
-export function buildApiError(error: Error): Pick<ApiError, 'message' | 'code' | 'hasErrorKey'> {
+export function getErrorMessage(error: unknown, fallbackMessage = 'Unknown error') {
+  if (error instanceof errors.RPCError) return error.errorMessage || fallbackMessage;
+  if (error instanceof Error) return error.message || fallbackMessage;
+  if (typeof error === 'string') return error || fallbackMessage;
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message?: unknown }).message || fallbackMessage);
+  }
+
+  return fallbackMessage;
+}
+
+export function buildApiError(error: unknown): Pick<ApiError, 'message' | 'code' | 'hasErrorKey'> {
   if (error instanceof errors.RPCError) {
     return {
       message: error.errorMessage,
@@ -117,7 +128,7 @@ export function buildApiError(error: Error): Pick<ApiError, 'message' | 'code' |
   }
 
   return {
-    message: error.message,
+    message: getErrorMessage(error),
   };
 }
 

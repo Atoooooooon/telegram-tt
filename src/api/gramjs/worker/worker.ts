@@ -101,7 +101,7 @@ onmessage = ({ data }: OriginMessageEvent) => {
               response,
             }, arrayBuffer);
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
           if (DEBUG) {
             console.error(error);
           }
@@ -151,13 +151,43 @@ onmessage = ({ data }: OriginMessageEvent) => {
 function handleErrors() {
   self.onerror = (e) => {
     console.error(e);
-    sendToOrigin({ type: 'unhandledError', error: { message: e.error.message || 'Uncaught exception in worker' } });
+    sendToOrigin({
+      type: 'unhandledError',
+      error: serializeWorkerError(e.error, e.message || 'Uncaught exception in worker'),
+    });
   };
 
   self.addEventListener('unhandledrejection', (e) => {
     console.error(e);
-    sendToOrigin({ type: 'unhandledError', error: { message: e.reason.message || 'Uncaught rejection in worker' } });
+    sendToOrigin({
+      type: 'unhandledError',
+      error: serializeWorkerError(e.reason, 'Uncaught rejection in worker'),
+    });
   });
+}
+
+function serializeWorkerError(error: unknown, fallbackMessage: string) {
+  if (error instanceof Error) {
+    return {
+      message: error.message || fallbackMessage,
+      name: error.name,
+      stack: error.stack,
+    };
+  }
+
+  if (typeof error === 'string') {
+    return { message: error || fallbackMessage };
+  }
+
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = String((error as { message?: unknown }).message || fallbackMessage);
+    const name = 'name' in error ? String((error as { name?: unknown }).name || '') : undefined;
+    const stack = 'stack' in error ? String((error as { stack?: unknown }).stack || '') : undefined;
+
+    return { message, name, stack };
+  }
+
+  return { message: fallbackMessage };
 }
 
 const sendToOriginOnTickEnd = throttleWithTickEnd(() => {

@@ -28,7 +28,7 @@ export type WorkerPayload =
   |
   {
     type: 'unhandledError';
-    error?: { message: string };
+    error?: { message: string; name?: string; stack?: string };
   }
   |
   {

@@ -126,7 +126,7 @@ function onMessage(
               arrayBuffer ? [arrayBuffer] : undefined,
             );
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
           if (DEBUG) {
             // eslint-disable-next-line no-console
             console.error(error);
@@ -136,7 +136,7 @@ function onMessage(
             sendToOrigin({
               type: 'methodResponse',
               messageId,
-              error: { message: error.message },
+              error: { message: getErrorMessage(error, 'Worker method failed') },
             });
           }
         }
@@ -168,12 +168,52 @@ function handleErrors(sendToOrigin: SendToOrigin) {
   self.onerror = (e) => {
     // eslint-disable-next-line no-console
     console.error(e);
-    sendToOrigin({ type: 'unhandledError', error: { message: e.error.message || 'Uncaught exception in worker' } });
+    sendToOrigin({
+      type: 'unhandledError',
+      error: serializeWorkerError(e.error, e.message || 'Uncaught exception in worker'),
+    });
   };
 
   self.addEventListener('unhandledrejection', (e) => {
     // eslint-disable-next-line no-console
     console.error(e);
-    sendToOrigin({ type: 'unhandledError', error: { message: e.reason.message || 'Uncaught rejection in worker' } });
+    sendToOrigin({
+      type: 'unhandledError',
+      error: serializeWorkerError(e.reason, 'Uncaught rejection in worker'),
+    });
   });
+}
+
+function getErrorMessage(error: unknown, fallbackMessage: string) {
+  if (error instanceof Error) return error.message || fallbackMessage;
+  if (typeof error === 'string') return error || fallbackMessage;
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message?: unknown }).message || fallbackMessage);
+  }
+
+  return fallbackMessage;
+}
+
+function serializeWorkerError(error: unknown, fallbackMessage: string) {
+  if (error instanceof Error) {
+    return {
+      message: error.message || fallbackMessage,
+      name: error.name,
+      stack: error.stack,
+    };
+  }
+
+  if (typeof error === 'string') {
+    return { message: error || fallbackMessage };
+  }
+
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = String((error as { message?: unknown }).message || fallbackMessage);
+    const name = 'name' in error ? String((error as { name?: unknown }).name || '') : undefined;
+    const stack = 'stack' in error ? String((error as { stack?: unknown }).stack || '') : undefined;
+
+    return { message, name, stack };
+  }
+
+  return { message: fallbackMessage };
 }

@@ -32,6 +32,7 @@ import InfiniteScroll from '../../ui/InfiniteScroll';
 import Loading from '../../ui/Loading';
 import Archive from './Archive';
 import Chat from './Chat';
+import CustomerServiceListItem from '../../customerService/v2/left/CustomerServiceListItem';
 import EmptyFolder from './EmptyFolder';
 import ChatListPanes from './panes/ChatListPanes';
 
@@ -96,6 +97,7 @@ const ChatList = ({
   );
 
   const shouldDisplayArchive = isAllFolder && canDisplayArchive && archiveSettings;
+  const customerServiceHeight = isAllFolder ? CHAT_HEIGHT_PX : 0;
 
   const orderedIds = useFolderManagerForOrderedIds(resolvedFolderId);
   usePeerStoriesPolling(orderedIds);
@@ -208,7 +210,7 @@ const ChatList = ({
       const isPinned = viewportOffset + i < pinnedCount;
       const offsetTop = noAbsolutePositioning
         ? undefined
-        : panesHeight + archiveHeight + (viewportOffset + i) * CHAT_HEIGHT_PX;
+        : customerServiceHeight + panesHeight + archiveHeight + (viewportOffset + i) * CHAT_HEIGHT_PX;
 
       return (
         <Chat
@@ -233,7 +235,7 @@ const ChatList = ({
     });
   }
 
-  const totalHeight = chatsHeight + archiveHeight + panesHeight;
+  const totalHeight = customerServiceHeight + chatsHeight + archiveHeight + panesHeight;
 
   return (
     <InfiniteScroll
@@ -250,6 +252,7 @@ const ChatList = ({
       onLoadMore={getMore}
       onScroll={onScroll}
     >
+      {isAllFolder && <CustomerServiceListItem key="customer-service" />}
       {isAllFolder && <ChatListPanes key="panes" onHeightChange={setPanesHeight} />}
       {shouldDisplayArchive && (
         <Archive

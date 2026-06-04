@@ -70,7 +70,7 @@ export type WorkerPayload =
   {
     channel?: string;
     type: 'unhandledError';
-    error?: { message: string };
+    error?: { message: string; name?: string; stack?: string };
   };
 
 export type WorkerMessageData = {
@@ -205,7 +205,14 @@ class ConnectorClass<T extends InputRequestTypes> {
         const requestState = requestStates.get(payload.messageId);
         requestState?.callback?.(...payload.callbackArgs);
       } else if (payload.type === 'unhandledError') {
-        throw new Error(payload.error?.message);
+        const error = new Error(payload.error?.message || 'Unhandled worker error');
+        if (payload.error?.name) {
+          error.name = payload.error.name;
+        }
+        if (payload.error?.stack) {
+          error.stack = payload.error.stack;
+        }
+        throw error;
       }
     });
   }

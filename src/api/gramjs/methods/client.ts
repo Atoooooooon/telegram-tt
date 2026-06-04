@@ -42,6 +42,7 @@ import {
 } from '../helpers/localDb';
 import {
   buildApiError,
+  getErrorMessage,
   isResponseUpdate, log,
 } from '../helpers/misc';
 import localDb, { clearLocalDb, type RepairInfo } from '../localDb';
@@ -154,11 +155,13 @@ export async function init(initialArgs: ApiInitialArgs, onConnected?: NoneToVoid
         accountIds,
         hasPasskeySupport,
       }, onConnected);
-    } catch (err: any) {
+    } catch (err: unknown) {
       // eslint-disable-next-line no-console
       console.error(err);
 
-      if (err.message !== 'Disconnect' && err.message !== 'Cannot send requests while disconnected') {
+      const message = getErrorMessage(err);
+
+      if (message !== 'Disconnect' && message !== 'Cannot send requests while disconnected') {
         sendApiUpdate({
           '@type': 'updateConnectionState',
           connectionState: 'connectionStateBroken',
@@ -316,7 +319,7 @@ export async function invokeRequest<T extends GramJs.AnyRequest>(
     }
 
     return shouldReturnTrue ? result && true : result;
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (shouldIgnoreErrors) return undefined;
     if (DEBUG) {
       log('INVOKE ERROR', request.className);
@@ -326,7 +329,7 @@ export async function invokeRequest<T extends GramJs.AnyRequest>(
       console.error(err);
     }
 
-    const message = err instanceof RPCError ? err.errorMessage : err.message;
+    const message = getErrorMessage(err);
 
     if (message.includes('FROZEN_METHOD_INVALID')) {
       dispatchNotSupportedInFrozenAccountUpdate(err, request);
@@ -453,7 +456,7 @@ export async function fetchCurrentUser() {
   setIsPremium({ isPremium: Boolean(currentUser.isPremium) });
 }
 
-export function dispatchErrorUpdate<T extends GramJs.AnyRequest>(err: Error, request: T) {
+export function dispatchErrorUpdate<T extends GramJs.AnyRequest>(err: unknown, request: T) {
   const { message, code } = buildApiError(err);
 
   const isSlowMode = err instanceof errors.FloodError && (
@@ -473,7 +476,7 @@ export function dispatchErrorUpdate<T extends GramJs.AnyRequest>(err: Error, req
   });
 }
 
-function dispatchNotSupportedInFrozenAccountUpdate<T extends GramJs.AnyRequest>(err: Error, request: T) {
+function dispatchNotSupportedInFrozenAccountUpdate<T extends GramJs.AnyRequest>(err: unknown, request: T) {
   if (!(err instanceof RPCError)) return;
   const message = err.errorMessage;
 
@@ -501,11 +504,14 @@ async function handleTerminatedSession() {
     }), {
       shouldThrow: true,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (
-      err.errorMessage === 'AUTH_KEY_UNREGISTERED'
-      || err.errorMessage === 'SESSION_REVOKED'
-      || err.errorMessage === 'USER_DEACTIVATED'
+      err instanceof RPCError
+      && (
+        err.errorMessage === 'AUTH_KEY_UNREGISTERED'
+        || err.errorMessage === 'SESSION_REVOKED'
+        || err.errorMessage === 'USER_DEACTIVATED'
+      )
     ) {
       sendApiUpdate({
         '@type': 'updateConnectionState',

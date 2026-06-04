@@ -301,7 +301,14 @@ function subscribeToWorker(onUpdate: OnApiUpdate) {
       } else if (payload.type === 'unhandledError') {
         const message = payload.error?.message;
         if (message && IGNORE_UNHANDLED_ERRORS.has(message)) return;
-        throw new Error(message);
+        const error = new Error(message || 'Unhandled API worker error');
+        if (payload.error?.name) {
+          error.name = payload.error.name;
+        }
+        if (payload.error?.stack) {
+          error.stack = payload.error.stack;
+        }
+        throw error;
       } else if (payload.type === 'sendBeacon') {
         navigator.sendBeacon(payload.url, payload.data);
       } else if (payload.type === 'debugLog') {

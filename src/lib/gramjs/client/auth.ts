@@ -350,8 +350,7 @@ async function signInUserWithQrCode(
   }
 
   // This is a workaround for TypeScript (never actually reached)
-  // eslint-disable-next-line @typescript-eslint/only-throw-error
-  throw undefined;
+  throw new Error('QR login failed');
 }
 
 export async function obtainPasskeyLoginOption(
