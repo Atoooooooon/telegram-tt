@@ -15,9 +15,11 @@ import { callApi } from '../../../api/gramjs';
 import { isGraph } from './helpers/isGraph';
 
 import useForceUpdate from '../../../hooks/useForceUpdate';
+import useLang from '../../../hooks/useLang';
 import useLastCallback from '../../../hooks/useLastCallback';
 import useOldLang from '../../../hooks/useOldLang';
 
+import Island, { IslandTitle } from '../../gili/layout/Island';
 import InfiniteScroll from '../../ui/InfiniteScroll';
 import Loading from '../../ui/Loading';
 import StatisticsMessagePublicForward from './StatisticsMessagePublicForward';
@@ -62,11 +64,12 @@ function MessageStatistics({
   dcId,
   messageId,
 }: OwnProps & StateProps) {
-  const lang = useOldLang();
+  const lang = useLang();
+  const oldLang = useOldLang();
   const containerRef = useRef<HTMLDivElement>();
   const [isReady, setIsReady] = useState(false);
-  const loadedCharts = useRef<Set<string>>(new Set());
-  const errorCharts = useRef<Set<string>>(new Set());
+  const loadedChartsRef = useRef<Set<string>>(new Set());
+  const errorChartsRef = useRef<Set<string>>(new Set());
 
   const { loadMessageStatistics, loadMessagePublicForwards, loadStatisticsAsyncGraph } = getActions();
   const forceUpdate = useForceUpdate();
@@ -79,8 +82,8 @@ function MessageStatistics({
 
   useEffect(() => {
     if (!isActive || messageId) {
-      loadedCharts.current.clear();
-      errorCharts.current.clear();
+      loadedChartsRef.current.clear();
+      errorChartsRef.current.clear();
       setIsReady(false);
     }
   }, [isActive, messageId]);
@@ -125,13 +128,13 @@ function MessageStatistics({
         const isAsync = graph.graphType === 'async';
         const isError = graph.graphType === 'error';
 
-        if (isAsync || loadedCharts.current.has(name)) {
+        if (isAsync || loadedChartsRef.current.has(name)) {
           return;
         }
 
         if (isError) {
-          loadedCharts.current.add(name);
-          errorCharts.current.add(name);
+          loadedChartsRef.current.add(name);
+          errorChartsRef.current.add(name);
 
           return;
         }
@@ -141,22 +144,22 @@ function MessageStatistics({
         LovelyChart.create(
           containerRef.current!.children[index] as HTMLElement,
           {
-            title: lang((GRAPH_TITLES as Record<string, string>)[name]),
+            title: oldLang((GRAPH_TITLES as Record<string, string>)[name]),
             ...zoomToken ? {
               onZoom: (x: number) => callApi('fetchStatisticsAsyncGraph', { token: zoomToken, x, dcId }),
-              zoomOutLabel: lang('Graph.ZoomOut'),
+              zoomOutLabel: oldLang('Graph.ZoomOut'),
             } : {},
             ...graph,
           },
         );
 
-        loadedCharts.current.add(name);
+        loadedChartsRef.current.add(name);
       });
 
       forceUpdate();
     })();
   }, [
-    isReady, statistics, lang, chatId, messageId, loadStatisticsAsyncGraph, dcId, forceUpdate,
+    isReady, statistics, oldLang, chatId, messageId, loadStatisticsAsyncGraph, dcId, forceUpdate,
   ]);
 
   const handleLoadMore = useLastCallback(({ direction }: { direction: LoadMoreDirection }) => {
@@ -174,13 +177,16 @@ function MessageStatistics({
       key={`${chatId}-${messageId}`}
       className={buildClassName(styles.root, 'custom-scroll', isReady && styles.ready)}
     >
-      <StatisticsOverview statistics={statistics} type="message" title={lang('StatisticOverview')} />
+      <IslandTitle>{lang('StatisticOverview')}</IslandTitle>
+      <Island>
+        <StatisticsOverview statistics={statistics} type="message" />
+      </Island>
 
-      {(!loadedCharts.current.size || !statistics.publicForwardsData) && <Loading />}
+      {(!loadedChartsRef.current.size || !statistics.publicForwardsData) && <Loading />}
 
-      <div ref={containerRef}>
+      <div ref={containerRef} className={styles.graphContainer} data-stricterdom-ignore>
         {GRAPHS.map((graph) => {
-          const isGraphReady = loadedCharts.current.has(graph) && !errorCharts.current.has(graph);
+          const isGraphReady = loadedChartsRef.current.has(graph) && !errorChartsRef.current.has(graph);
           return (
             <div className={buildClassName(styles.graph, !isGraphReady && styles.hidden)} />
           );
@@ -189,18 +195,19 @@ function MessageStatistics({
 
       {Boolean(statistics.publicForwards) && (
         <div className={styles.publicForwards}>
-          <h2 className={styles.publicForwardsTitle}>{lang('Stats.Message.PublicShares')}</h2>
-
-          <InfiniteScroll
-            items={statistics.publicForwardsData}
-            itemSelector=".statistic-public-forward"
-            onLoadMore={handleLoadMore}
-            noFastList
-          >
-            {(statistics.publicForwardsData as ApiMessagePublicForward[]).map((item) => (
-              <StatisticsMessagePublicForward key={item.messageId} data={item} />
-            ))}
-          </InfiniteScroll>
+          <IslandTitle>{lang('StatsMessagePublicShares')}</IslandTitle>
+          <Island>
+            <InfiniteScroll
+              items={statistics.publicForwardsData}
+              itemSelector=".statistic-public-forward"
+              onLoadMore={handleLoadMore}
+              noFastList
+            >
+              {(statistics.publicForwardsData as ApiMessagePublicForward[]).map((item) => (
+                <StatisticsMessagePublicForward key={item.messageId} data={item} />
+              ))}
+            </InfiniteScroll>
+          </Island>
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
 import type React from '@teact';
 import type { ElementRef } from '@teact';
-import { memo, useEffect, useMemo, useState } from '@teact';
+import { memo, useEffect, useMemo, useRef, useState } from '@teact';
 import { getActions, withGlobal } from '../../global';
 
 import type { ApiChat, ApiChatBannedRights, ApiInputMessageReplyInfo, ApiTopic } from '../../api/types';
@@ -30,14 +30,13 @@ import {
   isUserRightBanned,
 } from '../../global/helpers';
 import {
+  selectActionMessageBg,
   selectBot,
   selectCanAnimateInterface, selectCanAnimateRightColumn,
   selectChat,
   selectChatFullInfo,
   selectCurrentMessageList,
   selectCurrentMiddleSearch,
-  selectDraft,
-  selectEditingId,
   selectIsChatBotNotStarted,
   selectIsCurrentUserFrozen,
   selectIsInSelectMode,
@@ -49,12 +48,12 @@ import {
   selectTabState,
   selectTheme,
   selectThemeValues,
-  selectThreadInfo,
   selectTopic,
   selectTopics,
   selectUserFullInfo,
 } from '../../global/selectors';
 import { selectSharedSettings } from '../../global/selectors/sharedState';
+import { selectDraft, selectEditingId, selectThreadInfo } from '../../global/selectors/threads';
 import { IS_TAURI } from '../../util/browser/globalEnvironment';
 import {
   IS_ANDROID, IS_IOS, IS_MAC_OS, IS_SAFARI, IS_TRANSLATION_SUPPORTED, MASK_IMAGE_DISABLED,
@@ -62,6 +61,7 @@ import {
 import buildClassName from '../../util/buildClassName';
 import buildStyle from '../../util/buildStyle';
 import captureEscKeyListener from '../../util/captureEscKeyListener';
+import { waitForTransitionEnd } from '../../util/cssAnimationEndListeners';
 import { isUserId } from '../../util/entities/ids';
 import { resolveTransitionName } from '../../util/resolveTransitionName';
 import calculateMiddleFooterTransforms from './helpers/calculateMiddleFooterTransforms';
@@ -125,6 +125,7 @@ type StateProps = {
   customBackground?: string;
   backgroundColor?: string;
   patternColor?: string;
+  actionMessageBg?: string;
   isLeftColumnShown?: boolean;
   isRightColumnShown?: boolean;
   isBackgroundBlurred?: boolean;
@@ -191,6 +192,7 @@ function MiddleColumn({
   theme,
   backgroundColor,
   patternColor,
+  actionMessageBg,
   isLeftColumnShown,
   isRightColumnShown,
   isBackgroundBlurred,
@@ -250,7 +252,7 @@ function MiddleColumn({
   const oldLang = useOldLang();
   const lang = useLang();
   const [dropAreaState, setDropAreaState] = useState(DropAreaState.None);
-  const [isScrollDownNeeded, setIsScrollDownShown] = useState(false);
+  const [isScrollDownNeeded, setIsScrollDownNeeded] = useState(false);
   const isScrollDownShown = isScrollDownNeeded && (!isMobile || !hasActiveMiddleSearch);
   const [isNotchShown, setIsNotchShown] = useState<boolean | undefined>();
   const [isUnpinModalOpen, setIsUnpinModalOpen] = useState(false);
@@ -291,12 +293,16 @@ function MiddleColumn({
     prevTransitionKey !== undefined && prevTransitionKey < currentTransitionKey ? prevTransitionKey : undefined
   );
 
-  const { isReady, handleCssTransitionEnd, handleSlideTransitionStop } = useIsReady(
+  const middleColumnRef = useRef<HTMLDivElement>();
+
+  const { isReady, handleSlideTransitionStop } = useIsReady(
     !shouldSkipHistoryAnimations && withInterfaceAnimations,
     currentTransitionKey,
     prevTransitionKey,
     chatId,
     isMobile,
+    isLeftColumnShown,
+    middleColumnRef,
   );
 
   useEffect(() => {
@@ -486,7 +492,7 @@ function MiddleColumn({
   });
 
   // Prepare filter beforehand to avoid flickering
-  useFluidBackgroundFilter(patternColor);
+  useFluidBackgroundFilter(actionMessageBg);
 
   const isMessagingDisabled = Boolean(
     !isPinnedMessageList && !isSavedDialog && !renderingCanPost && !renderingCanRestartBot && !renderingCanStartBot
@@ -500,9 +506,9 @@ function MiddleColumn({
 
   return (
     <div
+      ref={middleColumnRef}
       id="MiddleColumn"
       className={className}
-      onTransitionEnd={handleCssTransitionEnd}
       style={buildStyle(
         `--composer-hidden-scale: ${composerHiddenScale}`,
         `--toolbar-hidden-scale: ${toolbarHiddenScale}`,
@@ -570,7 +576,7 @@ function MiddleColumn({
                 type={renderingMessageListType!}
                 isComments={isComments}
                 canPost={renderingCanPost!}
-                onScrollDownToggle={setIsScrollDownShown}
+                onScrollDownToggle={setIsScrollDownNeeded}
                 onNotchToggle={setIsNotchShown}
                 isReady={isReady}
                 isContactRequirePremium={isContactRequirePremium}
@@ -607,6 +613,7 @@ function MiddleColumn({
                       fluid
                       color="secondary"
                       className="composer-button unpin-all-button"
+                      noForcedUpperCase
                       onClick={handleOpenUnpinModal}
                       iconName="unpin"
                     >
@@ -760,6 +767,7 @@ export default memo(withGlobal<OwnProps>(
       customBackground,
       backgroundColor,
       patternColor,
+      actionMessageBg: selectActionMessageBg(global),
       isLeftColumnShown,
       isRightColumnShown: selectIsRightColumnShown(global, isMobile),
       isBackgroundBlurred,
@@ -821,7 +829,9 @@ export default memo(withGlobal<OwnProps>(
     const topics = selectTopics(global, chatId);
 
     const isSavedDialog = getIsSavedDialog(chatId, threadId, global.currentUserId);
-    const canShowOpenChatButton = isSavedDialog && threadId !== ANONYMOUS_USER_ID;
+    const canShowOpenChatButton = isSavedDialog
+      && threadId !== ANONYMOUS_USER_ID
+      && threadId !== global.currentUserId;
 
     const canUnpin = chat && (
       isPrivate || (
@@ -891,23 +901,26 @@ function useIsReady(
   prevTransitionKey?: number,
   chatId?: string,
   isMobile?: boolean,
+  isLeftColumnShown?: boolean,
+  middleColumnRef?: ElementRef<HTMLDivElement>,
 ) {
   const [isReady, setIsReady] = useState(!isMobile);
   const forceUpdate = useForceUpdate();
 
   const willSwitchMessageList = prevTransitionKey !== undefined && prevTransitionKey !== currentTransitionKey;
-  if (willSwitchMessageList) {
-    if (withAnimations) {
-      setIsReady(false);
-
-      // Make sure to end even if end callback was not called (which was some hardly-reproducible bug)
-      setTimeout(() => {
-        setIsReady(true);
-      }, LAYER_ANIMATION_DURATION_MS);
-    } else {
+  useSyncEffect(() => {
+    if (!willSwitchMessageList) return;
+    if (!withAnimations) {
       forceUpdate();
+      return undefined;
     }
-  }
+    setIsReady(false);
+
+    // Make sure to end even if end callback was not called (which was some hardly-reproducible bug)
+    window.setTimeout(() => {
+      setIsReady(true);
+    }, LAYER_ANIMATION_DURATION_MS);
+  }, [willSwitchMessageList, withAnimations]);
 
   useSyncEffect(() => {
     if (!withAnimations) {
@@ -915,11 +928,40 @@ function useIsReady(
     }
   }, [withAnimations]);
 
-  function handleCssTransitionEnd(e: React.TransitionEvent<HTMLDivElement>) {
-    if (e.propertyName === 'transform' && e.target === e.currentTarget) {
-      setIsReady(Boolean(chatId));
+  // Mobile only: wait until `MiddleColumn` slides in after the left column closes
+  useSyncEffect(([prevIsLeftColumnShown, prevWillSwitchMessageList]) => {
+    if (!isMobile) {
+      return;
     }
-  }
+
+    if (!chatId) {
+      setIsReady(false);
+      return;
+    }
+
+    if (!withAnimations) {
+      setIsReady(true);
+      return;
+    }
+
+    if (willSwitchMessageList || prevWillSwitchMessageList) {
+      return;
+    }
+
+    if (isLeftColumnShown) {
+      setIsReady(false);
+      return;
+    }
+
+    if (prevIsLeftColumnShown !== true) {
+      setIsReady(true);
+      return;
+    }
+
+    waitForTransitionEnd(middleColumnRef!.current!, () => {
+      setIsReady(true);
+    }, 'transform', LAYER_ANIMATION_DURATION_MS);
+  }, [isLeftColumnShown, willSwitchMessageList, chatId, isMobile, withAnimations, middleColumnRef]);
 
   function handleSlideTransitionStop() {
     setIsReady(true);
@@ -927,7 +969,6 @@ function useIsReady(
 
   return {
     isReady: isReady && !willSwitchMessageList,
-    handleCssTransitionEnd: withAnimations ? handleCssTransitionEnd : undefined,
     handleSlideTransitionStop: withAnimations ? handleSlideTransitionStop : undefined,
   };
 }

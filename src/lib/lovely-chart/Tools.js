@@ -1,5 +1,6 @@
 import { createElement } from './minifiers.js';
 import { captureEvents } from './captureEvents.js';
+import { isColorCloseToWhite } from './skin.js';
 
 export function createTools(container, data, filterCallback) {
   let _element;
@@ -35,8 +36,17 @@ export function createTools(container, data, filterCallback) {
       const control = createElement('a');
       control.href = '#';
       control.dataset.key = key;
-      control.className = `lovely-chart--button lovely-chart--color-${data.colors[key].slice(1)} lovely-chart--state-checked`;
-      control.innerHTML = `<span class="lovely-chart--button-check"></span><span class="lovely-chart--button-label">${name}</span>`;
+      const darkContent = isColorCloseToWhite(data.colors[key]) ? ' lovely-chart--dark-content' : '';
+      control.className = `lovely-chart--button lovely-chart--color-${data.colors[key].slice(1)} lovely-chart--state-checked${darkContent}`;
+
+      const check = createElement('span');
+      check.className = 'lovely-chart--button-check';
+      control.appendChild(check);
+
+      const label = createElement('span');
+      label.className = 'lovely-chart--button-label';
+      label.textContent = name;
+      control.appendChild(label);
 
       control.addEventListener('click', (e) => {
         e.preventDefault();

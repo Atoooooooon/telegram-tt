@@ -8,7 +8,7 @@ import type { IconName } from '../../types/icons';
 import { MediaViewerOrigin, type StoryViewerOrigin, type ThreadId } from '../../types';
 
 import {
-  getChatTypeString,
+  getChatTypeLangKey,
   getGroupStatus,
   getMainUsername,
   isChatSuperGroup,
@@ -19,17 +19,16 @@ import {
   selectChatOnlineCount,
   selectIsChatRestricted,
   selectMonoforumChannel,
-  selectThreadMessagesCount,
   selectTopic,
   selectUser,
 } from '../../global/selectors';
+import { selectThreadMessagesCount } from '../../global/selectors/threads';
 import buildClassName from '../../util/buildClassName';
 import { REM } from './helpers/mediaDimensions';
 import renderText from './helpers/renderText';
 
 import useLang from '../../hooks/useLang';
 import useLastCallback from '../../hooks/useLastCallback';
-import useOldLang from '../../hooks/useOldLang';
 
 import Transition from '../ui/Transition';
 import Avatar from './Avatar';
@@ -46,7 +45,7 @@ type OwnProps = {
   threadId?: ThreadId;
   className?: string;
   statusIcon?: IconName;
-  typingStatus?: ApiTypingStatus;
+  typingStatusByPeerId?: Record<string, ApiTypingStatus>;
   avatarSize?: 'tiny' | 'small' | 'medium' | 'large' | 'jumbo';
   status?: string;
   withDots?: boolean;
@@ -79,7 +78,7 @@ type StateProps = {
 };
 
 const GroupChatInfo = ({
-  typingStatus,
+  typingStatusByPeerId,
   className,
   statusIcon,
   avatarSize = 'medium',
@@ -117,7 +116,6 @@ const GroupChatInfo = ({
 
   const chat = !withMonoforumStatus && monoforumChannel ? monoforumChannel : realChat;
 
-  const oldLang = useOldLang();
   const lang = useLang();
 
   const isSuperGroup = chat && isChatSuperGroup(chat);
@@ -155,7 +153,7 @@ const GroupChatInfo = ({
   function renderStatusOrTyping() {
     if (withUpdatingStatus && !areMessagesLoaded && !isRestricted) {
       return (
-        <DotAnimation className="status" content={oldLang('Updating')} />
+        <DotAnimation className="status" content={lang('Updating')} />
       );
     }
 
@@ -186,8 +184,8 @@ const GroupChatInfo = ({
       return undefined;
     }
 
-    if (typingStatus) {
-      return <TypingStatus typingStatus={typingStatus} />;
+    if (typingStatusByPeerId) {
+      return <TypingStatus typingStatusByPeerId={typingStatusByPeerId} />;
     }
 
     if (isTopic) {
@@ -199,7 +197,9 @@ const GroupChatInfo = ({
             activeKey={messagesCount !== undefined ? 1 : 2}
             className="message-count-transition"
           >
-            {messagesCount !== undefined ? oldLang('messages', messagesCount, 'i') : oldLang('lng_forum_no_messages')}
+            {messagesCount !== undefined
+              ? lang('Messages', { count: messagesCount }, { pluralValue: messagesCount })
+              : lang('ChatInfoNoMessages')}
           </Transition>
         </span>
       );
@@ -207,18 +207,22 @@ const GroupChatInfo = ({
 
     if (withChatType) {
       return (
-        <span className="status" dir="auto">{oldLang(getChatTypeString(chat))}</span>
+        <span className="status" dir="auto">{lang(getChatTypeLangKey(chat))}</span>
       );
     }
 
-    const groupStatus = getGroupStatus(oldLang, chat);
-    const onlineStatus = onlineCount ? `, ${oldLang('OnlineCount', onlineCount, 'i')}` : undefined;
+    const groupStatusElement = <span className="group-status">{getGroupStatus(lang, chat)}</span>;
+    const onlineStatus = onlineCount ? lang('OnlineCount', { count: onlineCount }, { pluralValue: onlineCount })
+      : undefined;
+    const onlineStatusElement = onlineStatus ? <span className="online-status">{onlineStatus}</span> : undefined;
 
     return (
       <span className="status">
         {mainUsername && <span className="handle withStatus">{mainUsername}</span>}
-        <span className="group-status">{groupStatus}</span>
-        {onlineStatus && <span className="online-status">{onlineStatus}</span>}
+        {!onlineStatusElement ? groupStatusElement
+          : lang('GroupStatusWithOnline', {
+            status: groupStatusElement, onlineCount: onlineStatusElement,
+          }, { withNodes: true })}
       </span>
     );
   }
@@ -283,10 +287,14 @@ const GroupChatInfo = ({
 };
 
 export default memo(withGlobal<OwnProps>(
-  (global, { chatId, threadId }): Complete<StateProps> => {
+  (global, { chatId, threadId, isSavedDialog }): Complete<StateProps> => {
     const chat = selectChat(global, chatId);
     const onlineCount = chat ? selectChatOnlineCount(global, chat) : undefined;
-    const areMessagesLoaded = Boolean(selectChatMessages(global, chatId));
+    const areMessagesLoaded = Boolean(
+      isSavedDialog
+        ? selectChatMessages(global, global.currentUserId!)
+        : selectChatMessages(global, chatId),
+    );
     const topic = threadId ? selectTopic(global, chatId, threadId) : undefined;
     const messagesCount = topic && selectThreadMessagesCount(global, chatId, threadId!);
     const self = selectUser(global, global.currentUserId!);

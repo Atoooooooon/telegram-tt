@@ -96,16 +96,28 @@ export interface IAlbum {
   commentsMessage?: ApiMessage;
 }
 
+export interface IDocumentGroup {
+  documentGroupId: string;
+  messages: ApiMessage[];
+  firstMessageId: number;
+  commentsMessage?: ApiMessage;
+}
+
 export type ThreadId = string | number;
+
+export type ForwardTarget = {
+  chatId: string;
+  topicId?: number;
+};
 
 export type ThemeKey = 'light' | 'dark';
 export type AnimationLevel = 0 | 1 | 2;
 export type FoldersPosition = 'top' | 'left';
 export type PerformanceTypeKey = (
   'pageTransitions' | 'messageSendingAnimations' | 'mediaViewerAnimations'
-  | 'messageComposerAnimations' | 'contextMenuAnimations' | 'contextMenuBlur' | 'rightColumnAnimations'
-  | 'animatedEmoji' | 'loopAnimatedStickers' | 'reactionEffects' | 'stickerEffects' | 'autoplayGifs' | 'autoplayVideos'
-  | 'storyRibbonAnimations' | 'snapEffect'
+  | 'messageComposerAnimations' | 'contextMenuAnimations' | 'contextMenuBlur' | 'messageBlur'
+  | 'rightColumnAnimations' | 'animatedEmoji' | 'loopAnimatedStickers' | 'reactionEffects' | 'stickerEffects'
+  | 'autoplayGifs' | 'autoplayVideos' | 'storyRibbonAnimations' | 'snapEffect' | 'textStreaming'
 );
 export type PerformanceType = Record<PerformanceTypeKey, boolean>;
 
@@ -127,6 +139,7 @@ export interface AccountSettings {
   hasWebNotifications: boolean;
   hasPushNotifications: boolean;
   hasContactJoinedNotifications?: boolean;
+  shouldNotifyAboutPinnedMessages: boolean;
   notificationSoundVolume: number;
   canAutoLoadPhotoFromContacts: boolean;
   canAutoLoadPhotoInPrivateChats: boolean;
@@ -157,12 +170,15 @@ export interface AccountSettings {
   canTranslateChats: boolean;
   translationLanguage?: string;
   doNotTranslate: string[];
+  translationTone?: TranslationTone;
   shouldPaidMessageAutoApprove: boolean;
 }
 
 export type IAnchorPosition = {
   x: number;
   y: number;
+  width?: number;
+  height?: number;
 };
 
 export interface ShippingOption {
@@ -262,6 +278,7 @@ export enum SettingsScreens {
   CustomEmoji,
   DoNotTranslate,
   FoldersShare,
+  Passkeys,
 }
 
 export type StickerSetOrReactionsSetOrRecent = Pick<ApiStickerSet, (
@@ -327,6 +344,7 @@ export enum MediaViewerOrigin {
   StarsTransaction,
   PreviewMedia,
   SponsoredMessage,
+  PollPreview,
 }
 
 export enum StoryViewerOrigin {
@@ -408,6 +426,7 @@ export type MiddleSearchParams = {
   requestedQuery?: string;
   savedTag?: ApiReaction;
   isHashtag?: boolean;
+  fromPeerId?: string;
   fetchingQuery?: string;
   type: MiddleSearchType;
   results?: MiddleSearchResults;
@@ -602,23 +621,47 @@ export interface TabThread {
   viewportIds?: number[];
 }
 
-export interface Thread {
+export interface ThreadReadState {
+  unreadCount?: number;
+  unreadMentionsCount?: number;
+  unreadReactionsCount?: number;
+  unreadPollVotesCount?: number;
+  unreadReactions?: number[];
+  unreadMentions?: number[];
+  unreadPollVotes?: number[];
+  hasUnreadMark?: boolean;
+
+  lastReadOutboxMessageId?: number;
+  lastReadInboxMessageId?: number;
+}
+
+export interface ThreadLocalState {
   lastScrollOffset?: number;
   lastViewportIds?: number[];
   listedIds?: number[];
   outlyingLists?: number[][];
   pinnedIds?: number[];
   scheduledIds?: number[];
+  firstMessageId?: number;
+
   editingId?: number;
   editingScheduledId?: number;
   editingDraft?: ApiFormattedText;
   editingScheduledDraft?: ApiFormattedText;
+
   draft?: ApiDraft;
+
   noWebPage?: boolean;
-  threadInfo?: ApiThreadInfo;
-  firstMessageId?: number;
-  typingStatus?: ApiTypingStatus;
+
+  typingStatusByPeerId?: Record<string, ApiTypingStatus>;
+
   typingDraftIdByRandomId?: Record<string, number>;
+}
+
+export interface Thread {
+  localState: ThreadLocalState;
+  threadInfo: ApiThreadInfo;
+  readState: ThreadReadState;
 }
 
 export interface ServiceNotification {
@@ -631,6 +674,7 @@ export interface ServiceNotification {
 
 export interface TopicsInfo {
   totalCount: number;
+  isCache?: true;
   topicsById: Record<ThreadId, ApiTopic>;
   listedTopicIds?: number[];
   orderedPinnedTopicIds?: number[];
@@ -639,6 +683,18 @@ export interface TopicsInfo {
 export type TranslatedMessage = {
   isPending?: boolean;
   text?: ApiFormattedText;
+  summary?: TextSummary;
+};
+
+export const TRANSLATION_TONES = ['neutral', 'formal', 'casual'] as const;
+export type TranslationTone = typeof TRANSLATION_TONES[number];
+
+export type TextSummary = {
+  isPending?: false;
+  text: ApiFormattedText;
+} | {
+  isPending: true;
+  text?: undefined;
 };
 
 export type ChatTranslatedMessages = {
@@ -648,6 +704,7 @@ export type ChatTranslatedMessages = {
 export type ChatRequestedTranslations = {
   toLanguage?: string;
   manualMessages?: Record<number, string>;
+  tone?: TranslationTone;
 };
 
 export type SimilarBotsInfo = {
@@ -704,6 +761,7 @@ export type ResaleGiftsFilterOptions = {
   modelAttributes?: StarGiftAttributeIdModel[];
   patternAttributes?: ApiStarGiftAttributeIdPattern[];
   backdropAttributes?: ApiStarGiftAttributeIdBackdrop[];
+  starsOnly?: boolean;
 };
 
 export type SendMessageParams = {
@@ -720,6 +778,7 @@ export type SendMessageParams = {
   gif?: ApiVideo;
   poll?: ApiNewPoll;
   todo?: ApiNewMediaTodo;
+  dice?: string;
   contact?: ApiContact;
   isSilent?: boolean;
   scheduledAt?: number;
@@ -741,7 +800,6 @@ export type SendMessageParams = {
   messagePriceInStars?: number;
   localMessage?: ApiMessage;
   forwardedLocalMessagesSlice?: ForwardedLocalMessagesSlice;
-  isForwarding?: boolean;
   forwardParams?: ForwardMessagesParams;
   isStoryReply?: boolean;
   suggestedMedia?: MediaContent;
@@ -769,4 +827,5 @@ export type ForwardMessagesParams = {
   lastMessageId?: number;
   forwardedLocalMessagesSlice?: ForwardedLocalMessagesSlice;
   messagePriceInStars?: number;
+  effectId?: string;
 };

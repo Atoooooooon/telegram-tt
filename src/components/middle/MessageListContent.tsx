@@ -1,9 +1,9 @@
-import type { ElementRef } from '../../lib/teact/teact';
+import type { ElementRef, TeactNode } from '../../lib/teact/teact';
 import { getIsHeavyAnimating, memo } from '../../lib/teact/teact';
 import { getActions, getGlobal } from '../../global';
 
 import type { ApiMessage } from '../../api/types';
-import type { IAlbum, MessageListType, ThreadId } from '../../types';
+import type { IAlbum, IDocumentGroup, MessageListType, ThreadId } from '../../types';
 import type { Signal } from '../../util/signals';
 import type { MessageDateGroup } from './helpers/groupMessages';
 import type { OnIntersectPinnedMessage } from './hooks/usePinnedMessage';
@@ -22,11 +22,13 @@ import {
 import { getPeerTitle } from '../../global/helpers/peers';
 import { selectChatMessage, selectSender } from '../../global/selectors';
 import buildClassName from '../../util/buildClassName';
-import { formatHumanDate, formatScheduledDateTime } from '../../util/dates/dateFormat';
+import { formatHumanDate, formatScheduledDateTime } from '../../util/dates/oldDateFormat';
+import { isUserId } from '../../util/entities/ids';
 import { convertTonFromNanos } from '../../util/formatCurrency';
 import { compact } from '../../util/iteratees';
+import { formatMessageListDate } from '../../util/localization/dateFormat';
 import { formatStarsAsText, formatTonAsText } from '../../util/localization/format';
-import { isAlbum } from './helpers/groupMessages';
+import { isAlbum, isDocumentGroup } from './helpers/groupMessages';
 import { preventMessageInputBlur } from './helpers/preventMessageInputBlur';
 import { renderPeerLink } from './message/helpers/messageActions';
 
@@ -60,7 +62,7 @@ interface OwnProps {
   withUsers: boolean;
   isChannelChat: boolean | undefined;
   isChatMonoforum?: boolean;
-  isBotForum?: boolean;
+  canManageBotForumTopics?: boolean;
   isEmptyThread?: boolean;
   isComments?: boolean;
   noAvatars: boolean;
@@ -68,6 +70,8 @@ interface OwnProps {
   anchorIdRef: { current: string | undefined };
   memoUnreadDividerBeforeIdRef: { current: number | undefined };
   memoFirstUnreadIdRef: { current: number | undefined };
+  liveTailStartOriginalId?: number;
+  isReplacingHistoryRef: { current: boolean };
   type: MessageListType;
   isReady: boolean;
   hasLinkedChat: boolean | undefined;
@@ -87,6 +91,19 @@ interface OwnProps {
 
 const UNREAD_DIVIDER_CLASS = 'unread-divider';
 
+function senderGroupContainsOriginalId(
+  senderGroup: (ApiMessage | IAlbum | IDocumentGroup)[],
+  originalId: number,
+) {
+  return senderGroup.some((messageOrAlbum) => {
+    if (isAlbum(messageOrAlbum) || isDocumentGroup(messageOrAlbum)) {
+      return messageOrAlbum.messages.some((message) => getMessageOriginalId(message) === originalId);
+    }
+
+    return getMessageOriginalId(messageOrAlbum) === originalId;
+  });
+}
+
 const MessageListContent = ({
   canShowAds,
   chatId,
@@ -101,12 +118,14 @@ const MessageListContent = ({
   withUsers,
   isChannelChat,
   isChatMonoforum,
-  isBotForum,
+  canManageBotForumTopics,
   noAvatars,
   containerRef,
   anchorIdRef,
   memoUnreadDividerBeforeIdRef,
   memoFirstUnreadIdRef,
+  liveTailStartOriginalId,
+  isReplacingHistoryRef,
   type,
   isReady,
   hasLinkedChat,
@@ -129,13 +148,24 @@ const MessageListContent = ({
   const getIsReady = useDerivedSignal(() => isReady && !getIsHeavyAnimating2(), [isReady, getIsHeavyAnimating2]);
 
   const areDatesClickable = !isSavedDialog && !isSchedule;
+  const isPrivate = isUserId(chatId);
   const shouldRenderSponsoredMessage = canShowAds && isViewportNewest;
+  const shouldHideComments = hasLinkedChat === false || !isChannelChat || Boolean(isChatMonoforum);
 
   const {
     observeIntersectionForReading,
     observeIntersectionForLoading,
     observeIntersectionForPlaying,
-  } = useMessageObservers(type, containerRef, memoFirstUnreadIdRef, onIntersectPinnedMessage, chatId, isQuickPreview);
+    onMessageUnmount,
+  } = useMessageObservers({
+    type,
+    containerRef,
+    memoFirstUnreadIdRef,
+    chatId,
+    threadId,
+    isQuickPreview,
+    onIntersectPinnedMessage,
+  });
 
   const {
     withHistoryTriggers,
@@ -150,6 +180,7 @@ const MessageListContent = ({
     isViewportNewest,
     isUnread,
     isReady,
+    isReplacingHistoryRef,
     onScrollDownToggle,
     onNotchToggle,
   });
@@ -247,7 +278,7 @@ const MessageListContent = ({
   };
 
   const renderBotForumTopicAction = () => {
-    if (!isBotForum || threadId !== MAIN_THREAD_ID) return undefined;
+    if (!canManageBotForumTopics || threadId !== MAIN_THREAD_ID) return undefined;
     return (
       <div className={buildClassName('local-action-message', actionMessageStyles.root)} key="botforum-new-topic">
         <div className={actionMessageStyles.contentBox}>
@@ -261,7 +292,9 @@ const MessageListContent = ({
   };
 
   const messageCountToAnimate = noAppearanceAnimation ? 0 : messageGroups.reduce((acc, messageGroup) => {
-    return acc + messageGroup.senderGroups.flat().length;
+    return acc + messageGroup.senderGroups.flat().reduce((innerAcc, messageOrAlbum) => {
+      return innerAcc + (isDocumentGroup(messageOrAlbum) ? messageOrAlbum.messages.length : 1);
+    }, 0);
   }, 0);
   let appearanceIndex = 0;
 
@@ -281,6 +314,7 @@ const MessageListContent = ({
       if (
         senderGroup.length === 1
         && !isAlbum(senderGroup[0])
+        && !isDocumentGroup(senderGroup[0])
         && isActionMessage(senderGroup[0])
         && senderGroup[0].content.action?.type !== 'phoneCall'
       ) {
@@ -304,36 +338,125 @@ const MessageListContent = ({
             isJustAdded={isLastInList && isNewMessage}
             isLastInList={isLastInList}
             getIsMessageListReady={getIsReady}
-            onIntersectPinnedMessage={onIntersectPinnedMessage}
+            onMessageUnmount={onMessageUnmount}
           />,
         ]);
       }
 
-      let currentDocumentGroupId: string | undefined;
+      let currentDocumentGroupHasThreadTop = false;
 
       const senderGroupElements = senderGroup.map((
         messageOrAlbum,
         messageIndex,
       ) => {
+        function renderMessageElement(
+          message: ApiMessage,
+          position: {
+            isFirstInGroup: boolean;
+            isLastInGroup: boolean;
+            isFirstInDocumentGroup: boolean;
+            isLastInDocumentGroup: boolean;
+            isLastInList: boolean;
+          },
+          isThreadTopMessage: boolean,
+          album?: IAlbum,
+          documentGroup?: IDocumentGroup,
+        ) {
+          const isOwn = isOwnMessage(message);
+          const originalId = getMessageOriginalId(message);
+          const isInLiveTail = liveTailStartOriginalId !== undefined && originalId >= liveTailStartOriginalId;
+          const key = isServiceNotificationMessage(message)
+            ? `${message.date}_${originalId}` : originalId;
+          const shouldShowGuestAvatar = isPrivate && !withUsers && Boolean(message.guestChatViaId);
+
+          return compact([
+            message.id === memoUnreadDividerBeforeIdRef.current && unreadDivider,
+            message.paidMessageStars && !withUsers && renderPaidMessageAction(message, album),
+            message.suggestedPostInfo && renderSuggestedPostInfoAction(message),
+            <Message
+              key={key}
+              message={message}
+              observeIntersectionForBottom={observeIntersectionForReading}
+              observeIntersectionForLoading={observeIntersectionForLoading}
+              observeIntersectionForPlaying={observeIntersectionForPlaying}
+              album={album}
+              documentGroup={documentGroup}
+              noAvatars={noAvatars && !shouldShowGuestAvatar}
+              withAvatar={position.isLastInGroup && (withUsers || shouldShowGuestAvatar)
+                && !isOwn && (!isThreadTopMessage || !isComments)}
+              withSenderName={position.isFirstInGroup && (withUsers || shouldShowGuestAvatar) && !isOwn}
+              threadId={threadId}
+              messageListType={type}
+              noComments={shouldHideComments}
+              noReplies={!shouldHideComments || threadId !== MAIN_THREAD_ID || type === 'scheduled'}
+              appearanceOrder={messageCountToAnimate - ++appearanceIndex}
+              isJustAdded={position.isLastInList && isNewMessage}
+              isThreadTop={isThreadTopMessage}
+              isFirstInGroup={position.isFirstInGroup}
+              isLastInGroup={position.isLastInGroup}
+              isFirstInDocumentGroup={position.isFirstInDocumentGroup}
+              isLastInDocumentGroup={position.isLastInDocumentGroup}
+              isLastInList={position.isLastInList}
+              shouldIgnoreSendFocus={isInLiveTail && isOwn}
+              isQuickPreview={isQuickPreview}
+              memoFirstUnreadIdRef={memoFirstUnreadIdRef}
+              getIsMessageListReady={getIsReady}
+              onMessageUnmount={onMessageUnmount}
+            />,
+          ]);
+        }
+
+        if (isDocumentGroup(messageOrAlbum)) {
+          const documentGroup = messageOrAlbum;
+          return documentGroup.messages.map((docMessage, docIndex) => {
+            const isFirstInDocGroup = docIndex === 0;
+            const isLastInDocGroup = docIndex === documentGroup.messages.length - 1;
+
+            if (docMessage.previousLocalId && anchorIdRef.current === getMessageHtmlId(docMessage.previousLocalId)) {
+              anchorIdRef.current = getMessageHtmlId(docMessage.id);
+            }
+
+            if (isFirstInDocGroup && docMessage.id === threadId) {
+              currentDocumentGroupHasThreadTop = true;
+            }
+
+            const isThreadTopMessage = docMessage.id === threadId || currentDocumentGroupHasThreadTop;
+
+            if (isLastInDocGroup) {
+              currentDocumentGroupHasThreadTop = false;
+            }
+
+            const position = {
+              isFirstInGroup: messageIndex === 0 && isFirstInDocGroup,
+              isLastInGroup: messageIndex === senderGroup.length - 1 && isLastInDocGroup,
+              isFirstInDocumentGroup: isFirstInDocGroup,
+              isLastInDocumentGroup: isLastInDocGroup,
+              isLastInList: (
+                messageIndex === senderGroup.length - 1
+                && isLastInDocGroup
+                && senderGroupIndex === senderGroupsArray.length - 1
+                && dateGroupIndex === dateGroupsArray.length - 1
+              ),
+            };
+
+            return renderMessageElement(docMessage, position, isThreadTopMessage, undefined, documentGroup);
+          }).flat();
+        }
+
         const message = isAlbum(messageOrAlbum) ? messageOrAlbum.mainMessage : messageOrAlbum;
         const album = isAlbum(messageOrAlbum) ? messageOrAlbum : undefined;
-        const isOwn = isOwnMessage(message);
-        const isMessageAlbum = isAlbum(messageOrAlbum);
-        const nextMessage = senderGroup[messageIndex + 1];
 
         if (message.previousLocalId && anchorIdRef.current === getMessageHtmlId(message.previousLocalId)) {
           anchorIdRef.current = getMessageHtmlId(message.id);
         }
 
-        const documentGroupId = !isMessageAlbum && message.groupedId ? message.groupedId : undefined;
-        const nextDocumentGroupId = nextMessage && !isAlbum(nextMessage) ? nextMessage.groupedId : undefined;
         const isThreadTopMessage = message.id === threadId;
 
         const position = {
           isFirstInGroup: messageIndex === 0,
           isLastInGroup: messageIndex === senderGroup.length - 1,
-          isFirstInDocumentGroup: Boolean(documentGroupId && documentGroupId !== currentDocumentGroupId),
-          isLastInDocumentGroup: Boolean(documentGroupId && documentGroupId !== nextDocumentGroupId),
+          isFirstInDocumentGroup: false,
+          isLastInDocumentGroup: false,
           isLastInList: (
             messageIndex === senderGroup.length - 1
             && senderGroupIndex === senderGroupsArray.length - 1
@@ -341,65 +464,39 @@ const MessageListContent = ({
           ),
         };
 
-        currentDocumentGroupId = documentGroupId;
-
-        const originalId = getMessageOriginalId(message);
-        // Service notifications saved in cache in previous versions may share the same `previousLocalId`
-        const key = isServiceNotificationMessage(message) ? `${message.date}_${originalId}` : originalId;
-
-        const noComments = hasLinkedChat === false || !isChannelChat || Boolean(isChatMonoforum);
-
-        return compact([
-          message.id === memoUnreadDividerBeforeIdRef.current && unreadDivider,
-          message.paidMessageStars && !withUsers && renderPaidMessageAction(message, album),
-          message.suggestedPostInfo && renderSuggestedPostInfoAction(message),
-          <Message
-            key={key}
-            message={message}
-            observeIntersectionForBottom={observeIntersectionForReading}
-            observeIntersectionForLoading={observeIntersectionForLoading}
-            observeIntersectionForPlaying={observeIntersectionForPlaying}
-            album={album}
-            noAvatars={noAvatars}
-            withAvatar={position.isLastInGroup && withUsers && !isOwn && (!isThreadTopMessage || !isComments)}
-            withSenderName={position.isFirstInGroup && withUsers && !isOwn}
-            threadId={threadId}
-            messageListType={type}
-            noComments={noComments}
-            noReplies={!noComments || threadId !== MAIN_THREAD_ID || type === 'scheduled'}
-            appearanceOrder={messageCountToAnimate - ++appearanceIndex}
-            isJustAdded={position.isLastInList && isNewMessage}
-            isFirstInGroup={position.isFirstInGroup}
-            isLastInGroup={position.isLastInGroup}
-            isFirstInDocumentGroup={position.isFirstInDocumentGroup}
-            isLastInDocumentGroup={position.isLastInDocumentGroup}
-            isLastInList={position.isLastInList}
-            memoFirstUnreadIdRef={memoFirstUnreadIdRef}
-            onIntersectPinnedMessage={onIntersectPinnedMessage}
-            getIsMessageListReady={getIsReady}
-          />,
-        ]);
+        return renderMessageElement(message, position, isThreadTopMessage, album);
       }).flat();
 
-      if (!withUsers) return senderGroupElements;
-
-      const lastMessageOrAlbum = senderGroup[senderGroup.length - 1];
-      const lastMessage = isAlbum(lastMessageOrAlbum) ? lastMessageOrAlbum.mainMessage : lastMessageOrAlbum;
+      const lastItem = senderGroup[senderGroup.length - 1];
+      const lastMessage = isAlbum(lastItem)
+        ? lastItem.mainMessage
+        : isDocumentGroup(lastItem)
+          ? lastItem.messages[lastItem.messages.length - 1]
+          : lastItem;
       const lastMessageId = getMessageOriginalId(lastMessage);
       const lastAppearanceOrder = messageCountToAnimate - appearanceIndex;
 
-      const isThreadTopMessage = lastMessage.id === threadId;
       const isOwn = isOwnMessage(lastMessage);
 
-      const firstMessageOrAlbum = senderGroup[0];
-      const firstMessage = isAlbum(firstMessageOrAlbum) ? firstMessageOrAlbum.mainMessage : firstMessageOrAlbum;
+      const firstItem = senderGroup[0];
+      const firstMessage = isAlbum(firstItem)
+        ? firstItem.mainMessage
+        : isDocumentGroup(firstItem)
+          ? firstItem.messages[0]
+          : firstItem;
       const firstMessageId = getMessageOriginalId(firstMessage);
+
+      const isThreadTopMessage = lastMessage.id === threadId
+        || (firstMessage.id === threadId && Boolean(firstMessage.groupedId));
+
+      const shouldShowGuestAvatar = isPrivate && !withUsers && Boolean(lastMessage.guestChatViaId);
+      if (!withUsers && !shouldShowGuestAvatar) return senderGroupElements;
 
       const key = `${firstMessageId}-${lastMessageId}`;
       const id = (firstMessageId === lastMessageId) ? `message-group-${firstMessageId}`
         : `message-group-${firstMessageId}-${lastMessageId}`;
 
-      const withAvatar = withUsers && !isOwn && (!isThreadTopMessage || !isComments);
+      const withAvatar = (withUsers || shouldShowGuestAvatar) && !isOwn && (!isThreadTopMessage || !isComments);
       return compact([
         <SenderGroupContainer
           key={key}
@@ -420,43 +517,97 @@ const MessageListContent = ({
           </div>
         ),
       ]);
-    }).flat();
+    });
   }
 
-  const dateGroups = messageGroups.map((
+  function renderDateHeader(dateGroup: MessageDateGroup) {
+    return (
+      <div
+        className={buildClassName('sticky-date', areDatesClickable && 'interactive')}
+        key="date-header"
+        onMouseDown={preventMessageInputBlur}
+        onClick={areDatesClickable ? () => openHistoryCalendar({ selectedAt: dateGroup.datetime }) : undefined}
+      >
+        <span dir="auto">
+          {isSchedule && dateGroup.originalDate === SCHEDULED_WHEN_ONLINE && (
+            oldLang('MessageScheduledUntilOnline')
+          )}
+          {isSchedule && dateGroup.originalDate !== SCHEDULED_WHEN_ONLINE && (
+            oldLang('MessageScheduledOn', formatHumanDate(oldLang, dateGroup.datetime, undefined, true))
+          )}
+          {!isSchedule && formatMessageListDate(lang, new Date(dateGroup.datetime))}
+        </span>
+      </div>
+    );
+  }
+
+  function renderDateGroup(
+    dateGroup: MessageDateGroup,
+    children: TeactNode[],
+    keySuffix: string,
+    shouldAddFirstClass: boolean,
+  ) {
+    return (
+      <div
+        className={buildClassName('message-date-group', shouldAddFirstClass && 'first-message-date-group')}
+        key={`${dateGroup.datetime}-${keySuffix}`}
+        onMouseDown={preventMessageInputBlur}
+        teactFastList
+      >
+        {children}
+      </div>
+    );
+  }
+
+  let isRenderingLiveTail = false;
+  const dateGroups: TeactNode[] = [];
+  const liveTailDateGroups: TeactNode[] = [];
+
+  messageGroups.forEach((
     dateGroup: MessageDateGroup,
     dateGroupIndex: number,
     dateGroupsArray: MessageDateGroup[],
   ) => {
     const senderGroups = calculateSenderGroups(dateGroup, dateGroupIndex, dateGroupsArray);
+    const beforeTailChildren: TeactNode[] = [];
+    const liveTailChildren: TeactNode[] = [];
 
-    return (
-      <div
-        className={buildClassName('message-date-group', !(nameChangeDate || photoChangeDate)
-        && dateGroupIndex === 0 && 'first-message-date-group')}
-        key={dateGroup.datetime}
-        onMouseDown={preventMessageInputBlur}
-        teactFastList
-      >
-        <div
-          className={buildClassName('sticky-date', areDatesClickable && 'interactive')}
-          key="date-header"
-          onMouseDown={preventMessageInputBlur}
-          onClick={areDatesClickable ? () => openHistoryCalendar({ selectedAt: dateGroup.datetime }) : undefined}
-        >
-          <span dir="auto">
-            {isSchedule && dateGroup.originalDate === SCHEDULED_WHEN_ONLINE && (
-              oldLang('MessageScheduledUntilOnline')
-            )}
-            {isSchedule && dateGroup.originalDate !== SCHEDULED_WHEN_ONLINE && (
-              oldLang('MessageScheduledOn', formatHumanDate(oldLang, dateGroup.datetime, undefined, true))
-            )}
-            {!isSchedule && formatHumanDate(oldLang, dateGroup.datetime)}
-          </span>
-        </div>
-        {senderGroups.flat()}
-      </div>
-    );
+    if (isRenderingLiveTail) {
+      liveTailChildren.push(renderDateHeader(dateGroup));
+    } else {
+      beforeTailChildren.push(renderDateHeader(dateGroup));
+    }
+
+    senderGroups.forEach((senderGroupElements, senderGroupIndex) => {
+      const isLiveTailStart = (
+        !isRenderingLiveTail
+        && liveTailStartOriginalId !== undefined
+        && senderGroupContainsOriginalId(
+          dateGroup.senderGroups[senderGroupIndex],
+          liveTailStartOriginalId,
+        )
+      );
+
+      if (isLiveTailStart) {
+        isRenderingLiveTail = true;
+      }
+
+      const target = isRenderingLiveTail ? liveTailChildren : beforeTailChildren;
+      target.push(...senderGroupElements);
+    });
+
+    const shouldAddFirstClass = !(nameChangeDate || photoChangeDate) && dateGroupIndex === 0;
+    if (beforeTailChildren.length) {
+      dateGroups.push(renderDateGroup(
+        dateGroup, beforeTailChildren, 'before-tail', shouldAddFirstClass,
+      ));
+    }
+
+    if (liveTailChildren.length) {
+      liveTailDateGroups.push(renderDateGroup(
+        dateGroup, liveTailChildren, 'live-tail', shouldAddFirstClass && !beforeTailChildren.length,
+      ));
+    }
   });
 
   return (
@@ -464,7 +615,12 @@ const MessageListContent = ({
       {withHistoryTriggers && <div ref={backwardsTriggerRef} key="backwards-trigger" className="backwards-trigger" />}
       {shouldRenderAccountInfo
         && <MessageListAccountInfo key={`account_info_${chatId}`} chatId={chatId} hasMessages />}
-      {dateGroups.flat()}
+      {dateGroups}
+      {Boolean(liveTailDateGroups.length) && (
+        <div className="live-tail" key="live-tail" teactFastList>
+          {liveTailDateGroups}
+        </div>
+      )}
       {isViewportNewest && renderBotForumTopicAction()}
       {withHistoryTriggers && (
         <div

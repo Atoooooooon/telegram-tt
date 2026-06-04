@@ -83,13 +83,13 @@ function GiftItemPremium({
       <div className={styles.description}>
         {lang('PremiumGiftDescription')}
       </div>
-      <Button className={styles.buy} nonInteractive size="tiny" pill fluid>
+      <Button className={styles.buy} color="adaptive" nonInteractive size="tiny" pill fluid>
         {formatCurrencyAsString(amount, currency)}
       </Button>
       {optionByStars && (
         <div className={styles.starsPriceBlock}>
           {lang('GiftPremiumStarsPrice', {
-            stars: (formatStarsAsIcon(lang, optionByStars.amount, { className: styles.starsPriceIcon })),
+            stars: (formatStarsAsIcon(lang, optionByStars.amount)),
           }, { withNodes: true, withMarkdown: true })}
         </div>
       )}

@@ -41,10 +41,13 @@ export function statsFormatText(labels) {
 }
 
 export function humanize(value, decimals = 1) {
-  if (value >= 1e6) {
-    return keepThreeDigits(value / 1e6, decimals) + 'M';
-  } else if (value >= 1e3) {
-    return keepThreeDigits(value / 1e3, decimals) + 'K';
+  const abs = Math.abs(value);
+  const sign = value < 0 ? '-' : '';
+
+  if (abs >= 1e6) {
+    return sign + keepThreeDigits(abs / 1e6, decimals) + 'M';
+  } else if (abs >= 1e3) {
+    return sign + keepThreeDigits(abs / 1e3, decimals) + 'K';
   }
 
   return value;
@@ -59,11 +62,20 @@ function keepThreeDigits(value, decimals) {
 }
 
 export function formatInteger(n) {
-  return String(n).replace(/\d(?=(\d{3})+$)/g, '$& ');
+  if (!Number.isInteger(n)) {
+    const abs = Math.abs(n);
+    const decimals = (abs > 0 && abs < 1)
+      ? Math.max(2, -Math.floor(Math.log10(abs)) + 1)
+      : 2;
+    const [intPart, decPart] = n.toFixed(decimals).split('.');
+    const trimmed = decPart.replace(/0+$/, '');
+    return trimmed ? addThousandSeparators(intPart) + '.' + trimmed : addThousandSeparators(intPart);
+  }
+  return addThousandSeparators(String(n));
 }
 
-export function formatCryptoValue(n) {
-  return Number(n / 10 ** 9);
+function addThousandSeparators(s) {
+  return s.replace(/\d(?=(\d{3})+$)/g, '$& ');
 }
 
 export function getFullLabelDate(label, { isShort = false } = {}) {

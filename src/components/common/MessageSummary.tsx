@@ -2,7 +2,7 @@ import { memo } from '../../lib/teact/teact';
 import { withGlobal } from '../../global';
 
 import type {
-  ApiFormattedText, ApiMessage, ApiPoll, ApiTypeStory,
+  ApiFormattedText, ApiMessage, ApiMessagePoll, ApiTypeStory,
   ApiWebPage,
 } from '../../api/types';
 import type { ObserveFn } from '../../hooks/useIntersectionObserver';
@@ -30,7 +30,7 @@ import MessageText from './MessageText';
 
 type OwnProps = {
   message: ApiMessage;
-  translatedText?: ApiFormattedText;
+  forcedText?: ApiFormattedText;
   noEmoji?: boolean;
   highlight?: string;
   truncateLength?: number;
@@ -42,14 +42,14 @@ type OwnProps = {
 };
 
 type StateProps = {
-  poll?: ApiPoll;
+  poll?: ApiMessagePoll;
   story?: ApiTypeStory;
   webPage?: ApiWebPage;
 };
 
 function MessageSummary({
   message,
-  translatedText,
+  forcedText,
   noEmoji,
   highlight,
   truncateLength = TRUNCATED_SUMMARY_LENGTH,
@@ -70,7 +70,7 @@ function MessageSummary({
   const statefulContent = groupStatefulContent({ poll, story, webPage });
 
   if (!extractedText && !hasPoll && !isAction) {
-    const summaryText = translatedText?.text
+    const summaryText = forcedText?.text
       || getMessageSummaryText(lang, message, statefulContent, noEmoji, truncateLength);
     const trimmedText = trimText(summaryText, truncateLength);
 
@@ -93,7 +93,7 @@ function MessageSummary({
     return (
       <MessageText
         messageOrStory={message}
-        translatedText={translatedText}
+        forcedText={forcedText}
         highlight={highlight}
         asPreview
         observeIntersectionForLoading={observeIntersectionForLoading}

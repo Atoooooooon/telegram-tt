@@ -114,6 +114,7 @@ type StateProps = {
   isMuted?: boolean;
   isTopic?: boolean;
   isForum?: boolean;
+  isBotForum?: boolean;
   isForumAsMessages?: true;
   canAddContact?: boolean;
   canDeleteChat?: boolean;
@@ -132,6 +133,8 @@ type StateProps = {
   savedDialog?: ApiChat;
   disallowedGifts?: ApiDisallowedGifts;
   isAccountFrozen?: boolean;
+  noForwardsMyEnabled?: boolean;
+  noForwardsPeerEnabled?: boolean;
 };
 
 const CLOSE_MENU_ANIMATION_DURATION = 200;
@@ -148,6 +151,7 @@ const HeaderMenuContainer: FC<OwnProps & StateProps> = ({
   withForumActions,
   isTopic,
   isForum,
+  isBotForum,
   isForumAsMessages,
   isChatInfoShown,
   canStartBot,
@@ -182,6 +186,8 @@ const HeaderMenuContainer: FC<OwnProps & StateProps> = ({
   canShowBoostModal,
   disallowedGifts,
   isAccountFrozen,
+  noForwardsMyEnabled,
+  noForwardsPeerEnabled,
   channelMonoforumId,
   onJoinRequestsClick,
   onSubscribeChannel,
@@ -218,6 +224,8 @@ const HeaderMenuContainer: FC<OwnProps & StateProps> = ({
     openBoostModal,
     reportMessages,
     showNotification,
+    toggleNoForwards,
+    openDisableSharingAboutModal,
   } = getActions();
 
   const oldLang = useOldLang();
@@ -493,6 +501,21 @@ const HeaderMenuContainer: FC<OwnProps & StateProps> = ({
     closeMenu();
   });
 
+  const handleToggleNoForwards = useLastCallback(() => {
+    closeMenu();
+    if (isAccountFrozen) {
+      openFrozenAccountModal();
+      return;
+    }
+
+    if (noForwardsMyEnabled || noForwardsPeerEnabled) {
+      toggleNoForwards({ userId: chatId, isEnabled: false });
+      return;
+    }
+
+    openDisableSharingAboutModal({ userId: chatId });
+  });
+
   const handleSendChannelMessage = useLastCallback(() => {
     openChat({ id: channelMonoforumId });
     closeMenu();
@@ -627,7 +650,7 @@ const HeaderMenuContainer: FC<OwnProps & StateProps> = ({
               {oldLang('lng_forum_topic_edit')}
             </MenuItem>
           )}
-          {isMobile && !withForumActions && isForum && !isTopic && (
+          {isMobile && !withForumActions && isForum && !isBotForum && !isTopic && (
             <MenuItem
               icon="forums"
               onClick={handleViewAsTopicsClick}
@@ -644,7 +667,7 @@ const HeaderMenuContainer: FC<OwnProps & StateProps> = ({
               <div className="right-badge">{pendingJoinRequests}</div>
             </MenuItem>
           )}
-          {withForumActions && !isTopic && !isForumAsMessages && (
+          {withForumActions && !isTopic && !isBotForum && !isForumAsMessages && (
             <MenuItem
               icon="message"
               onClick={handleOpenAsMessages}
@@ -801,6 +824,14 @@ const HeaderMenuContainer: FC<OwnProps & StateProps> = ({
           )}
           {isPrivate && !isChatWithSelf && !isBot && (
             <MenuItem
+              icon={noForwardsMyEnabled || noForwardsPeerEnabled ? 'allow-share' : 'no-share'}
+              onClick={handleToggleNoForwards}
+            >
+              {noForwardsMyEnabled || noForwardsPeerEnabled ? lang('EnableSharing') : lang('DisableSharing')}
+            </MenuItem>
+          )}
+          {isPrivate && !isChatWithSelf && !isBot && (
+            <MenuItem
               icon={isBlocked ? 'user' : 'hand-stop'}
               onClick={isBlocked ? handleUnblock : handleBlock}
             >
@@ -883,6 +914,7 @@ export default memo(withGlobal<OwnProps>(
       isPrivate,
       isTopic: chat?.isForum && !isMainThread,
       isForum: chat?.isForum,
+      isBotForum: chat?.isBotForum,
       isForumAsMessages: chat?.isForumAsMessages,
       canAddContact,
       canDeleteChat: getCanDeleteChat(chat),
@@ -903,6 +935,8 @@ export default memo(withGlobal<OwnProps>(
       savedDialog,
       disallowedGifts: userFullInfo?.disallowedGifts,
       isAccountFrozen,
+      noForwardsMyEnabled: userFullInfo?.noForwardsMyEnabled,
+      noForwardsPeerEnabled: userFullInfo?.noForwardsPeerEnabled,
     };
   },
 )(HeaderMenuContainer));

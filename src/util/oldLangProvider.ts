@@ -4,6 +4,7 @@ import type { ApiOldLangPack, ApiOldLangString } from '../api/types';
 import type { LangCode, TimeFormat } from '../types';
 
 import {
+  FALLBACK_LANG_CODE,
   LANG_CACHE_NAME, LANG_PACKS,
 } from '../config';
 import { selectSharedSettings } from '../global/selectors/sharedState';
@@ -105,7 +106,6 @@ const PLURAL_RULES = {
 const cache = new Map<string, string>();
 
 let langPack: ApiOldLangPack | undefined;
-let fallbackLangPack: ApiOldLangPack | undefined;
 
 const {
   addCallback,
@@ -128,11 +128,7 @@ function createLangFn() {
       }
     }
 
-    if (!fallbackLangPack) {
-      void importFallbackLangPack();
-    }
-
-    const langString = langPack?.[key] || fallbackLangPack?.[key];
+    const langString = langPack?.[key];
     if (!langString) {
       return key;
     }
@@ -157,7 +153,7 @@ export function getTranslationFn(): LangFn {
 /**
  * @deprecated Migrate to `changeLanguage` in `util/localization.ts` instead
  */
-export async function oldSetLanguage(langCode: LangCode, callback?: NoneToVoidFunction, withFallback = false) {
+export async function oldSetLanguage(langCode: LangCode, callback?: NoneToVoidFunction) {
   loadAndChangeLanguage(langCode, true);
   if (langPack && langCode === currentLangCode) {
     if (callback) {
@@ -169,10 +165,6 @@ export async function oldSetLanguage(langCode: LangCode, callback?: NoneToVoidFu
 
   let newLangPack = await cacheApi.fetch(LANG_CACHE_NAME, langCode, cacheApi.Type.Json);
   if (!newLangPack) {
-    if (withFallback) {
-      await importFallbackLangPack();
-    }
-
     newLangPack = await fetchRemote(langCode);
     if (!newLangPack) {
       return;
@@ -212,15 +204,6 @@ export function setTimeFormat(timeFormat: TimeFormat) {
   runCallbacks();
 }
 
-async function importFallbackLangPack() {
-  if (fallbackLangPack) {
-    return;
-  }
-
-  fallbackLangPack = (await import('./fallbackLangPack')).default;
-  runCallbacks();
-}
-
 async function fetchRemote(langCode: string): Promise<ApiOldLangPack | undefined> {
   const remote = await callApi('oldFetchLangPack', { sourceLangPacks: LANG_PACKS, langCode });
   if (remote) {
@@ -232,7 +215,7 @@ async function fetchRemote(langCode: string): Promise<ApiOldLangPack | undefined
 }
 
 function getPluralOption(amount: number) {
-  const langCode = currentLangCode || 'en';
+  const langCode = currentLangCode?.replace('-raw', '') || FALLBACK_LANG_CODE;
   const optionIndex = PLURAL_RULES[langCode as keyof typeof PLURAL_RULES]
     ? PLURAL_RULES[langCode as keyof typeof PLURAL_RULES](amount)
     : 0;

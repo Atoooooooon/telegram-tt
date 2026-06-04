@@ -1,6 +1,4 @@
-import type { ChangeEvent } from 'react';
-import type { ElementRef, FC, TeactNode } from '../../../lib/teact/teact';
-import type React from '../../../lib/teact/teact';
+import type { ElementRef, TeactNode } from '../../../lib/teact/teact';
 import {
   memo, useEffect, useLayoutEffect,
   useRef, useState,
@@ -16,8 +14,9 @@ import type { Signal } from '../../../util/signals';
 
 import { EDITABLE_INPUT_ID, EDITABLE_INPUT_MODAL_ID } from '../../../config';
 import { requestForcedReflow, requestMutation } from '../../../lib/fasterdom/fasterdom';
-import { selectCanPlayAnimatedEmojis, selectDraft, selectIsInSelectMode } from '../../../global/selectors';
+import { selectCanPlayAnimatedEmojis, selectIsInSelectMode } from '../../../global/selectors';
 import { selectSharedSettings } from '../../../global/selectors/sharedState';
+import { selectDraft } from '../../../global/selectors/threads';
 import { IS_TAURI } from '../../../util/browser/globalEnvironment';
 import {
   IS_ANDROID, IS_EMOJI_SUPPORTED, IS_IOS, IS_TOUCH_ENV,
@@ -111,7 +110,7 @@ function clearSelection() {
   }
 }
 
-const MessageInput: FC<OwnProps & StateProps> = ({
+const MessageInput = ({
   ref,
   id,
   chatId,
@@ -142,7 +141,7 @@ const MessageInput: FC<OwnProps & StateProps> = ({
   onScroll,
   onFocus,
   onBlur,
-}) => {
+}: OwnProps & StateProps) => {
   const {
     editLastMessage,
     replyToNextMessage,
@@ -407,7 +406,7 @@ const MessageInput: FC<OwnProps & StateProps> = ({
     }
   }
 
-  function handleChange(e: ChangeEvent<HTMLDivElement>) {
+  function handleChange(e: React.ChangeEvent<HTMLDivElement>) {
     const { innerHTML, textContent } = e.currentTarget;
 
     onUpdate(innerHTML === SAFARI_BR ? '' : innerHTML);

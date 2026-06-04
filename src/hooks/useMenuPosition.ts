@@ -132,6 +132,8 @@ function processDynamically(
   let { x, y } = anchor;
   const anchorX = x;
   const anchorY = y;
+  const anchorWidth = anchor.width || 0;
+  const anchorHeight = anchor.height || 0;
 
   const menuEl = getMenuElement();
   const rootEl = getRootElement();
@@ -161,9 +163,9 @@ function processDynamically(
   if (isDense || (x + menuRect.width + extraPaddingX < rootRect.width + rootRect.left)) {
     x += 3;
     positionX = 'left';
-  } else if (x - menuRect.width - rootRect.left > 0) {
+  } else if (x - anchorWidth - menuRect.width - rootRect.left > 0) {
     positionX = 'right';
-    x -= 3;
+    x = x - anchorWidth - 3;
   } else {
     positionX = 'left';
     x = 16;
@@ -178,6 +180,7 @@ function processDynamically(
     y = yWithTopShift;
   } else {
     positionY = 'bottom';
+    y = y + anchorHeight;
 
     if (y - menuRect.height < rootRect.top + extraTopPadding) {
       y = rootRect.top + rootRect.height;
@@ -199,6 +202,25 @@ function processDynamically(
       : leftWithPossibleNegative)
     : (x - triggerRect.left)) + addedXForPortalPositioning;
   let top = y - triggerRect.top + addedYForPortalPositioning;
+
+  // When portalled, `left`/`top` are in viewport coords. The container has width 0 — its anchor
+  // is the bubble's left edge for `positionX='left'` and right edge for `positionX='right'`
+  // (same for `top`/`bottom`). Clamp the anchor so the bubble fits the viewport on either side.
+  if (withPortal) {
+    const viewportWidth = document.documentElement.clientWidth;
+    const viewportHeight = document.documentElement.clientHeight;
+    const margin = MENU_POSITION_VISUAL_COMFORT_SPACE_PX;
+    if (positionX === 'left') {
+      left = Math.max(margin, Math.min(left, viewportWidth - menuRect.width - margin));
+    } else {
+      left = Math.max(menuRect.width + margin, Math.min(left, viewportWidth - margin));
+    }
+    if (positionY === 'top') {
+      top = Math.max(margin, Math.min(top, viewportHeight - menuRect.height - margin));
+    } else {
+      top = Math.max(menuRect.height + margin, Math.min(top, viewportHeight - margin));
+    }
+  }
 
   if (isDense) {
     left = Math.min(left, rootRect.width - menuRect.width - MENU_POSITION_VISUAL_COMFORT_SPACE_PX);

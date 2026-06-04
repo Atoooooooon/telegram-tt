@@ -19,10 +19,12 @@ import {
   getMainUsername,
   isAnonymousForwardsChat,
   isAnonymousOwnMessage,
+  isChatChannel,
   isSystemBot,
 } from '../../../global/helpers';
 import { isApiPeerUser } from '../../../global/helpers/peers';
 import {
+  selectChat,
   selectForwardedSender,
   selectIsChatWithSelf,
   selectSender,
@@ -58,6 +60,7 @@ type StateProps = {
   isChatWithSelf?: boolean;
   isRepliesChat?: boolean;
   isAnonymousForwards?: boolean;
+  isChannel?: boolean;
 };
 
 const SenderGroupContainer: FC<OwnProps & StateProps> = ({
@@ -72,9 +75,10 @@ const SenderGroupContainer: FC<OwnProps & StateProps> = ({
   isChatWithSelf,
   isRepliesChat,
   isAnonymousForwards,
+  isChannel,
   canPost,
 }) => {
-  const { openChat, updateInsertingPeerIdMention } = getActions();
+  const { openChat, updateInsertingPeerIdMention, openMiddleSearch } = getActions();
 
   const { forwardInfo } = message;
 
@@ -88,8 +92,9 @@ const SenderGroupContainer: FC<OwnProps & StateProps> = ({
       return;
     }
 
+    // Message appearance animation works only if this timeout is not cleared
     setTimeout(markShown, appearanceOrder * MESSAGE_APPEARANCE_DELAY);
-  }, [appearanceOrder, markShown, noAppearanceAnimation]);
+  }, [appearanceOrder, noAppearanceAnimation]);
 
   const shouldPreferOriginSender = forwardInfo
     && (isChatWithSelf || isRepliesChat || isAnonymousForwards || !messageSender);
@@ -113,6 +118,14 @@ const SenderGroupContainer: FC<OwnProps & StateProps> = ({
     if (messageInput) {
       updateInsertingPeerIdMention({ peerId: avatarPeer.id });
     }
+  });
+
+  const handleSearchMessages = useLastCallback(() => {
+    if (!avatarPeer) {
+      return;
+    }
+
+    openMiddleSearch({ fromPeerId: avatarPeer.id });
   });
 
   const handleAvatarClick = useLastCallback(() => {
@@ -142,7 +155,8 @@ const SenderGroupContainer: FC<OwnProps & StateProps> = ({
   const getLayout = useLastCallback(() => ({ withPortal: true }));
 
   const canMention = canPost && avatarPeer && (isAvatarPeerUser || Boolean(getMainUsername(avatarPeer)));
-  const shouldRenderContextMenu = Boolean(contextMenuAnchor) && (isAvatarPeerUser || canMention);
+  const canSearch = !isChannel;
+  const shouldRenderContextMenu = Boolean(contextMenuAnchor) && (isAvatarPeerUser || canMention || canSearch);
 
   function renderContextMenu() {
     return (
@@ -174,6 +188,14 @@ const SenderGroupContainer: FC<OwnProps & StateProps> = ({
               onClick={handleMention}
             >
               {lang('ContextMenuItemMention')}
+            </MenuItem>
+          )}
+          {canSearch && (
+            <MenuItem
+              icon="search"
+              onClick={handleSearchMessages}
+            >
+              {lang('Search')}
             </MenuItem>
           )}
         </>
@@ -221,6 +243,7 @@ export default memo(withGlobal<OwnProps>(
     } = ownProps;
     const { chatId } = message;
 
+    const chat = selectChat(global, chatId);
     const isChatWithSelf = selectIsChatWithSelf(global, chatId);
     const isSystemBotChat = isSystemBot(chatId);
     const isAnonymousForwards = isAnonymousForwardsChat(chatId);
@@ -237,6 +260,7 @@ export default memo(withGlobal<OwnProps>(
       isChatWithSelf,
       isRepliesChat: isSystemBotChat,
       isAnonymousForwards,
+      isChannel: chat && isChatChannel(chat),
     };
   },
 )(SenderGroupContainer));

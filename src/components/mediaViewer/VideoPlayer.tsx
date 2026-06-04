@@ -5,7 +5,7 @@ import {
 } from '../../lib/teact/teact';
 import { getActions } from '../../global';
 
-import type { ApiDimensions } from '../../api/types';
+import type { ApiDimensions, StoryboardInfo } from '../../api/types';
 
 import { IS_IOS, IS_TOUCH_ENV, IS_YA_BROWSER } from '../../util/browser/windowEnvironment';
 import getPointerPosition from '../../util/events/getPointerPosition';
@@ -22,7 +22,7 @@ import usePictureInPicture from '../../hooks/usePictureInPicture';
 import useShowTransitionDeprecated from '../../hooks/useShowTransitionDeprecated';
 import useVideoCleanup from '../../hooks/useVideoCleanup';
 import useFullscreen from '../../hooks/window/useFullscreen';
-import useControlsSignal from './hooks/useControlsSignal';
+import useControlsSignal, { registerPlayerElement } from './hooks/useControlsSignal';
 import useVideoWaitingSignal from './hooks/useVideoWaitingSignal';
 
 import Button from '../ui/Button';
@@ -33,12 +33,12 @@ import './VideoPlayer.scss';
 
 type OwnProps = {
   url?: string;
+  storyboardInfo?: StoryboardInfo;
   isGif?: boolean;
   posterData?: string;
   posterSize?: ApiDimensions;
   loadProgress?: number;
   fileSize: number;
-  isPreviewDisabled?: boolean;
   isMediaViewerOpen?: boolean;
   noPlay?: boolean;
   volume: number;
@@ -61,6 +61,7 @@ const REWIND_STEP = 5; // Seconds
 
 const VideoPlayer: FC<OwnProps> = ({
   url,
+  storyboardInfo,
   isGif,
   posterData,
   posterSize,
@@ -75,7 +76,6 @@ const VideoPlayer: FC<OwnProps> = ({
   shouldCloseOnClick,
   isProtected,
   isClickDisabled,
-  isPreviewDisabled,
   isSponsoredMessage,
   timestamp,
   handleSponsoredClick,
@@ -113,11 +113,11 @@ const VideoPlayer: FC<OwnProps> = ({
 
   const [, toggleControls, lockControls] = useControlsSignal();
   const [getIsSeeking, setIsSeeking] = useSignal(false);
-  const lastMousePosition = useRef({ x: 0, y: 0 });
+  const lastMousePositionRef = useRef<{ x: number; y: number }>();
 
   useEffect(() => {
     const updateMousePosition = (e: MouseEvent | TouchEvent) => {
-      lastMousePosition.current = getPointerPosition(e);
+      lastMousePositionRef.current = getPointerPosition(e);
     };
 
     window.addEventListener('mousemove', updateMousePosition);
@@ -127,6 +127,11 @@ const VideoPlayer: FC<OwnProps> = ({
       window.removeEventListener('mousemove', updateMousePosition);
       window.removeEventListener('touchmove', updateMousePosition);
     };
+  }, []);
+
+  useEffect(() => {
+    registerPlayerElement(videoRef.current, () => lastMousePositionRef.current);
+    return () => registerPlayerElement(undefined);
   }, []);
 
   const checkMousePositionAndToggleControls = useLastCallback((clientX: number, clientY: number) => {
@@ -150,8 +155,8 @@ const VideoPlayer: FC<OwnProps> = ({
 
   const handleSeekingChange = useLastCallback((isSeeking: boolean) => {
     setIsSeeking(isSeeking);
-    if (!isSeeking) {
-      const { x, y } = lastMousePosition.current;
+    if (!isSeeking && lastMousePositionRef.current) {
+      const { x, y } = lastMousePositionRef.current;
       checkMousePositionAndToggleControls(x, y);
     }
   });
@@ -250,7 +255,7 @@ const VideoPlayer: FC<OwnProps> = ({
     if (isLooped) return;
     setCurrentTime(0);
     setIsPlaying(false);
-    toggleControls(true);
+    toggleControls(true, true);
   });
 
   const handleFullscreenChange = useLastCallback(() => {
@@ -378,7 +383,7 @@ const VideoPlayer: FC<OwnProps> = ({
       )}
       {!isGif && !isSponsoredMessage && !isUnsupported && (
         <VideoPlayerControls
-          url={url}
+          storyboardInfo={storyboardInfo}
           isPlaying={isPlaying}
           bufferedRanges={bufferedRanges}
           bufferedProgress={bufferedProgress}
@@ -386,11 +391,9 @@ const VideoPlayer: FC<OwnProps> = ({
           isFullscreenSupported={Boolean(setFullscreen)}
           isPictureInPictureSupported={isPictureInPictureSupported}
           isFullscreen={isFullscreen}
-          isPreviewDisabled={isPreviewDisabled}
           fileSize={fileSize}
           duration={duration}
           isReady={isReady}
-          posterSize={posterSize}
           isForceMobileVersion={isForceMobileVersion}
           onSeek={handleSeek}
           onChangeFullscreen={handleFullscreenChange}

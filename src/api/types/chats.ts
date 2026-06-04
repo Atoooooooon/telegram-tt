@@ -28,12 +28,6 @@ export interface ApiChat {
   folderId?: number;
   type: ApiChatType;
   title: string;
-  hasUnreadMark?: boolean;
-  lastReadOutboxMessageId?: number;
-  lastReadInboxMessageId?: number;
-  unreadCount?: number;
-  unreadMentionsCount?: number;
-  unreadReactionsCount?: number;
   isVerified?: true;
   areSignaturesShown?: boolean;
   areProfilesShown?: boolean;
@@ -48,7 +42,6 @@ export interface ApiChat {
   membersCount?: number;
   creationDate?: number;
   isSupport?: true;
-  draftDate?: number;
   isProtected?: boolean;
   fakeType?: ApiFakeType;
   color?: ApiTypePeerColor;
@@ -93,9 +86,6 @@ export interface ApiChat {
   sendPaidReactionsAsPeerIds?: ApiSendAsPeerId[];
   sendPaidReactionsPeer?: ApiSendAsPeerId;
 
-  unreadReactions?: number[];
-  unreadMentions?: number[];
-
   // Stories
   areStoriesHidden?: boolean;
   hasStories?: boolean;
@@ -110,12 +100,22 @@ export interface ApiChat {
   paidMessagesStars?: number;
 }
 
-export interface ApiTypingStatus {
-  userId?: string;
-  action: string;
+type ApiTypingStatusBase = {
   timestamp: number;
-  emoji?: string;
-}
+};
+
+type ApiTypingStatusSimple = ApiTypingStatusBase & {
+  type: 'typing' | 'recordVideo' | 'uploadVideo' | 'recordAudio' | 'uploadAudio'
+    | 'uploadPhoto' | 'uploadFile' | 'playingGame' | 'recordRound' | 'uploadRound'
+    | 'chooseSticker' | 'chooseLocation' | 'chooseContact';
+};
+
+type ApiTypingStatusWatchingAnimations = ApiTypingStatusBase & {
+  type: 'watchingAnimations';
+  emoji: string;
+};
+
+export type ApiTypingStatus = ApiTypingStatusSimple | ApiTypingStatusWatchingAnimations;
 
 export interface ApiChatFullInfo {
   about?: string;
@@ -170,13 +170,13 @@ export interface ApiChatFullInfo {
 
 export interface ApiChatMember {
   userId: string;
+  rank?: string;
   inviterId?: string;
   joinedDate?: number;
   kickedByUserId?: string;
   promotedByUserId?: string;
   bannedRights?: ApiChatBannedRights;
   adminRights?: ApiChatAdminRights;
-  customTitle?: string;
   isAdmin?: true;
   isOwner?: true;
   isViaRequest?: true;
@@ -197,6 +197,8 @@ export interface ApiChatAdminRights {
   postStories?: true;
   editStories?: true;
   deleteStories?: true;
+  manageDirectMessages?: true;
+  manageRanks?: true;
 }
 
 export interface ApiChatBannedRights {
@@ -220,6 +222,7 @@ export interface ApiChatBannedRights {
   sendVoices?: true;
   sendDocs?: true;
   sendPlain?: true;
+  editRank?: true;
   untilDate?: number;
 }
 

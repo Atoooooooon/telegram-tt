@@ -9,7 +9,7 @@ import type {
   ApiChat,
   ApiChatReactions,
   ApiMessage,
-  ApiPoll,
+  ApiMessagePoll,
   ApiReaction,
   ApiStickerSet,
   ApiStickerSetInfo,
@@ -23,10 +23,11 @@ import type {
   IAnchorPosition,
   MessageListType,
   ThreadId,
+  TranslationTone,
 } from '../../../types';
 import { MAIN_THREAD_ID } from '../../../api/types';
 
-import { PREVIEW_AVATAR_COUNT, SERVICE_NOTIFICATIONS_USER_ID } from '../../../config';
+import { PREVIEW_AVATAR_COUNT } from '../../../config';
 import {
   areReactionsEmpty,
   getCanPostInChat,
@@ -64,19 +65,21 @@ import {
   selectPeerStory,
   selectPollFromMessage,
   selectRequestedChatTranslationLanguage,
+  selectRequestedChatTranslationTone,
   selectRequestedMessageTranslationLanguage,
-  selectSavedDialogIdFromMessage,
   selectStickerSet,
-  selectThreadInfo,
   selectTopic,
   selectUser,
+  selectUserFullInfo,
   selectUserStatus,
   selectWebPageFromMessage,
 } from '../../../global/selectors';
 import { selectMessageDownloadableMedia } from '../../../global/selectors/media';
+import { selectSavedDialogIdFromMessage, selectThreadInfo } from '../../../global/selectors/threads';
 import buildClassName from '../../../util/buildClassName';
 import { copyTextToClipboard } from '../../../util/clipboard';
 import { isUserId } from '../../../util/entities/ids';
+import { getTranslationCacheKey, parseTranslationCacheKey } from '../../../util/keys/translationKey';
 import { getSelectionAsFormattedText } from './helpers/getSelectionAsFormattedText';
 import { isSelectionRangeInsideMessage } from './helpers/isSelectionRangeInsideMessage';
 
@@ -108,7 +111,7 @@ export type OwnProps = {
 
 type StateProps = {
   threadId?: ThreadId;
-  poll?: ApiPoll;
+  poll?: ApiMessagePoll;
   webPage?: ApiWebPage;
   story?: ApiTypeStory;
   chat?: ApiChat;
@@ -138,6 +141,8 @@ type StateProps = {
   canShowOriginal?: boolean;
   isMessageTranslated?: boolean;
   canSelectLanguage?: boolean;
+  currentTranslationTone?: TranslationTone;
+  translationRequestLanguage?: string;
   isPrivate?: boolean;
   isCurrentUserPremium?: boolean;
   hasFullInfo?: boolean;
@@ -163,6 +168,8 @@ type StateProps = {
   userFullName?: string;
   canGift?: boolean;
   savedDialogId?: string;
+  noForwardsMyEnabled?: boolean;
+  noForwardsPeerEnabled?: boolean;
 };
 
 const selection = window.getSelection();
@@ -225,6 +232,8 @@ const ContextMenuContainer: FC<OwnProps & StateProps> = ({
   isMessageTranslated,
   canShowOriginal,
   canSelectLanguage,
+  currentTranslationTone,
+  translationRequestLanguage,
   isReactionPickerOpen,
   isInSavedMessages,
   canReplyInChat,
@@ -233,6 +242,8 @@ const ContextMenuContainer: FC<OwnProps & StateProps> = ({
   canGift,
   className,
   savedDialogId,
+  noForwardsMyEnabled,
+  noForwardsPeerEnabled,
   onClose,
   onCloseAnimationEnd,
 }) => {
@@ -274,10 +285,16 @@ const ContextMenuContainer: FC<OwnProps & StateProps> = ({
     reportMessages,
     openTodoListModal,
     showNotification,
+    setSettingOption,
   } = getActions();
 
   const oldLang = useOldLang();
   const lang = useLang();
+
+  const noForwardsNotice = noForwardsPeerEnabled
+    ? lang('ContextMenuNoForwardsPeer', { name: userFullName })
+    : (noForwardsMyEnabled ? lang('ContextMenuNoForwardsYou') : undefined);
+
   const { ref: containerRef } = useShowTransition({
     isOpen,
     onCloseAnimationEnd,
@@ -646,6 +663,20 @@ const ContextMenuContainer: FC<OwnProps & StateProps> = ({
     requestMessageTranslation({
       chatId: message.chatId,
       id: message.id,
+      tone: currentTranslationTone,
+    });
+    closeMenu();
+  });
+
+  const handleTranslateWithTone = useLastCallback((tone: TranslationTone) => {
+    const { languageCode } = parseTranslationCacheKey(translationRequestLanguage!);
+
+    setSettingOption({ translationTone: tone });
+    requestMessageTranslation({
+      chatId: message.chatId,
+      id: message.id,
+      toLanguageCode: languageCode,
+      tone,
     });
     closeMenu();
   });
@@ -682,9 +713,6 @@ const ContextMenuContainer: FC<OwnProps & StateProps> = ({
 
     return undefined;
   }
-
-  const scheduledMaxDate = new Date();
-  scheduledMaxDate.setFullYear(scheduledMaxDate.getFullYear() + 1);
 
   return (
     <div ref={containerRef} className={buildClassName('ContextMenuContainer', className)}>
@@ -730,6 +758,7 @@ const ContextMenuContainer: FC<OwnProps & StateProps> = ({
         canTranslate={canTranslate}
         canShowOriginal={canShowOriginal}
         canSelectLanguage={canSelectLanguage}
+        currentTranslationTone={currentTranslationTone}
         canPlayAnimatedEmojis={canPlayAnimatedEmojis}
         shouldRenderShowWhen={shouldRenderShowWhen}
         canLoadReadDate={canLoadReadDate}
@@ -771,10 +800,12 @@ const ContextMenuContainer: FC<OwnProps & StateProps> = ({
         onShowReactors={handleOpenReactorListModal}
         onReactionPickerOpen={handleReactionPickerOpen}
         onTranslate={handleTranslate}
+        onTranslateWithTone={handleTranslateWithTone}
         onShowOriginal={handleShowOriginal}
         onSelectLanguage={handleSelectLanguage}
         userFullName={userFullName}
         canGift={canGift}
+        noForwardsNotice={noForwardsNotice}
       />
       <PinMessageModal
         isOpen={isPinModalOpen}
@@ -806,6 +837,7 @@ export default memo(withGlobal<OwnProps>(
     const chatFullInfo = !isPrivate ? selectChatFullInfo(global, message.chatId) : undefined;
     const user = selectUser(global, message.chatId);
     const userFullName = user && getUserFullName(user);
+    const userFullInfo = isPrivate ? selectUserFullInfo(global, message.chatId) : undefined;
 
     const {
       seenByExpiresAt, seenByMaxChatMembers, maxUniqueReactions, readDateExpiresAt,
@@ -837,7 +869,9 @@ export default memo(withGlobal<OwnProps>(
     const isOwn = isOwnMessage(message);
     const chatBot = chat && selectBot(global, chat.id);
     const isBot = Boolean(chatBot);
-    const isMessageUnread = selectIsMessageUnread(global, message);
+    const isMessageUnread = selectIsMessageUnread(
+      global, message.chatId, threadId || MAIN_THREAD_ID, message.id, messageListType,
+    );
     const canLoadReadDate = Boolean(
       isPrivate
       && isOwn
@@ -891,11 +925,26 @@ export default memo(withGlobal<OwnProps>(
       ? customEmojiSetsNotFiltered : undefined;
 
     const translationRequestLanguage = selectRequestedMessageTranslationLanguage(global, message.chatId, message.id);
-    const hasTranslation = translationRequestLanguage
-      ? Boolean(selectMessageTranslations(global, message.chatId, translationRequestLanguage)[message.id]?.text)
+    const chatTranslationLanguage = selectRequestedChatTranslationLanguage(global, message.chatId);
+    const chatTranslationTone = selectRequestedChatTranslationTone(global, message.chatId);
+
+    const isManualMessageTranslation = !chatTranslationLanguage && translationRequestLanguage;
+    const { tone: manualMessageTone } = isManualMessageTranslation
+      ? parseTranslationCacheKey(translationRequestLanguage)
+      : { tone: undefined };
+    const globalTone = global.settings.byKey.translationTone;
+    const currentTranslationTone = manualMessageTone || chatTranslationTone || globalTone;
+
+    const translationCacheKey = chatTranslationLanguage
+      ? getTranslationCacheKey(chatTranslationLanguage, currentTranslationTone)
+      : translationRequestLanguage;
+
+    const messageTranslation = translationCacheKey
+      ? selectMessageTranslations(global, message.chatId, translationCacheKey)[message.id]
       : undefined;
+    const hasTranslation = Boolean(messageTranslation?.text);
     const canTranslate = !hasTranslation && selectCanTranslateMessage(global, message, detectedLanguage);
-    const isChatTranslated = selectRequestedChatTranslationLanguage(global, message.chatId);
+    const isChatTranslated = chatTranslationLanguage;
 
     const isInSavedMessages = selectIsChatWithSelf(global, message.chatId);
 
@@ -947,8 +996,7 @@ export default memo(withGlobal<OwnProps>(
       isCurrentUserPremium,
       hasFullInfo: Boolean(chatFullInfo),
       canShowReactionsCount,
-      canShowReactionList: !isLocal && !isAction
-        && !isScheduled && chat?.id !== SERVICE_NOTIFICATIONS_USER_ID && !hasTtl,
+      canShowReactionList: !isLocal && !isAction && !isScheduled && !hasTtl,
       canBuyPremium: !isCurrentUserPremium && !selectIsPremiumPurchaseBlocked(global),
       customEmojiSetsInfo,
       customEmojiSets,
@@ -957,6 +1005,8 @@ export default memo(withGlobal<OwnProps>(
       canShowOriginal: hasTranslation && !isChatTranslated,
       canSelectLanguage: hasTranslation && !isChatTranslated,
       isMessageTranslated: hasTranslation,
+      currentTranslationTone,
+      translationRequestLanguage,
       canPlayAnimatedEmojis: selectCanPlayAnimatedEmojis(global),
       isReactionPickerOpen: selectIsReactionPickerOpen(global),
       isInSavedMessages,
@@ -969,6 +1019,8 @@ export default memo(withGlobal<OwnProps>(
       canGift,
       savedDialogId,
       webPage,
+      noForwardsMyEnabled: userFullInfo?.noForwardsMyEnabled,
+      noForwardsPeerEnabled: userFullInfo?.noForwardsPeerEnabled,
     };
   },
 )(ContextMenuContainer));

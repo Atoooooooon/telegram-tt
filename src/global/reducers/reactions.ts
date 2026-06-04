@@ -1,5 +1,5 @@
-import type { ApiChat, ApiMessage, ApiReactionWithPaid } from '../../api/types';
 import type { GlobalState } from '../types';
+import { type ApiMessage, type ApiReactionWithPaid } from '../../api/types';
 
 import { MIN_SCREEN_WIDTH_FOR_STATIC_LEFT_COLUMN, MIN_SCREEN_WIDTH_FOR_STATIC_RIGHT_COLUMN } from '../../config';
 import windowSize from '../../util/windowSize';
@@ -9,8 +9,8 @@ import {
 } from '../../components/middle/helpers/calculateMiddleFooterTransforms';
 import { updateReactionCount } from '../helpers';
 import { selectIsChatWithSelf, selectSendAs, selectTabState } from '../selectors';
-import { updateChat } from './chats';
 import { updateChatMessage } from './messages';
+import { addUnreadCount, removeUnreadCount } from './unreadCounters';
 
 import { getIsMobile } from '../../hooks/useAppLayout';
 
@@ -75,8 +75,34 @@ export function addMessageReaction<T extends GlobalState>(
   });
 }
 
-export function updateUnreadReactions<T extends GlobalState>(
-  global: T, chatId: string, update: Pick<ApiChat, 'unreadReactionsCount' | 'unreadReactions'>,
-): T {
-  return updateChat(global, chatId, update, true);
+export function addUnreadReactions<T extends GlobalState>({
+  global, chatId, ids, totalCount,
+}: {
+  global: T;
+  chatId: string;
+  ids: number[];
+  totalCount?: number;
+}): T {
+  return addUnreadCount({
+    global,
+    chatId,
+    messageIds: ids,
+    totalCount,
+    unreadCountKey: 'unreadReactionsCount',
+  });
+}
+
+export function removeUnreadReactions<T extends GlobalState>({
+  global, chatId, ids,
+}: {
+  global: T;
+  chatId: string;
+  ids: number[];
+}): T {
+  return removeUnreadCount({
+    global,
+    chatId,
+    messageIds: ids,
+    unreadCountKey: 'unreadReactionsCount',
+  });
 }

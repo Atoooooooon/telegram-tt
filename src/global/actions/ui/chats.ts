@@ -7,12 +7,15 @@ import { createMessageHashUrl } from '../../../util/routing';
 import { addActionHandler, execAfterActions, getGlobal, setGlobal } from '../../index';
 import {
   closeMiddleSearch,
-  exitMessageSelectMode, replaceTabThreadParam, updateCurrentMessageList, updateRequestedChatTranslation,
+  exitMessageSelectMode,
+  updateChatTranslationTone,
+  updateCurrentMessageList,
+  updateMessageTranslationTone,
+  updateRequestedChatTranslation,
 } from '../../reducers';
 import { updateTabState } from '../../reducers/tabs';
-import {
-  selectChat, selectCurrentMessageList, selectTabState,
-} from '../../selectors';
+import { replaceTabThreadParam } from '../../reducers/threads';
+import { selectChat, selectCurrentMessageList, selectTabState } from '../../selectors';
 
 addActionHandler('processOpenChatOrThread', (global, actions, payload): ActionReturnType => {
   const {
@@ -42,6 +45,7 @@ addActionHandler('processOpenChatOrThread', (global, actions, payload): ActionRe
   actions.closeStarsBalanceModal({ tabId });
   actions.closeStarsTransactionModal({ tabId });
   actions.closeGiftInfoModal({ tabId });
+  actions.closeGiftAuctionModal({ tabId });
 
   if (!currentMessageList || (
     currentMessageList.chatId !== chatId
@@ -239,7 +243,20 @@ addActionHandler('closeChatlistModal', (global, actions, payload): ActionReturnT
 
 addActionHandler('requestChatTranslation', (global, actions, payload): ActionReturnType => {
   const { chatId, toLanguageCode, tabId = getCurrentTabId() } = payload;
-  return updateRequestedChatTranslation(global, chatId, toLanguageCode, tabId);
+  const tabState = selectTabState(global, tabId);
+  const existingTone = tabState.requestedTranslations.byChatId[chatId]?.tone;
+  const tone = existingTone || global.settings.byKey.translationTone;
+  return updateRequestedChatTranslation(global, chatId, toLanguageCode, tone, tabId);
+});
+
+addActionHandler('setChatTranslationTone', (global, actions, payload): ActionReturnType => {
+  const { chatId, tone, tabId = getCurrentTabId() } = payload;
+  return updateChatTranslationTone(global, chatId, tone, tabId);
+});
+
+addActionHandler('setMessageTranslationTone', (global, actions, payload): ActionReturnType => {
+  const { chatId, messageId, tone, tabId = getCurrentTabId() } = payload;
+  return updateMessageTranslationTone(global, chatId, messageId, tone, tabId);
 });
 
 addActionHandler('closeChatInviteModal', (global, actions, payload): ActionReturnType => {

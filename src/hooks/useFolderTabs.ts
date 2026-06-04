@@ -1,10 +1,15 @@
 import { type TeactNode, useMemo } from '../lib/teact/teact';
 import { getActions, getGlobal } from '../global';
 
-import type { ApiMessageEntity, ApiMessageEntityCustomEmoji } from '../api/types';
 import type { MenuItemContextAction } from '../components/ui/ListItem';
-import type { TabWithProperties } from '../components/ui/TabList';
-import { type ApiChatFolder, type ApiChatlistExportedInvite, ApiMessageEntityTypes } from '../api/types';
+import type { TabWithProperties } from '../components/ui/SquareTabList';
+import {
+  type ApiChatFolder,
+  type ApiChatlistExportedInvite,
+  type ApiMessageEntity,
+  type ApiMessageEntityCustomEmoji,
+  ApiMessageEntityTypes,
+} from '../api/types';
 import { SettingsScreens } from '../types';
 
 import { ALL_FOLDER_ID } from '../config';
@@ -23,23 +28,37 @@ type FolderNameOptions = {
   emojiSize?: number;
 };
 
-const useFolderTabs = ({
-  sidebarMode,
-  orderedFolderIds,
-  chatFoldersById,
-  maxFolders,
-  maxChatLists,
-  folderInvitesById,
-  maxFolderInvites,
-}: {
+type Params = {
   sidebarMode: boolean;
   orderedFolderIds?: number[];
   chatFoldersById: Record<number, ApiChatFolder>;
   maxFolders: number;
+  noEmoticons?: boolean;
+} & ({
+  isReadOnly?: false;
   maxChatLists: number;
   folderInvitesById: Record<number, ApiChatlistExportedInvite[]>;
   maxFolderInvites: number;
-}) => {
+} | {
+  isReadOnly: true;
+});
+
+const useFolderTabs = (params: Params) => {
+  const {
+    sidebarMode,
+    orderedFolderIds,
+    chatFoldersById,
+    maxFolders,
+    noEmoticons,
+    isReadOnly,
+  } = params;
+
+  const {
+    maxChatLists,
+    folderInvitesById,
+    maxFolderInvites,
+  } = !isReadOnly ? params : {};
+
   const lang = useLang();
   const { isMobile } = useAppLayout();
 
@@ -97,89 +116,92 @@ const useFolderTabs = ({
       const canShareFolder = selectCanShareFolder(getGlobal(), id);
       const contextActions: MenuItemContextAction[] = [];
 
-      if (canShareFolder) {
-        contextActions.push({
-          title: lang('FilterShare'),
-          icon: 'link',
-          handler: () => {
-            const chatListCount = Object.values(chatFoldersById).reduce((acc, el) => acc + (el.isChatList ? 1 : 0), 0);
-            if (chatListCount >= maxChatLists && !folder.isChatList) {
-              openLimitReachedModal({
-                limit: 'chatlistJoined',
-              });
-              return;
-            }
+      if (!isReadOnly) {
+        if (canShareFolder) {
+          contextActions.push({
+            title: lang('FilterShare'),
+            icon: 'link',
+            handler: () => {
+              const chatListCount = Object.values(chatFoldersById)
+                .reduce((acc, el) => acc + (el.isChatList ? 1 : 0), 0);
+              if (chatListCount >= maxChatLists! && !folder.isChatList) {
+                openLimitReachedModal({
+                  limit: 'chatlistJoined',
+                });
+                return;
+              }
 
-            // Greater amount can be after premium downgrade
-            if (folderInvitesById[id]?.length >= maxFolderInvites) {
-              openLimitReachedModal({
-                limit: 'chatlistInvites',
-              });
-              return;
-            }
+              // Greater amount can be after premium downgrade
+              if (folderInvitesById![id]?.length >= maxFolderInvites!) {
+                openLimitReachedModal({
+                  limit: 'chatlistInvites',
+                });
+                return;
+              }
 
-            openShareChatFolderModal({
-              folderId: id,
+              openShareChatFolderModal({
+                folderId: id,
+              });
+            },
+          });
+        }
+
+        if (id === ALL_FOLDER_ID) {
+          contextActions.push({
+            title: lang('FilterEditFolders'),
+            icon: 'edit',
+            handler: () => {
+              openSettingsScreen({ screen: SettingsScreens.Folders });
+            },
+          });
+
+          if (folderUnreadChatsCountersById[id]?.length) {
+            contextActions.push({
+              title: lang('ChatListMarkAllAsRead'),
+              icon: 'readchats',
+              handler: () => handleReadAllChats(folder.id),
             });
-          },
-        });
-      }
-
-      if (id === ALL_FOLDER_ID) {
-        contextActions.push({
-          title: lang('FilterEditFolders'),
-          icon: 'edit',
-          handler: () => {
-            openSettingsScreen({ screen: SettingsScreens.Folders });
-          },
-        });
-
-        if (folderUnreadChatsCountersById[id]?.length) {
+          }
+        } else {
           contextActions.push({
-            title: lang('ChatListMarkAllAsRead'),
-            icon: 'readchats',
-            handler: () => handleReadAllChats(folder.id),
+            title: lang('EditFolder'),
+            icon: 'edit',
+            handler: () => {
+              openEditChatFolder({ folderId: id });
+            },
           });
-        }
-      } else {
-        contextActions.push({
-          title: lang('EditFolder'),
-          icon: 'edit',
-          handler: () => {
-            openEditChatFolder({ folderId: id });
-          },
-        });
 
-        if (folderUnreadChatsCountersById[id]?.length) {
+          if (folderUnreadChatsCountersById[id]?.length) {
+            contextActions.push({
+              title: lang('ChatListMarkAllAsRead'),
+              icon: 'readchats',
+              handler: () => handleReadAllChats(folder.id),
+            });
+          }
+
           contextActions.push({
-            title: lang('ChatListMarkAllAsRead'),
-            icon: 'readchats',
-            handler: () => handleReadAllChats(folder.id),
+            title: lang('FilterMenuDelete'),
+            icon: 'delete',
+            destructive: true,
+            handler: () => {
+              openDeleteChatFolderModal({ folderId: id });
+            },
           });
         }
 
-        contextActions.push({
-          title: lang('FilterMenuDelete'),
-          icon: 'delete',
-          destructive: true,
-          handler: () => {
-            openDeleteChatFolderModal({ folderId: id });
-          },
-        });
-      }
+        if (!isMobile) {
+          contextActions.push({
+            isSeparator: true,
+          });
 
-      if (!isMobile) {
-        contextActions.push({
-          isSeparator: true,
-        });
-
-        contextActions.push({
-          title: sidebarMode ? lang('TabsPositionTop') : lang('TabsPositionLeft'),
-          icon: 'forums',
-          handler: () => {
-            setSharedSettingOption({ foldersPosition: sidebarMode ? 'top' : 'left' });
-          },
-        });
+          contextActions.push({
+            title: sidebarMode ? lang('TabsPositionTop') : lang('TabsPositionLeft'),
+            icon: 'forums',
+            handler: () => {
+              setSharedSettingOption({ foldersPosition: sidebarMode ? 'top' : 'left' });
+            },
+          });
+        }
       }
 
       const folderNameOptions: FolderNameOptions = {
@@ -215,15 +237,14 @@ const useFolderTabs = ({
         badgeCount: folderCountersById[id]?.chatsCount,
         isBadgeActive: Boolean(folderCountersById[id]?.notificationsCount),
         isBlocked,
-        contextActions: contextActions?.length ? contextActions : undefined,
-        emoticon: folderIcon,
+        contextActions: contextActions.length ? contextActions : undefined,
+        emoticon: noEmoticons ? undefined : folderIcon,
         noTitleAnimations: folder.noTitleAnimations,
       } satisfies TabWithProperties;
     });
   }, [
     displayedFolders, maxFolders, folderCountersById, lang, chatFoldersById, maxChatLists, folderInvitesById,
-    maxFolderInvites, folderUnreadChatsCountersById, openSettingsScreen, sidebarMode, isMobile,
-    setSharedSettingOption,
+    maxFolderInvites, folderUnreadChatsCountersById, isReadOnly, sidebarMode, isMobile, noEmoticons,
   ]);
 
   return {

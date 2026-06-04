@@ -1,5 +1,6 @@
 import {
   Api as GramJs,
+  errors,
   sessions,
   type Update,
 } from '../../../lib/gramjs';
@@ -40,6 +41,7 @@ import {
   addWebPageMediaToLocalDb,
 } from '../helpers/localDb';
 import {
+  buildApiError,
   isResponseUpdate, log,
 } from '../helpers/misc';
 import localDb, { clearLocalDb, type RepairInfo } from '../localDb';
@@ -49,13 +51,22 @@ import {
   getDifference,
   init as initUpdatesManager,
   processUpdate,
+  requestChannelDifference as requestChannelDifferenceFromUpdates,
   reset as resetUpdatesManager,
-  scheduleGetChannelDifference,
+  setOpenedChannelIds as setOpenedChannelIdsInUpdates,
   updateChannelState,
 } from '../updates/updateManager';
 import {
-  onAuthError, onAuthReady, onCurrentUserUpdate, onRequestCode, onRequestPassword, onRequestPhoneNumber,
-  onRequestQrCode, onRequestRegistration, onWebAuthTokenFailed,
+  onAuthError,
+  onAuthReady,
+  onCurrentUserUpdate,
+  onPasskeyOption,
+  onRequestCode,
+  onRequestPassword,
+  onRequestPhoneNumber,
+  onRequestQrCode,
+  onRequestRegistration,
+  onWebAuthTokenFailed,
 } from './auth';
 import downloadMediaWithClient, { parseMediaUrl } from './media';
 
@@ -84,6 +95,7 @@ export async function init(initialArgs: ApiInitialArgs, onConnected?: NoneToVoid
     userAgent, platform, sessionData, isWebmSupported, maxBufferSize, webAuthToken, dcId,
     mockScenario, shouldForceHttpTransport, shouldAllowHttpTransport,
     shouldDebugExportedSenders, langCode, isTestServerRequested, accountIds,
+    hasPasskeySupport,
   } = initialArgs;
 
   const session = new sessions.CallbackSession(sessionData, onSessionUpdate);
@@ -131,6 +143,7 @@ export async function init(initialArgs: ApiInitialArgs, onConnected?: NoneToVoid
         phoneCode: onRequestCode,
         password: onRequestPassword,
         firstAndLastNames: onRequestRegistration,
+        onPasskeyOption,
         qrCode: onRequestQrCode,
         onError: onAuthError,
         initialMethod: platform === 'iOS' || platform === 'Android' ? 'phoneNumber' : 'qrCode',
@@ -139,6 +152,7 @@ export async function init(initialArgs: ApiInitialArgs, onConnected?: NoneToVoid
         webAuthTokenFailed: onWebAuthTokenFailed,
         mockScenario,
         accountIds,
+        hasPasskeySupport,
       }, onConnected);
     } catch (err: any) {
       // eslint-disable-next-line no-console
@@ -440,8 +454,9 @@ export async function fetchCurrentUser() {
 }
 
 export function dispatchErrorUpdate<T extends GramJs.AnyRequest>(err: Error, request: T) {
-  const message = err instanceof RPCError ? err.errorMessage : err.message;
-  const isSlowMode = message === 'FLOOD' && (
+  const { message, code } = buildApiError(err);
+
+  const isSlowMode = err instanceof errors.FloodError && (
     request instanceof GramJs.messages.SendMessage
     || request instanceof GramJs.messages.SendMedia
     || request instanceof GramJs.messages.SendMultiMedia
@@ -451,6 +466,7 @@ export function dispatchErrorUpdate<T extends GramJs.AnyRequest>(err: Error, req
     '@type': 'error',
     error: {
       message,
+      code,
       isSlowMode,
       hasErrorKey: true,
     },
@@ -645,5 +661,9 @@ export function setShouldDebugExportedSenders(value: boolean) {
 }
 
 export function requestChannelDifference(channelId: string) {
-  scheduleGetChannelDifference(channelId);
+  requestChannelDifferenceFromUpdates(channelId);
+}
+
+export function setOpenedChannelIds(channelIds: string[]) {
+  setOpenedChannelIdsInUpdates(channelIds);
 }

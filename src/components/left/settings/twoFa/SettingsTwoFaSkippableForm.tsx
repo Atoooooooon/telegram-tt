@@ -11,12 +11,12 @@ import { selectAnimatedEmoji } from '../../../../global/selectors';
 import { IS_TOUCH_ENV } from '../../../../util/browser/windowEnvironment';
 import renderText from '../../../common/helpers/renderText';
 
-import useAppLayout from '../../../../hooks/useAppLayout';
 import useFlag from '../../../../hooks/useFlag';
 import useHistoryBack from '../../../../hooks/useHistoryBack';
 import useOldLang from '../../../../hooks/useOldLang';
 
 import AnimatedIconFromSticker from '../../../common/AnimatedIconFromSticker';
+import Island from '../../../gili/layout/Island';
 import Button from '../../../ui/Button';
 import InputText from '../../../ui/InputText';
 import Modal from '../../../ui/Modal';
@@ -53,19 +53,15 @@ const SettingsTwoFaSkippableForm: FC<OwnProps & StateProps> = ({
   onReset,
 }) => {
   const inputRef = useRef<HTMLInputElement>();
-  const { isMobile } = useAppLayout();
 
-  const focusDelayTimeoutMs = isMobile ? 550 : 400;
   const [value, setValue] = useState<string>('');
   const [isConfirmShown, markIsConfirmShown, unmarkIsConfirmShown] = useFlag(false);
 
   useEffect(() => {
-    if (!IS_TOUCH_ENV) {
-      setTimeout(() => {
-        inputRef.current!.focus();
-      }, focusDelayTimeoutMs);
+    if (!IS_TOUCH_ENV && isActive) {
+      inputRef.current!.focus();
     }
-  }, [focusDelayTimeoutMs]);
+  }, [isActive]);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (error && clearError) {
@@ -112,8 +108,8 @@ const SettingsTwoFaSkippableForm: FC<OwnProps & StateProps> = ({
         )}
       </div>
 
-      <div className="settings-item settings-group">
-        <form action="" onSubmit={handleSubmit}>
+      <Island>
+        <form className="settings-input" action="" onSubmit={handleSubmit}>
           <InputText
             ref={inputRef}
             value={value}
@@ -166,7 +162,7 @@ const SettingsTwoFaSkippableForm: FC<OwnProps & StateProps> = ({
             </div>
           </Modal>
         )}
-      </div>
+      </Island>
     </div>
   );
 };

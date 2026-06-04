@@ -31,6 +31,7 @@ import SettingsHeader from './SettingsHeader';
 import SettingsLanguage from './SettingsLanguage';
 import SettingsMain from './SettingsMain';
 import SettingsNotifications from './SettingsNotifications';
+import SettingsPasskeys from './SettingsPasskeys';
 import SettingsPerformance from './SettingsPerformance';
 import SettingsPrivacy from './SettingsPrivacy';
 import SettingsPrivacyBlockedUsers from './SettingsPrivacyBlockedUsers';
@@ -85,6 +86,7 @@ const FOLDERS_SCREENS = [
 const PRIVACY_SCREENS = [
   SettingsScreens.PrivacyBlockedUsers,
   SettingsScreens.ActiveWebsites,
+  SettingsScreens.Passkeys,
 ];
 
 const PRIVACY_PHONE_NUMBER_SCREENS = [
@@ -153,6 +155,7 @@ export type OwnProps = {
   foldersDispatch: FolderEditDispatch;
   animationLevel: AnimationLevel;
   shouldSkipTransition?: boolean;
+  hasProfileBackground?: boolean;
   onReset: (forceReturnToChatList?: true | Event) => void;
 };
 
@@ -164,6 +167,7 @@ const Settings: FC<OwnProps> = ({
   onReset,
   animationLevel,
   shouldSkipTransition,
+  hasProfileBackground,
 }) => {
   const { closeShareChatFolderModal, openSettingsScreen } = getActions();
 
@@ -174,7 +178,8 @@ const Settings: FC<OwnProps> = ({
 
   useScrollNotch({
     containerRef,
-    selector: '.settings-content',
+    selector: '.Transition_slide-active .settings-content,'
+      + ' .Transition_slide-active .settings-main-scroll',
   }, [currentScreen]);
 
   const handleReset = useLastCallback((forceReturnToChatList?: true | Event) => {
@@ -486,6 +491,14 @@ const Settings: FC<OwnProps> = ({
           />
         );
 
+      case SettingsScreens.Passkeys:
+        return (
+          <SettingsPasskeys
+            isActive={isScreenActive}
+            onReset={handleReset}
+          />
+        );
+
       default:
         return undefined;
     }
@@ -503,6 +516,7 @@ const Settings: FC<OwnProps> = ({
           currentScreen={currentScreen}
           onReset={handleReset}
           editedFolderId={foldersState.folderId}
+          hasProfileBackground={hasProfileBackground}
         />
         {renderCurrentSectionContent(isScreenActive, activeKey)}
       </>

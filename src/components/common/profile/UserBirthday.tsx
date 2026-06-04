@@ -12,7 +12,7 @@ import { getStickerMediaHash } from '../../../global/helpers';
 import { selectIsPremiumPurchaseBlocked } from '../../../global/selectors';
 import { IS_OFFSET_PATH_SUPPORTED } from '../../../util/browser/windowEnvironment';
 import buildClassName from '../../../util/buildClassName';
-import { formatDateToString } from '../../../util/dates/dateFormat';
+import { formatDateToString } from '../../../util/dates/oldDateFormat';
 import { buildCollectionByKey } from '../../../util/iteratees';
 import * as mediaLoader from '../../../util/mediaLoader';
 import renderText from '../helpers/renderText';
@@ -66,13 +66,11 @@ const UserBirthday = ({
     age,
   } = useMemo(() => {
     const today = new Date();
-    const date = new Date();
-    if (birthday.year) {
-      date.setFullYear(birthday.year);
-    }
-    date.setMonth(birthday.month - 1);
-    date.setDate(birthday.day);
-    date.setHours(0, 0, 0, 0);
+    const date = new Date(
+      birthday.year || 2024, // Use leap year as fallback
+      birthday.month - 1,
+      birthday.day,
+    );
 
     const formatted = formatDateToString(date, lang.code, true, 'long');
     const isBirthdayToday = date.getDate() === today.getDate() && date.getMonth() === today.getMonth();
@@ -142,7 +140,7 @@ const UserBirthday = ({
   const value = useMemo(() => {
     if (age) {
       return lang(
-        `ProfileBirthday${isToday ? 'Today' : ''}ValueYear`,
+        `ProfileBirthday${isToday ? 'Today' : ''}ValueAge`,
         { date: formattedDate, age },
         { pluralValue: age },
       );

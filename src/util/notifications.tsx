@@ -11,10 +11,14 @@ import {
   getChatAvatarHash,
   getChatTitle,
   getMessageRecentReaction,
-  getPrivateChatUserId,
   getUserFullName,
 } from '../global/helpers';
-import { getIsChatMuted, getIsChatSilent, getShouldShowMessagePreview } from '../global/helpers/notifications';
+import {
+  getIsChatMuted,
+  getIsChatSilent,
+  getShouldIgnoreNotificationMute,
+  getShouldShowMessagePreview,
+} from '../global/helpers/notifications';
 import { getMessageSenderName } from '../global/helpers/peers';
 import {
   selectCurrentMessageList,
@@ -292,10 +296,13 @@ function checkIfShouldNotify(chat: ApiChat, message: Partial<ApiMessage>) {
   const topic = selectTopicFromMessage(global, message as ApiMessage);
   const topicMutedUntil = topic?.notifySettings.mutedUntil;
   const isMuted = topicMutedUntil === undefined ? isChatMuted : topicMutedUntil > getServerTime();
-  const shouldIgnoreMute = message.isMentioned;
+  const shouldNotifyAboutPinnedMessages = global.settings.byKey.shouldNotifyAboutPinnedMessages;
+  const shouldIgnoreMute = getShouldIgnoreNotificationMute(message, shouldNotifyAboutPinnedMessages);
 
+  const isPinMessage = message.content?.action?.type === 'pinMessage';
+  const shouldSkipPinnedMessageNotification = isPinMessage && !shouldNotifyAboutPinnedMessages;
   const shouldNotifyAboutMessage = message.content?.action?.type !== 'phoneCall';
-  if ((isMuted && !shouldIgnoreMute) || !shouldNotifyAboutMessage
+  if (shouldSkipPinnedMessageNotification || (isMuted && !shouldIgnoreMute) || !shouldNotifyAboutMessage
     || chat.isNotJoined || !chat.isListed || selectIsChatWithSelf(global, chat.id)) {
     return false;
   }
@@ -320,8 +327,7 @@ function getNotificationContent(chat: ApiChat, message: ApiMessage, reaction?: A
   }
 
   const { isScreenLocked } = global.passcode;
-  const privateChatUserId = getPrivateChatUserId(chat);
-  const isSelf = privateChatUserId === global.currentUserId;
+  const isSelf = chat.id === global.currentUserId;
 
   let body: string;
   if (
@@ -498,7 +504,7 @@ export async function notifyAboutMessage({
     // Play sound when notification is displayed
     notification.onshow = () => {
       // TODO Update when reaction badges are implemented
-      if (isReaction || message.isSilent || IS_TAURI) return;
+      if (isSilent || isReaction || message.isSilent || IS_TAURI) return;
       playNotifySoundDebounced(String(message.id) || chat.id);
     };
   }

@@ -7,7 +7,10 @@ import type {
   ApiCountry,
   ApiLanguage,
   ApiOldLangString,
+  ApiPasskey,
+  ApiPendingSuggestion,
   ApiPrivacyKey,
+  ApiPromoData,
   ApiRestrictionReason,
   ApiSession,
   ApiTimezone,
@@ -22,6 +25,7 @@ import {
 } from '../../../util/iteratees';
 import { toJSNumber } from '../../../util/numbers';
 import { addUserToLocalDb } from '../helpers/localDb';
+import { buildApiFormattedText } from './common';
 import { omitVirtualClassFields } from './helpers';
 import { buildApiDocument, buildMessageTextContent } from './messageContent';
 import { buildApiPeerId, getApiChatIdFromMtpPeer } from './peers';
@@ -162,7 +166,10 @@ export function buildJson(json: GramJs.TypeJSONValue): any {
 
 export function buildApiUrlAuthResult(result: GramJs.TypeUrlAuthResult): ApiUrlAuthResult | undefined {
   if (result instanceof GramJs.UrlAuthResultRequest) {
-    const { bot, domain, requestWriteAccess } = result;
+    const {
+      bot, domain, requestWriteAccess, requestPhoneNumber, browser, platform, ip, region, matchCodes,
+      matchCodesFirst, userIdHint, isApp, verifiedAppName,
+    } = result;
     const user = buildApiUser(bot);
     if (!user) return undefined;
 
@@ -171,8 +178,18 @@ export function buildApiUrlAuthResult(result: GramJs.TypeUrlAuthResult): ApiUrlA
     return {
       type: 'request',
       domain,
+      isApp,
       shouldRequestWriteAccess: requestWriteAccess,
       bot: user,
+      shouldRequestPhoneNumber: requestPhoneNumber,
+      browser,
+      platform,
+      ip,
+      region,
+      matchCodes,
+      matchCodesFirst,
+      userIdHint: userIdHint?.toString(),
+      verifiedAppName,
     };
   }
 
@@ -194,7 +211,7 @@ export function buildApiUrlAuthResult(result: GramJs.TypeUrlAuthResult): ApiUrlA
 export function buildApiConfig(config: GramJs.Config): ApiConfig {
   const {
     testMode, expires, gifSearchUsername, chatSizeMax, autologinToken, reactionsDefault,
-    messageLengthMax, editTimeLimit, forwardedCountMax,
+    messageLengthMax, editTimeLimit, forwardedCountMax, ratingEDecay,
   } = config;
   const defaultReaction = reactionsDefault && buildApiReaction(reactionsDefault);
   return {
@@ -207,6 +224,31 @@ export function buildApiConfig(config: GramJs.Config): ApiConfig {
     maxMessageLength: messageLengthMax,
     editTimeLimit,
     maxForwardedCount: forwardedCountMax,
+    ratingEDecay,
+  };
+}
+
+export function buildApiPromoData(promoData: GramJs.help.PromoData): ApiPromoData {
+  const {
+    expires, pendingSuggestions, dismissedSuggestions, customPendingSuggestion,
+  } = promoData;
+  return {
+    expires,
+    pendingSuggestions,
+    dismissedSuggestions,
+    customPendingSuggestion: customPendingSuggestion ? buildApiPendingSuggestion(customPendingSuggestion) : undefined,
+  };
+}
+
+function buildApiPendingSuggestion(pendingSuggestion: GramJs.TypePendingSuggestion): ApiPendingSuggestion {
+  const {
+    suggestion, title, description, url,
+  } = pendingSuggestion;
+  return {
+    suggestion,
+    title: buildApiFormattedText(title),
+    description: buildApiFormattedText(description),
+    url,
   };
 }
 
@@ -217,7 +259,7 @@ export function oldBuildLangPack(mtpLangPack: GramJs.LangPackDifference) {
   }, {});
 }
 
-export function oldBuildLangPackString(mtpString: GramJs.TypeLangPackString) {
+function oldBuildLangPackString(mtpString: GramJs.TypeLangPackString) {
   return mtpString instanceof GramJs.LangPackString
     ? mtpString.value
     : mtpString instanceof GramJs.LangPackStringPluralized
@@ -321,4 +363,15 @@ export function buildApiRestrictionReasons(
   return restrictionReasons.map((
     { reason, text, platform }) =>
     ({ reason, text, platform }));
+}
+
+export function buildApiPasskey(passkey: GramJs.TypePasskey): ApiPasskey {
+  const { id, name, date, softwareEmojiId, lastUsageDate } = passkey;
+  return {
+    id,
+    name,
+    date,
+    softwareEmojiId: softwareEmojiId?.toString(),
+    lastUsageDate,
+  };
 }

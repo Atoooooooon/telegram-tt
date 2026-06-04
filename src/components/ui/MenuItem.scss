@@ -68,6 +68,13 @@
   &.disabled {
     cursor: var(--custom-cursor, default) !important;
     opacity: 0.5 !important;
+
+    &:hover,
+    &:focus,
+    &:active {
+      transform: none !important;
+      background-color: transparent !important;
+    }
   }
 
   &.destructive {
@@ -83,7 +90,7 @@
     transition: none !important;
   }
 
-  .Switcher, .menu-item-badge {
+  .Switcher, .Toggle, .menu-item-badge {
     margin-left: auto;
   }
 
@@ -107,10 +114,14 @@
       margin-left: 2rem;
     }
 
-    > .Switcher {
+    > .Switcher, > .Toggle {
       margin-right: auto;
       margin-left: 0;
     }
+  }
+
+  .submenu-icon {
+    margin-inline: auto 0 !important;
   }
 
   &.compact {
@@ -157,9 +168,18 @@
     font-weight: var(--font-weight-semibold);
   }
 
+  a:hover {
+    text-decoration: none;
+  }
+
   &.wrap {
     display: block;
     white-space: normal;
+  }
+
+  &.text-only {
+    padding-inline: 0.5rem;
+    line-height: 1.375;
   }
 
   &.menu-custom-emoji-sets {

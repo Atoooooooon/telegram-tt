@@ -1,5 +1,6 @@
 @use "sass:map";
 @use "../../../styles/icons";
+@use "../../../styles/mixins";
 
 @mixin subheader-styles() {
   overflow: hidden;
@@ -12,7 +13,8 @@
 
   font-size: calc(var(--message-text-size, 1rem) - 0.125rem);
 
-  background-color: var(--pattern-color);
+  @include mixins.action-message-bg;
+
   box-shadow: 0 1px 2px var(--color-default-shadow);
 
   @media (max-width: 600px) {
@@ -27,7 +29,8 @@
 .message-content {
   position: relative;
   max-width: var(--max-width);
-  &.gift {
+  &.gift,
+  &.auction {
     --max-width: 18rem;
   }
 
@@ -300,7 +303,6 @@
     user-select: none;
 
     unicode-bidi: plaintext;
-    overflow: hidden;
     display: flex;
 
     font-size: calc(var(--message-text-size, 1rem) - 0.125rem);
@@ -333,6 +335,7 @@
 
     .sender-title {
       overflow: hidden;
+      line-height: normal;
       text-overflow: ellipsis;
     }
 
@@ -349,6 +352,12 @@
       unicode-bidi: plaintext;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+
+    .via-sender {
+      display: flex;
+      align-items: center;
+      line-height: normal;
     }
 
     .sender-hidden {
@@ -396,11 +405,29 @@
       flex-grow: 1;
     }
 
-    .admin-title {
+    .message-title-meta {
       user-select: none;
 
-      margin-left: 1rem;
+      display: flex;
+      gap: 0.25rem;
+      align-items: center;
 
+      margin-left: 1rem;
+    }
+
+    .admin-title-badge, .admin-title {
+      user-select: none;
+    }
+
+    .admin-title-badge:last-child {
+      margin-right: -0.1875rem;
+    }
+
+    .admin-title-plain {
+      padding-inline: 0.25rem;
+    }
+
+    .admin-title {
       font-size: 0.75rem;
       font-weight: var(--font-weight-normal);
       color: rgba(var(--color-text-meta-rgb), 0.75);
@@ -413,13 +440,8 @@
 
     .sender-boosts {
       user-select: none;
-
       display: flex;
       align-items: center;
-
-      margin-top: -0.125rem;
-      margin-inline-start: 0.125rem;
-
       font-size: 0.75rem;
     }
   }
@@ -537,23 +559,6 @@
     }
   }
 
-  &.voice,
-  &.audio,
-  &.document {
-    .text-content {
-      margin-top: 0.25rem;
-    }
-  }
-
-  &.voice,
-  &.audio {
-    .message-title,
-    .Embedded {
-      margin-top: -0.1875rem;
-      margin-bottom: 0.1875rem;
-    }
-  }
-
   &.audio {
     min-width: 20rem;
 
@@ -582,13 +587,13 @@
 
   &:not(.custom-shape) .text-content {
     .emoji {
-      width: calc(1.25 * var(--message-text-size, 1rem));
-      height: calc(1.25 * var(--message-text-size, 1rem));
-      background-size: calc(1.25 * var(--message-text-size, 1rem));
+      width: 1.25em;
+      height: 1.25em;
+      background-size: 1.25em;
     }
 
     .custom-emoji {
-      --custom-emoji-size: max(calc(1.25 * var(--message-text-size, 1rem)), 20px);
+      --custom-emoji-size: max(1.25em, 20px);
 
       width: var(--custom-emoji-size);
       height: var(--custom-emoji-size);
@@ -640,6 +645,9 @@
     .MessageList.no-avatars & {
       max-width: min(29rem, calc(100vw - 3.75rem));
     }
+    .has-guest-avatar & {
+      max-width: min(29rem, calc(100vw - 6.25rem));
+    }
     .Message.own & {
       max-width: min(30rem, calc(100vw - 3.75rem));
     }
@@ -649,6 +657,9 @@
 
       .MessageList.no-avatars & {
         max-width: min(29rem, calc(100vw - 4.5rem));
+      }
+      .has-guest-avatar & {
+        max-width: min(29rem, calc(100vw - 7rem));
       }
 
       .Message.own & {
@@ -1064,6 +1075,26 @@
   &.clickable {
     cursor: var(--custom-cursor, pointer);
   }
+}
+
+.text-entity-diff-insert,
+.text-entity-diff-replace-new {
+  color: var(--color-primary);
+}
+
+.text-entity-diff-replace-new {
+  text-decoration: underline wavy;
+}
+
+.text-entity-diff-replace-old {
+  color: var(--color-error);
+  text-decoration: line-through;
+}
+
+.text-entity-diff-delete {
+  color: var(--color-error);
+  text-decoration: line-through;
+  text-decoration-color: var(--color-error);
 }
 
 // Keep this close to `CodeBlock` style to avoid jumps in height

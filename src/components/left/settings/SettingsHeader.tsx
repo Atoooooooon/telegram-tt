@@ -19,12 +19,14 @@ import MenuItem from '../../ui/MenuItem';
 type OwnProps = {
   currentScreen: SettingsScreens;
   editedFolderId?: number;
+  hasProfileBackground?: boolean;
   onReset: () => void;
 };
 
 const SettingsHeader: FC<OwnProps> = ({
   currentScreen,
   editedFolderId,
+  hasProfileBackground,
   onReset,
 }) => {
   const {
@@ -253,10 +255,13 @@ const SettingsHeader: FC<OwnProps> = ({
             )}
           </h3>
         );
+
+      case SettingsScreens.Passkeys:
+        return <h3>{lang('SettingsPasskeyTitle')}</h3>;
+
       default:
         return (
           <div className="settings-main-header">
-            {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
             <h3 onClick={handleMultiClick}>
               {oldLang('SETTINGS')}
             </h3>
@@ -283,7 +288,9 @@ const SettingsHeader: FC<OwnProps> = ({
   }
 
   return (
-    <div className="left-header">
+    <div className={hasProfileBackground && currentScreen === SettingsScreens.Main
+      ? 'left-header' : 'left-header secondary'}
+    >
       <Button
         round
         size="smaller"

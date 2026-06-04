@@ -5,7 +5,6 @@ export { default as ForwardRecipientPicker } from '../components/main/ForwardRec
 export { default as DraftRecipientPicker } from '../components/main/DraftRecipientPicker';
 export { default as AttachBotRecipientPicker } from '../components/main/AttachBotRecipientPicker';
 export { default as Dialogs } from '../components/main/Dialogs';
-export { default as Notifications } from '../components/main/Notifications';
 export { default as SafeLinkModal } from '../components/main/SafeLinkModal';
 export { default as MapModal } from '../components/modals/map/MapModal';
 export { default as UrlAuthModal } from '../components/modals/urlAuth/UrlAuthModal';
@@ -27,6 +26,8 @@ export { default as DeleteAccountModal } from '../components/modals/deleteAccoun
 export { default as AgeVerificationModal } from '../components/modals/ageVerification/AgeVerificationModal';
 export { default as ChatlistModal } from '../components/modals/chatlist/ChatlistModal';
 export { default as ChatInviteModal } from '../components/modals/chatInvite/ChatInviteModal';
+export { default as PasskeyModal } from '../components/modals/passkey/PasskeyModal';
+export { default as BirthdaySetupModal } from '../components/modals/birthday/BirthdaySetupModal';
 
 export { default as AboutAdsModal } from '../components/modals/aboutAds/AboutAdsModal';
 export { default as AboutMonetizationModal } from '../components/common/AboutMonetizationModal';
@@ -70,8 +71,15 @@ export { default as HeaderMenuContainer } from '../components/middle/HeaderMenuC
 export { default as MiddleSearch } from '../components/middle/search/MiddleSearch';
 export { default as ReactionPicker } from '../components/middle/message/reactions/ReactionPicker';
 
+export { default as AiMessageEditorModal }
+  from '../components/middle/composer/AiMessageEditorModal/AiMessageEditorModal';
+export { default as AiToneEmojiPickerModal }
+  from '../components/middle/composer/AiMessageEditorModal/AiToneEmojiPickerModal';
+export { default as AiTonePreviewModal }
+  from '../components/modals/aiTonePreview/AiTonePreviewModal';
+
 export { default as AttachmentModal } from '../components/middle/composer/AttachmentModal';
-export { default as PollModal } from '../components/middle/composer/PollModal';
+export { default as PollModal } from '../components/modals/poll/PollModal';
 export { default as ToDoListModal } from '../components/middle/composer/ToDoListModal';
 export { default as SymbolMenu } from '../components/middle/composer/SymbolMenu';
 export { default as ChatCommandTooltip } from '../components/middle/composer/ChatCommandTooltip';
@@ -104,5 +112,12 @@ export { default as OneTimeMediaModal } from '../components/modals/oneTimeMedia/
 export { default as WebAppsCloseConfirmationModal } from '../components/main/WebAppsCloseConfirmationModal';
 export { default as FrozenAccountModal } from '../components/modals/frozenAccount/FrozenAccountModal';
 export { default as ProfileRatingModal } from '../components/modals/profileRating/ProfileRatingModal';
+export { default as DisableSharingAboutModal } from '../components/modals/disableSharing/DisableSharingAboutModal';
+export { default as EditRankModal } from '../components/modals/rank/EditRankModal';
+export { default as RankModal } from '../components/modals/rank/RankModal';
 export { default as QuickPreviewModal } from '../components/modals/quickPreview/QuickPreviewModal';
 export { default as StealthModeModal } from '../components/modals/storyStealthMode/StealthModeModal';
+export { default as LeaveGroupModal } from '../components/modals/leaveGroup/LeaveGroupModal';
+export { default as TwoFaCheckModal } from '../components/modals/twoFaCheck/TwoFaCheckModal';
+export { default as QuickChatPickerModal } from '../components/modals/quickChatPicker/QuickChatPickerModal';
+export { default as CocoonModal } from '../components/modals/cocoon/CocoonModal';

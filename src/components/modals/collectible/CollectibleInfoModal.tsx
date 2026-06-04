@@ -9,7 +9,7 @@ import type { ApiCountryCode } from '../../../api/types';
 import type { TabState } from '../../../global/types';
 
 import { copyTextToClipboard } from '../../../util/clipboard';
-import { formatDateAtTime } from '../../../util/dates/dateFormat';
+import { formatDateAtTime } from '../../../util/dates/oldDateFormat';
 import { formatCurrencyAsString } from '../../../util/formatCurrency';
 import { formatPhoneNumberWithCode } from '../../../util/phoneNumber';
 import { LOCAL_TGS_URLS } from '../../common/helpers/animatedAssets';
@@ -101,16 +101,8 @@ const CollectibleInfoModal: FC<OwnProps & StateProps> = ({
       isSlim
       contentClassName={styles.content}
       onClose={closeCollectibleInfoModal}
+      hasAbsoluteCloseButton
     >
-      <Button
-        round
-        color="translucent"
-        size="smaller"
-        className={styles.closeButton}
-        ariaLabel={lang('Close')}
-        onClick={handleClose}
-        iconName="close"
-      />
       <div className={styles.icon}>
         <AnimatedIconWithPreview
           tgsUrl={isUsername ? LOCAL_TGS_URLS.Mention : LOCAL_TGS_URLS.Fragment}

@@ -1,4 +1,3 @@
-import type { FC } from '../../../lib/teact/teact';
 import { memo, useEffect } from '../../../lib/teact/teact';
 import { getActions, withGlobal } from '../../../global';
 
@@ -6,7 +5,7 @@ import type { ApiChatInviteImporter, ApiExportedInvite } from '../../../api/type
 
 import { isChatChannel } from '../../../global/helpers';
 import { selectChat, selectTabState } from '../../../global/selectors';
-import { formatFullDate, formatMediaDateTime, formatTime } from '../../../util/dates/dateFormat';
+import { formatFullDate, formatMediaDateTime, formatTime } from '../../../util/dates/oldDateFormat';
 import { getServerTime } from '../../../util/serverTime';
 
 import useHistoryBack from '../../../hooks/useHistoryBack';
@@ -14,6 +13,7 @@ import useOldLang from '../../../hooks/useOldLang';
 
 import LinkField from '../../common/LinkField';
 import PrivateChatInfo from '../../common/PrivateChatInfo';
+import Island, { IslandDescription, IslandTitle } from '../../gili/layout/Island';
 import ListItem from '../../ui/ListItem';
 import Spinner from '../../ui/Spinner';
 
@@ -32,7 +32,7 @@ type StateProps = {
 
 const BULLET = '\u2022';
 
-const ManageInviteInfo: FC<OwnProps & StateProps> = ({
+const ManageInviteInfo = ({
   chatId,
   invite,
   importers,
@@ -40,7 +40,7 @@ const ManageInviteInfo: FC<OwnProps & StateProps> = ({
   isChannel,
   isActive,
   onClose,
-}) => {
+}: OwnProps & StateProps) => {
   const {
     loadChatInviteImporters,
     loadChatInviteRequesters,
@@ -51,6 +51,7 @@ const ManageInviteInfo: FC<OwnProps & StateProps> = ({
   const {
     usage = 0, usageLimit, link, adminId,
   } = invite || {};
+  // eslint-disable-next-line @eslint-react/purity
   const expireDate = invite?.expireDate && (invite.expireDate - getServerTime()) * 1000 + Date.now();
   const isExpired = ((invite?.expireDate || 0) - getServerTime()) < 0;
 
@@ -70,11 +71,13 @@ const ManageInviteInfo: FC<OwnProps & StateProps> = ({
     if (!importers?.length && requesters?.length) return undefined;
     if (!importers) return <Spinner />;
     return (
-      <div className="section">
-        <p className="section-heading">{importers.length ? lang('PeopleJoined', usage) : lang('NoOneJoined')}</p>
-        <p className="section-help">
+      <>
+        <IslandTitle>{importers.length ? lang('PeopleJoined', usage) : lang('NoOneJoined')}</IslandTitle>
+        <Island>
           {!importers.length && (
-            usageLimit ? lang('PeopleCanJoinViaLinkCount', usageLimit - usage) : lang('NoOneJoinedYet')
+            <IslandDescription>
+              {usageLimit ? lang('PeopleCanJoinViaLinkCount', usageLimit - usage) : lang('NoOneJoinedYet')}
+            </IslandDescription>
           )}
           {importers.map((importer) => {
             const joinTime = formatMediaDateTime(lang, importer.date * 1000, true);
@@ -93,8 +96,8 @@ const ManageInviteInfo: FC<OwnProps & StateProps> = ({
               </ListItem>
             );
           })}
-        </p>
-      </div>
+        </Island>
+      </>
     );
   };
 
@@ -103,9 +106,9 @@ const ManageInviteInfo: FC<OwnProps & StateProps> = ({
     if (!requesters && importers) return <Spinner />;
     if (!requesters?.length) return undefined;
     return (
-      <div className="section">
-        <p className="section-heading">{isChannel ? lang('SubscribeRequests') : lang('MemberRequests')}</p>
-        <p className="section-help">
+      <>
+        <IslandTitle>{isChannel ? lang('SubscribeRequests') : lang('MemberRequests')}</IslandTitle>
+        <Island>
           {requesters.map((requester) => (
             <ListItem
               className="chat-item-clickable scroll-item small-icon"
@@ -119,8 +122,8 @@ const ManageInviteInfo: FC<OwnProps & StateProps> = ({
               />
             </ListItem>
           ))}
-        </p>
-      </div>
+        </Island>
+      </>
     );
   };
 
@@ -128,35 +131,37 @@ const ManageInviteInfo: FC<OwnProps & StateProps> = ({
     <div className="Management ManageInviteInfo">
       <div className="panel-content custom-scroll">
         {!invite && (
-          <p className="section-help">{lang('Loading')}</p>
+          <IslandDescription>{lang('Loading')}</IslandDescription>
         )}
         {invite && (
           <>
-            <div className="section">
+            <Island>
               <LinkField title={invite.title} link={invite.link} className="invite-link" />
               {Boolean(expireDate) && (
-                <p className="section-help">
+                <IslandDescription>
                   {isExpired
                     ? lang('ExpiredLink')
                     : lang('LinkExpiresIn', `${formatFullDate(lang, expireDate)} ${formatTime(lang, expireDate)}`)}
-                </p>
+                </IslandDescription>
               )}
-            </div>
+            </Island>
             {adminId && (
-              <div className="section">
-                <p className="section-heading">{lang('LinkCreatedeBy')}</p>
-                <ListItem
-                  className="chat-item-clickable scroll-item small-icon"
+              <>
+                <IslandTitle>{lang('LinkCreatedeBy')}</IslandTitle>
+                <Island>
+                  <ListItem
+                    className="chat-item-clickable scroll-item small-icon"
 
-                  onClick={() => openChat({ id: adminId })}
-                >
-                  <PrivateChatInfo
-                    userId={adminId}
-                    status={formatMediaDateTime(lang, invite.date * 1000, true)}
-                    forceShowSelf
-                  />
-                </ListItem>
-              </div>
+                    onClick={() => openChat({ id: adminId })}
+                  >
+                    <PrivateChatInfo
+                      userId={adminId}
+                      status={formatMediaDateTime(lang, invite.date * 1000, true)}
+                      forceShowSelf
+                    />
+                  </ListItem>
+                </Island>
+              </>
             )}
             {renderImporters()}
             {renderRequesters()}

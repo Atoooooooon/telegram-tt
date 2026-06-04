@@ -32,7 +32,9 @@ export const IS_LINUX = PLATFORM_ENV === 'Linux';
 export const IS_IOS = PLATFORM_ENV === 'iOS';
 export const IS_ANDROID = PLATFORM_ENV === 'Android';
 export const IS_MOBILE = IS_IOS || IS_ANDROID;
-export const IS_SAFARI = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+export const IS_CHROMIUM = navigator.userAgentData?.brands.some((data) => data.brand === 'Chromium')
+  || /Chrom(e|ium)\//.test(navigator.userAgent);
+export const IS_SAFARI = !IS_CHROMIUM && /applewebkit/i.test(navigator.userAgent);
 export const IS_YA_BROWSER = navigator.userAgent.includes('YaBrowser');
 export const IS_FIREFOX = navigator.userAgent.toLowerCase().includes('firefox')
   || navigator.userAgent.toLowerCase().includes('iceweasel')
@@ -64,18 +66,14 @@ export const IS_EMOJI_SUPPORTED = PLATFORM_ENV && (IS_MAC_OS || IS_IOS) && isLas
 
 export const IS_SERVICE_WORKER_SUPPORTED = 'serviceWorker' in navigator;
 
-// Remove in mid-late 2025 when Chromium 132 is no longer a problem
-// https://issues.chromium.org/issues/390581541
-const chromeVersion = navigator.userAgent.match(/Chrom(e|ium)\/([0-9]+)\./)?.[2];
-const hasBrokenServiceWorkerStreaming = chromeVersion && Number(chromeVersion) === 132;
 // TODO Consider failed service worker
-export const IS_PROGRESSIVE_SUPPORTED = IS_SERVICE_WORKER_SUPPORTED && !hasBrokenServiceWorkerStreaming;
+export const IS_PROGRESSIVE_SUPPORTED = IS_SERVICE_WORKER_SUPPORTED;
 export const IS_OPUS_SUPPORTED = Boolean((new Audio()).canPlayType('audio/ogg; codecs=opus'));
 export const IS_CANVAS_FILTER_SUPPORTED = (
   !IS_TEST && 'filter' in (document.createElement('canvas').getContext('2d') || {})
 );
 export const IS_REQUEST_FULLSCREEN_SUPPORTED = 'requestFullscreen' in document.createElement('div');
-export const ARE_CALLS_SUPPORTED = true;
+export const ARE_CALLS_SUPPORTED = !IS_FIREFOX;
 
 export const IS_WAVE_TRANSFORM_SUPPORTED = !IS_MOBILE
   && !IS_FIREFOX // https://bugzilla.mozilla.org/show_bug.cgi?id=1961378
@@ -109,8 +107,11 @@ export const IS_BACKDROP_BLUR_SUPPORTED = CSS.supports('backdrop-filter: blur()'
 export const IS_INSTALL_PROMPT_SUPPORTED = 'onbeforeinstallprompt' in window;
 export const IS_OPEN_IN_NEW_TAB_SUPPORTED = !(IS_PWA && IS_MOBILE);
 export const IS_TRANSLATION_SUPPORTED = !IS_TEST;
+export const IS_TRANSLATION_DETECTOR_SUPPORTED = 'LanguageDetector' in window;
 export const IS_VIEW_TRANSITION_SUPPORTED = CSS.supports('view-transition-class: test')
-  && !IS_FIREFOX; // Fix flashing elements before removing
+  && !IS_FIREFOX; // https://bugzilla.mozilla.org/show_bug.cgi?id=1994547
+export const IS_WEBAUTHN_SUPPORTED = navigator.credentials && window.PublicKeyCredential
+  && 'parseCreationOptionsFromJSON' in PublicKeyCredential;
 
 export const MESSAGE_LIST_SENSITIVE_AREA = 750;
 
@@ -135,7 +136,7 @@ function isLastEmojiVersionSupported() {
   inlineEl.classList.add('emoji-test-element');
   document.body.appendChild(inlineEl);
 
-  inlineEl.innerText = '🇨🇶'; // Emoji from 16.0 version
+  inlineEl.innerText = '🧑‍🩰'; // Emoji from 17.0 version
   const newEmojiWidth = inlineEl.offsetWidth;
   inlineEl.innerText = '❤️'; // Emoji from 1.0 version
   const legacyEmojiWidth = inlineEl.offsetWidth;

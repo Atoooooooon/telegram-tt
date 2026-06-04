@@ -57,7 +57,6 @@ const LeftSideMenuDropdown = ({
   return (
     <DropdownMenu
       trigger={trigger}
-      footer={`${APP_NAME} ${versionString}`}
       className={buildClassName(
         'main-menu',
         lang.isRtl && 'rtl',
@@ -69,6 +68,7 @@ const LeftSideMenuDropdown = ({
       positionX={shouldHideSearch && lang.isRtl ? 'right' : 'left'}
       transformOriginX={90}
       transformOriginY={100}
+      withPortal
       onTransitionEnd={lang.isRtl ? handleDropdownMenuTransitionEnd : undefined}
     >
       <LeftSideMenuItems
@@ -77,6 +77,7 @@ const LeftSideMenuDropdown = ({
         onSelectSettings={handleSelectSettings}
         onBotMenuOpened={markBotMenuOpen}
         onBotMenuClosed={unmarkBotMenuOpen}
+        footer={`${APP_NAME} ${versionString}`}
       />
     </DropdownMenu>
   );

@@ -1,4 +1,5 @@
 dist/build-stats.json
+public/build-stats.json
 node_modules
 .cache
 .env
@@ -13,4 +14,4 @@ dev/perf/screenshot*
 !.github/workflows/package-and-publish.yml
 dist/
 src-tauri/
-
+build/

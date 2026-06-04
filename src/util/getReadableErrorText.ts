@@ -71,6 +71,8 @@ const READABLE_ERROR_MESSAGES: Record<string, string> = {
   ADMIN_RANK_EMOJI_NOT_ALLOWED: 'An admin rank cannot contain emojis',
   ADMIN_RANK_INVALID: 'The specified admin rank is invalid',
   FRESH_CHANGE_ADMINS_FORBIDDEN: 'You were just elected admin, you can\'t add or modify other admins yet',
+  SESSION_TOO_FRESH: 'Session is fresh, please try again later',
+  SESSION_IS_FRESH: 'Session is fresh, please try again later',
   INPUT_USER_DEACTIVATED: 'Can\'t do this action to a deleted account',
   BOT_PRECHECKOUT_TIMEOUT: 'The request for payment has expired',
   PROVIDER_ACCOUNT_TIMEOUT: 'Request to the payment provider has expired',
@@ -134,6 +136,10 @@ const FINAL_PAYMENT_ERRORS = new Set([
   'PAYMENT_FAILED',
 ]);
 
+const ERROR_CODES_WITHOUT_DIALOG = new Set([
+  406,
+]);
+
 export default function getReadableErrorText(error: ApiError) {
   const { message, isSlowMode, textParams } = error;
   // Currently, Telegram API doesn't return `SLOWMODE_WAIT_X` error as described in the docs
@@ -156,4 +162,11 @@ export function getShippingError(error: ApiError): ApiFieldError | undefined {
 
 export function shouldClosePaymentModal(error: ApiError): boolean {
   return FINAL_PAYMENT_ERRORS.has(error.message);
+}
+
+export function shouldShowErrorDialog(error: ApiError): boolean {
+  if (error.code && ERROR_CODES_WITHOUT_DIALOG.has(error.code)) return false;
+  if (error.hasErrorKey && !getReadableErrorText(error)) return false;
+
+  return true;
 }

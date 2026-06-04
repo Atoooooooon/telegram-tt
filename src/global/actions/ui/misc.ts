@@ -1,6 +1,5 @@
 import { addCallback } from '../../../lib/teact/teactn';
 
-import type { ApiError, ApiNotification } from '../../../api/types';
 import type { ActionReturnType, GlobalState } from '../../types';
 
 import {
@@ -12,15 +11,15 @@ import { IS_TAURI } from '../../../util/browser/globalEnvironment';
 import { IS_WAVE_TRANSFORM_SUPPORTED } from '../../../util/browser/windowEnvironment';
 import { getAllMultitabTokens, getCurrentTabId, reestablishMasterToSelf } from '../../../util/establishMultitabRole';
 import { getAllNotificationsCount } from '../../../util/folderManager';
-import generateUniqueId from '../../../util/generateUniqueId';
 import getIsAppUpdateNeeded from '../../../util/getIsAppUpdateNeeded';
-import getReadableErrorText from '../../../util/getReadableErrorText';
+import { shouldShowErrorDialog } from '../../../util/getReadableErrorText';
 import { compact, unique } from '../../../util/iteratees';
 import { refreshFromCache } from '../../../util/localization';
 import * as langProvider from '../../../util/oldLangProvider';
 import updateIcon from '../../../util/updateIcon';
 import { setPageTitle, setPageTitleInstant } from '../../../util/updatePageTitle';
-import { getAllowedAttachmentOptions, getChatTitle } from '../../helpers';
+import { canEditMediaInEditor, getAllowedAttachmentOptions, getChatTitle } from '../../helpers';
+import { addTabStateResetterAction } from '../../helpers/meta';
 import {
   addActionHandler, getActions, getGlobal, setGlobal,
 } from '../../index';
@@ -42,6 +41,7 @@ import {
   selectTopic,
 } from '../../selectors';
 import { selectSharedSettings } from '../../selectors/sharedState';
+import { selectDraft, selectEditingId } from '../../selectors/threads';
 
 import { getIsMobile, getIsTablet } from '../../../hooks/useAppLayout';
 
@@ -331,26 +331,6 @@ addActionHandler('reorderStickerSets', (global, actions, payload): ActionReturnT
   };
 });
 
-addActionHandler('showNotification', (global, actions, payload): ActionReturnType => {
-  const { tabId = getCurrentTabId(), ...notification } = payload;
-  const hasLocalId = notification.localId;
-  notification.localId ||= generateUniqueId();
-
-  const newNotifications = [...selectTabState(global, tabId).notifications];
-  const existingNotificationIndex = newNotifications.findIndex((n) => (
-    hasLocalId ? n.localId === notification.localId : n.message === notification.message
-  ));
-  if (existingNotificationIndex !== -1) {
-    newNotifications.splice(existingNotificationIndex, 1);
-  }
-
-  newNotifications.push(notification as ApiNotification);
-
-  return updateTabState(global, {
-    notifications: newNotifications,
-  }, tabId);
-});
-
 addActionHandler('showAllowedMessageTypesNotification', (global, actions, payload): ActionReturnType => {
   const { chatId, messageListType, tabId = getCurrentTabId() } = payload;
 
@@ -370,7 +350,7 @@ addActionHandler('showAllowedMessageTypesNotification', (global, actions, payloa
   if (!chat) return;
   const chatFullInfo = selectChatFullInfo(global, chatId);
   const isSavedMessages = chatId ? selectIsChatWithSelf(global, chatId) : undefined;
-  const isChatWithBot = chatId ? selectIsChatWithBot(global, chat) : undefined;
+  const isChatWithBot = chatId ? selectIsChatWithBot(global, chatId) : undefined;
 
   const {
     canSendPlainText, canSendPhotos, canSendVideos, canSendDocuments, canSendAudios,
@@ -404,27 +384,19 @@ addActionHandler('showAllowedMessageTypesNotification', (global, actions, payloa
   });
 });
 
-addActionHandler('dismissNotification', (global, actions, payload): ActionReturnType => {
-  const { tabId = getCurrentTabId() } = payload;
-  const newNotifications = selectTabState(global, tabId)
-    .notifications.filter(({ localId }) => localId !== payload.localId);
-
-  return updateTabState(global, {
-    notifications: newNotifications,
-  }, tabId);
-});
-
 addActionHandler('showDialog', (global, actions, payload): ActionReturnType => {
   const { data, tabId = getCurrentTabId() } = payload;
 
   // Filter out errors that we don't want to show to the user
-  if ('message' in data && data.hasErrorKey && !getReadableErrorText(data)) {
+  if (data.type === 'error' && !shouldShowErrorDialog(data)) {
     return global;
   }
 
   const newDialogs = [...selectTabState(global, tabId).dialogs];
-  if ('message' in data) {
-    const existingErrorIndex = newDialogs.findIndex((err) => (err as ApiError).message === data.message);
+  if (data.type === 'error') {
+    const existingErrorIndex = newDialogs.findIndex((dialog) => {
+      return dialog.type === 'error' && dialog.message === data.message;
+    });
     if (existingErrorIndex !== -1) {
       newDialogs.splice(existingErrorIndex, 1);
     }
@@ -894,6 +866,17 @@ addActionHandler('closeCollectibleInfoModal', (global, actions, payload): Action
   }, tabId);
 });
 
+addActionHandler('openBirthdaySetupModal', (global, actions, payload): ActionReturnType => {
+  const { currentBirthday, tabId = getCurrentTabId() } = payload || {};
+  return updateTabState(global, {
+    birthdaySetupModal: {
+      currentBirthday,
+    },
+  }, tabId);
+});
+
+addTabStateResetterAction('closeBirthdaySetupModal', 'birthdaySetupModal');
+
 addActionHandler('setShouldCloseRightColumn', (global, actions, payload): ActionReturnType => {
   const { value, tabId = getCurrentTabId() } = payload;
   return updateTabState(global, {
@@ -970,3 +953,67 @@ addCallback((global: GlobalState) => {
   prevIsScreenLocked = global.passcode.isScreenLocked;
   prevBlurredTabsCount = blurredTabsCount;
 });
+
+addActionHandler('openLeaveGroupModal', (global, actions, payload): ActionReturnType => {
+  const { chatId, nextOwnerId, tabId = getCurrentTabId() } = payload;
+
+  return updateTabState(global, {
+    leaveGroupModal: {
+      chatId,
+      nextOwnerId,
+    },
+  }, tabId);
+});
+
+addTabStateResetterAction('closeLeaveGroupModal', 'leaveGroupModal');
+
+addActionHandler('openTwoFaCheckModal', (global, actions, payload): ActionReturnType => {
+  const { tabId = getCurrentTabId() } = payload || {};
+
+  return updateTabState(global, {
+    isTwoFaCheckModalOpen: true,
+  }, tabId);
+});
+
+addTabStateResetterAction('closeTwoFaCheckModal', 'isTwoFaCheckModalOpen');
+
+addActionHandler('openQuickChatPicker', (global, actions, payload): ActionReturnType => {
+  const { tabId = getCurrentTabId() } = payload || {};
+
+  return updateTabState(global, {
+    isQuickChatPickerOpen: true,
+  }, tabId);
+});
+
+addTabStateResetterAction('closeQuickChatPicker', 'isQuickChatPickerOpen');
+
+addActionHandler('openCocoonModal', (global, actions, payload): ActionReturnType => {
+  const { tabId = getCurrentTabId() } = payload || {};
+  return updateTabState(global, {
+    isCocoonModalOpen: true,
+  }, tabId);
+});
+
+addTabStateResetterAction('closeCocoonModal', 'isCocoonModalOpen');
+
+addActionHandler('requestMessageMediaEditor', (global, actions, payload): ActionReturnType => {
+  const { tabId = getCurrentTabId() } = payload || {};
+  const currentMessageList = selectCurrentMessageList(global, tabId);
+  if (!currentMessageList) return;
+
+  const draft = selectDraft(global, currentMessageList.chatId, currentMessageList.threadId);
+  const replyToMessage = draft?.replyInfo
+    ? selectChatMessage(global, currentMessageList.chatId, draft.replyInfo.replyToMsgId)
+    : undefined;
+  const editingId = selectEditingId(global, currentMessageList.chatId, currentMessageList.threadId);
+  const editingMessage = editingId ? selectChatMessage(global, currentMessageList.chatId, editingId) : undefined;
+
+  const message = replyToMessage || editingMessage;
+  if (!message || !canEditMediaInEditor(message)) return;
+
+  return updateTabState(global, {
+    shouldOpenMessageMediaEditor: true,
+  }, tabId);
+});
+
+addTabStateResetterAction('resetMessageMediaEditorRequest', 'shouldOpenMessageMediaEditor');

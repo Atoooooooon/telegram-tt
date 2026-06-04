@@ -19,6 +19,7 @@ import {
 import { getMessageSenderName } from '../../../../global/helpers/peers';
 import { waitStartingTransitionsEnd } from '../../../../util/animations/waitTransitionEnd';
 import buildClassName from '../../../../util/buildClassName';
+import { isUserId } from '../../../../util/entities/ids';
 import renderText from '../../../common/helpers/renderText';
 import { renderTextWithEntities } from '../../../common/helpers/renderTextWithEntities';
 import { ChatAnimationTypes } from './useChatAnimationType';
@@ -34,32 +35,44 @@ import Icon from '../../../common/icons/Icon';
 import MessageSummary from '../../../common/MessageSummary';
 import TypingStatus from '../../../common/TypingStatus';
 
+function getLatestTypingStatusTimestamp(typingStatusByPeerId?: Record<string, ApiTypingStatus>) {
+  if (!typingStatusByPeerId) {
+    return undefined;
+  }
+
+  const timestamps = Object.values(typingStatusByPeerId).map(({ timestamp }) => timestamp);
+
+  return timestamps.length ? Math.max(...timestamps) : undefined;
+}
+
 export default function useChatListEntry({
   chat,
-  topics,
+  topicIds,
   lastMessage,
   statefulMediaContent,
   chatId,
-  typingStatus,
+  typingStatusByPeerId,
   draft,
   lastMessageTopic,
   lastMessageSender,
   observeIntersection,
   animationType,
   orderDiff,
+  shiftDiff,
   withInterfaceAnimations,
   isTopic,
   isSavedDialog,
   isPreview,
   hasTags,
+  shouldForceNonForumView,
   onReorderAnimationEnd,
 }: {
   chat?: ApiChat;
-  topics?: Record<number, ApiTopic>;
+  topicIds?: number[];
   lastMessage?: ApiMessage;
   statefulMediaContent: StatefulMediaContent | undefined;
   chatId: string;
-  typingStatus?: ApiTypingStatus;
+  typingStatusByPeerId?: Record<string, ApiTypingStatus>;
   draft?: ApiDraft;
   lastMessageTopic?: ApiTopic;
   lastMessageSender?: ApiPeer;
@@ -71,7 +84,9 @@ export default function useChatListEntry({
 
   animationType: ChatAnimationTypes;
   orderDiff: number;
+  shiftDiff: number;
   withInterfaceAnimations?: boolean;
+  shouldForceNonForumView?: boolean;
   onReorderAnimationEnd?: NoneToVoidFunction;
 }) {
   const lang = useLang();
@@ -93,9 +108,14 @@ export default function useChatListEntry({
   const isRoundVideo = Boolean(lastMessage && getMessageRoundVideo(lastMessage));
 
   const renderLastMessageOrTyping = useCallback(() => {
+    const latestTypingStatusTimestamp = getLatestTypingStatusTimestamp(typingStatusByPeerId);
+
     if (!isSavedDialog && !isPreview
-      && typingStatus && lastMessage && typingStatus.timestamp > lastMessage.date * 1000) {
-      return <TypingStatus typingStatus={typingStatus} />;
+      && typingStatusByPeerId && lastMessage
+      && latestTypingStatusTimestamp && latestTypingStatusTimestamp > lastMessage.date) {
+      return (
+        <TypingStatus typingStatusByPeerId={typingStatusByPeerId} isPrivate={isUserId(chatId)} />
+      );
     }
 
     const isDraftReplyToTopic = draft && draft.replyInfo?.replyToMsgId === lastMessageTopic?.id;
@@ -145,17 +165,18 @@ export default function useChatListEntry({
     );
   }, [
     chat, chatId, draft, isRoundVideo, isTopic, lang, lastMessage, lastMessageSender, lastMessageTopic,
-    mediaBlobUrl, mediaThumbnail, observeIntersection, typingStatus, isSavedDialog, isPreview,
+    mediaBlobUrl, mediaThumbnail, observeIntersection, typingStatusByPeerId, isSavedDialog, isPreview,
   ]);
 
   function renderSubtitle() {
-    if (chat?.isForum && !isTopic) {
+    const shouldRenderAsForum = chat?.isForum && !isTopic && !shouldForceNonForumView;
+    if (shouldRenderAsForum) {
       return (
         <ChatForumLastMessage
           chat={chat}
           renderLastMessage={renderLastMessageOrTyping}
           observeIntersection={observeIntersection}
-          topics={topics}
+          topicIds={topicIds}
           hasTags={hasTags}
         />
       );
@@ -174,9 +195,15 @@ export default function useChatListEntry({
 
     let isCancelled = false;
 
+    // Clear stale transitions before setting the compensating transform
+    element.classList.remove('animate-opacity', 'animate-transform');
+    element.style.opacity = '';
+    element.style.transform = '';
+
     const notifyAnimationEnd = () => {
       if (isCancelled) return;
       requestMutation(() => {
+        if (isCancelled) return;
         element.classList.remove('animate-opacity', 'animate-transform');
         element.style.opacity = '';
         element.style.transform = '';
@@ -189,28 +216,46 @@ export default function useChatListEntry({
       element.style.opacity = '0';
 
       requestMutation(() => {
+        if (isCancelled) return;
         element.classList.add('animate-opacity');
         element.style.opacity = '1';
 
         waitStartingTransitionsEnd(element).then(notifyAnimationEnd);
       });
-    } else if (animationType === ChatAnimationTypes.Move) {
-      element.style.transform = `translate3d(0, ${-orderDiff * CHAT_HEIGHT_PX}px, 0)`;
+    }
+
+    if (animationType === ChatAnimationTypes.Move) {
+      element.style.transform = `translate3d(0, ${-orderDiff * CHAT_HEIGHT_PX - shiftDiff}px, 0)`;
 
       requestMutation(() => {
+        if (isCancelled) return;
         element.classList.add('animate-transform');
         element.style.transform = '';
 
         waitStartingTransitionsEnd(element).then(notifyAnimationEnd);
       });
-    } else {
+    }
+
+    if (animationType === ChatAnimationTypes.Shift) {
+      element.style.transform = `translate3d(0, ${-shiftDiff}px, 0)`;
+
+      requestMutation(() => {
+        if (isCancelled) return;
+        element.classList.add('animate-transform');
+        element.style.transform = '';
+
+        waitStartingTransitionsEnd(element).then(notifyAnimationEnd);
+      });
+    }
+
+    if (animationType === ChatAnimationTypes.None) {
       return;
     }
 
     return () => {
       isCancelled = true;
     };
-  }, [withInterfaceAnimations, orderDiff, animationType, onReorderAnimationEnd]);
+  }, [withInterfaceAnimations, orderDiff, shiftDiff, animationType, onReorderAnimationEnd]);
 
   return {
     renderSubtitle,

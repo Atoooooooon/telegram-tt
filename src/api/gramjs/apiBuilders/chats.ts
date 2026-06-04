@@ -1,30 +1,34 @@
 import { Api as GramJs } from '../../../lib/gramjs';
 import type { Entity } from '../../../lib/gramjs/types';
 
-import type {
-  ApiBotCommand,
-  ApiChat,
-  ApiChatAdminRights,
-  ApiChatBannedRights,
-  ApiChatFolder,
-  ApiChatInviteImporter,
-  ApiChatInviteInfo,
-  ApiChatlistExportedInvite,
-  ApiChatlistInvite,
-  ApiChatMember,
-  ApiChatReactions,
-  ApiExportedInvite,
-  ApiMissingInvitedUser,
-  ApiRestrictionReason,
-  ApiSendAsPeerId,
-  ApiSponsoredMessageReportResult,
-  ApiSponsoredPeer,
-  ApiStarsSubscriptionPricing,
+import type { ThreadReadState } from '../../../types';
+import {
+  type ApiBotCommand,
+  type ApiChat,
+  type ApiChatAdminRights,
+  type ApiChatBannedRights,
+  type ApiChatFolder,
+  type ApiChatInviteImporter,
+  type ApiChatInviteInfo,
+  type ApiChatlistExportedInvite,
+  type ApiChatlistInvite,
+  type ApiChatMember,
+  type ApiChatReactions,
+  type ApiExportedInvite,
+  type ApiMissingInvitedUser,
+  type ApiRestrictionReason,
+  type ApiSendAsPeerId,
+  type ApiSponsoredMessageReportResult,
+  type ApiSponsoredPeer,
+  type ApiStarsSubscriptionPricing,
+  type ApiThreadInfo,
+  type ApiTypingStatus,
+  MAIN_THREAD_ID,
 } from '../../types';
 
-import { pickTruthy } from '../../../util/iteratees';
+import { omitUndefined, pickTruthy } from '../../../util/iteratees';
 import { toJSNumber } from '../../../util/numbers';
-import { getServerTimeOffset } from '../../../util/serverTime';
+import { getServerTime } from '../../../util/serverTime';
 import { addPhotoToLocalDb, addUserToLocalDb } from '../helpers/localDb';
 import { serializeBytes } from '../helpers/misc';
 import {
@@ -144,23 +148,15 @@ export function buildApiChatFromDialog(
   peerEntity: GramJs.TypeUser | GramJs.TypeChat,
 ): ApiChat {
   const {
-    peer, folderId, unreadMark, unreadCount, unreadMentionsCount, unreadReactionsCount,
-    readOutboxMaxId, readInboxMaxId, draft, viewForumAsMessages,
+    peer, folderId, viewForumAsMessages,
   } = dialog;
 
   return {
     id: getApiChatIdFromMtpPeer(peer),
-    ...(folderId && { folderId }),
+    folderId,
     type: getApiChatTypeFromPeerEntity(peerEntity),
     title: getApiChatTitleFromMtpPeer(peer, peerEntity),
-    lastReadOutboxMessageId: readOutboxMaxId,
-    lastReadInboxMessageId: readInboxMaxId,
-    unreadCount,
-    unreadMentionsCount,
-    unreadReactionsCount,
-    ...(unreadMark && { hasUnreadMark: true }),
-    ...(draft instanceof GramJs.DraftMessage && { draftDate: draft.date }),
-    ...(viewForumAsMessages && { isForumAsMessages: true }),
+    isForumAsMessages: viewForumAsMessages,
     ...buildApiChatFieldsFromPeerEntity(peerEntity),
   };
 }
@@ -217,9 +213,24 @@ function buildApiChatRestrictions(peerEntity: Entity): {
     };
   }
 
-  const restrictions = {};
+  const restrictions: {
+    isNotJoined?: boolean;
+    isForbidden?: boolean;
+    isRestricted?: boolean;
+    restrictionReasons?: ApiRestrictionReason[];
+  } = {};
 
-  if ('restricted' in peerEntity && !peerEntity.min) {
+  const isMin = 'min' in peerEntity && peerEntity.min;
+  const hasRestricted = 'restricted' in peerEntity;
+
+  if (!isMin) {
+    Object.assign(restrictions, {
+      isForbidden: undefined,
+      isRestricted: undefined,
+    });
+  }
+
+  if (hasRestricted && !isMin) {
     const restrictionReasons = buildApiRestrictionReasons(peerEntity.restrictionReason);
 
     Object.assign(restrictions, {
@@ -335,6 +346,7 @@ export function buildChatMember(
 
   return {
     userId,
+    rank: 'rank' in member ? member.rank : undefined,
     inviterId: 'inviterId' in member && member.inviterId
       ? buildApiPeerId(member.inviterId, 'user')
       : undefined,
@@ -345,7 +357,6 @@ export function buildChatMember(
       : undefined,
     bannedRights: 'bannedRights' in member ? omitVirtualClassFields(member.bannedRights) : undefined,
     adminRights: 'adminRights' in member ? omitVirtualClassFields(member.adminRights) : undefined,
-    customTitle: 'rank' in member ? member.rank : undefined,
     isViaRequest: 'viaRequest' in member ? member.viaRequest : undefined,
     ...((member instanceof GramJs.ChannelParticipantAdmin || member instanceof GramJs.ChatParticipantAdmin) && {
       isAdmin: true,
@@ -372,52 +383,73 @@ export function buildChatMembers(
 
 export function buildChatTypingStatus(
   update: GramJs.UpdateUserTyping | GramJs.UpdateChatUserTyping | GramJs.UpdateChannelUserTyping,
-) {
-  let action: string = '';
-  let emoticon: string | undefined;
-  if (update.action instanceof GramJs.SendMessageCancelAction) {
+): ApiTypingStatus | undefined {
+  const action = update.action;
+  const timestamp = getServerTime();
+  const buildTypingStatus = (
+    type: Exclude<ApiTypingStatus['type'], 'watchingAnimations'>,
+  ): ApiTypingStatus => ({
+    timestamp,
+    type,
+  });
+
+  if (action instanceof GramJs.SendMessageCancelAction) {
     return undefined;
-  } else if (update.action instanceof GramJs.SendMessageTypingAction) {
-    action = 'lng_user_typing';
-  } else if (update.action instanceof GramJs.SendMessageRecordVideoAction) {
-    action = 'lng_send_action_record_video';
-  } else if (update.action instanceof GramJs.SendMessageUploadVideoAction) {
-    action = 'lng_send_action_upload_video';
-  } else if (update.action instanceof GramJs.SendMessageRecordAudioAction) {
-    action = 'lng_send_action_record_audio';
-  } else if (update.action instanceof GramJs.SendMessageUploadAudioAction) {
-    action = 'lng_send_action_upload_audio';
-  } else if (update.action instanceof GramJs.SendMessageUploadPhotoAction) {
-    action = 'lng_send_action_upload_photo';
-  } else if (update.action instanceof GramJs.SendMessageUploadDocumentAction) {
-    action = 'lng_send_action_upload_file';
-  } else if (update.action instanceof GramJs.SendMessageGeoLocationAction) {
-    action = 'selecting a location to share';
-  } else if (update.action instanceof GramJs.SendMessageChooseContactAction) {
-    action = 'selecting a contact to share';
-  } else if (update.action instanceof GramJs.SendMessageGamePlayAction) {
-    action = 'lng_playing_game';
-  } else if (update.action instanceof GramJs.SendMessageRecordRoundAction) {
-    action = 'lng_send_action_record_round';
-  } else if (update.action instanceof GramJs.SendMessageUploadRoundAction) {
-    action = 'lng_send_action_upload_round';
-  } else if (update.action instanceof GramJs.SendMessageChooseStickerAction) {
-    action = 'lng_send_action_choose_sticker';
-  } else if (update.action instanceof GramJs.SpeakingInGroupCallAction) {
+  }
+  if (action instanceof GramJs.SendMessageTypingAction) {
+    return buildTypingStatus('typing');
+  }
+  if (action instanceof GramJs.SendMessageRecordVideoAction) {
+    return buildTypingStatus('recordVideo');
+  }
+  if (action instanceof GramJs.SendMessageUploadVideoAction) {
+    return buildTypingStatus('uploadVideo');
+  }
+  if (action instanceof GramJs.SendMessageRecordAudioAction) {
+    return buildTypingStatus('recordAudio');
+  }
+  if (action instanceof GramJs.SendMessageUploadAudioAction) {
+    return buildTypingStatus('uploadAudio');
+  }
+  if (action instanceof GramJs.SendMessageUploadPhotoAction) {
+    return buildTypingStatus('uploadPhoto');
+  }
+  if (action instanceof GramJs.SendMessageUploadDocumentAction) {
+    return buildTypingStatus('uploadFile');
+  }
+  if (action instanceof GramJs.SendMessageGeoLocationAction) {
+    return buildTypingStatus('chooseLocation');
+  }
+  if (action instanceof GramJs.SendMessageChooseContactAction) {
+    return buildTypingStatus('chooseContact');
+  }
+  if (action instanceof GramJs.SendMessageGamePlayAction) {
+    return buildTypingStatus('playingGame');
+  }
+  if (action instanceof GramJs.SendMessageRecordRoundAction) {
+    return buildTypingStatus('recordRound');
+  }
+  if (action instanceof GramJs.SendMessageUploadRoundAction) {
+    return buildTypingStatus('uploadRound');
+  }
+  if (action instanceof GramJs.SendMessageChooseStickerAction) {
+    return buildTypingStatus('chooseSticker');
+  }
+  if (action instanceof GramJs.SpeakingInGroupCallAction) {
     return undefined;
-  } else if (update.action instanceof GramJs.SendMessageEmojiInteractionSeen) {
-    action = 'lng_user_action_watching_animations';
-    emoticon = update.action.emoticon;
-  } else if (update.action instanceof GramJs.SendMessageEmojiInteraction) {
+  }
+  if (action instanceof GramJs.SendMessageEmojiInteractionSeen) {
+    return {
+      timestamp,
+      type: 'watchingAnimations',
+      emoji: action.emoticon,
+    };
+  }
+  if (action instanceof GramJs.SendMessageEmojiInteraction) {
     return undefined;
   }
 
-  return {
-    action,
-    ...(emoticon && { emoji: emoticon }),
-    ...(!(update instanceof GramJs.UpdateUserTyping) && { userId: getApiChatIdFromMtpPeer(update.fromId) }),
-    timestamp: Date.now() + getServerTimeOffset() * 1000,
-  };
+  return undefined;
 }
 
 export function buildApiChatFolder(filter: GramJs.DialogFilter | GramJs.DialogFilterChatlist): ApiChatFolder {
@@ -688,5 +720,41 @@ export function buildApiSponsoredPeer(sponsoredPeer: GramJs.SponsoredPeer): ApiS
     randomId: serializeBytes(randomId),
     additionalInfo,
     sponsorInfo,
+  };
+}
+
+export function buildThreadReadState(
+  input: GramJs.Dialog | GramJs.MonoForumDialog | GramJs.ForumTopic | GramJs.messages.DiscussionMessage,
+): ThreadReadState {
+  const { unreadCount, readInboxMaxId, readOutboxMaxId } = input;
+  const dialog = input instanceof GramJs.Dialog ? input : undefined;
+  const monoForumDialog = input instanceof GramJs.MonoForumDialog ? input : undefined;
+  const forumTopic = input instanceof GramJs.ForumTopic ? input : undefined;
+
+  const { unreadReactionsCount } = dialog || monoForumDialog || forumTopic || {};
+  const { unreadMentionsCount, unreadPollVotesCount } = dialog || forumTopic || {};
+  const { unreadMark } = dialog || monoForumDialog || {};
+
+  return omitUndefined<ThreadReadState>({
+    unreadCount,
+    lastReadInboxMessageId: readInboxMaxId,
+    lastReadOutboxMessageId: readOutboxMaxId,
+    unreadReactionsCount,
+    unreadPollVotesCount,
+    unreadMentionsCount,
+    hasUnreadMark: unreadMark,
+  });
+}
+
+export function buildApiThreadInfoFromDialog(
+  chatId: string, dialog: GramJs.Dialog | GramJs.SavedDialog,
+): ApiThreadInfo {
+  const isSavedDialog = dialog instanceof GramJs.SavedDialog;
+  const { topMessage } = dialog;
+  return {
+    isCommentsInfo: false,
+    chatId,
+    threadId: isSavedDialog ? getApiChatIdFromMtpPeer(dialog.peer) : MAIN_THREAD_ID,
+    lastMessageId: topMessage,
   };
 }

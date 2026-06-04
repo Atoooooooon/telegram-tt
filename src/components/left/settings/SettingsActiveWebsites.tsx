@@ -7,7 +7,7 @@ import { getActions, getGlobal, withGlobal } from '../../../global';
 import type { ApiWebSession } from '../../../api/types';
 
 import buildClassName from '../../../util/buildClassName';
-import { formatPastTimeShort } from '../../../util/dates/dateFormat';
+import { formatPastTimeShort } from '../../../util/dates/oldDateFormat';
 
 import useFlag from '../../../hooks/useFlag';
 import useHistoryBack from '../../../hooks/useHistoryBack';
@@ -15,6 +15,7 @@ import useOldLang from '../../../hooks/useOldLang';
 
 import Avatar from '../../common/Avatar';
 import FullNameTitle from '../../common/FullNameTitle';
+import Island, { IslandDescription, IslandTitle } from '../../gili/layout/Island';
 import ConfirmDialog from '../../ui/ConfirmDialog';
 import ListItem from '../../ui/ListItem';
 import SettingsActiveWebsite from './SettingsActiveWebsite';
@@ -80,13 +81,14 @@ const SettingsActiveWebsites: FC<OwnProps & StateProps> = ({
 
   function renderSessions(sessionHashes: string[]) {
     return (
-      <div className="settings-item">
-        <h4 className="settings-item-header" dir={lang.isRtl ? 'rtl' : undefined}>
+      <>
+        <IslandTitle dir={lang.isRtl ? 'rtl' : undefined}>
           {lang('WebSessionsTitle')}
-        </h4>
-
-        {sessionHashes.map(renderSession)}
-      </div>
+        </IslandTitle>
+        <Island>
+          {sessionHashes.map(renderSession)}
+        </Island>
+      </>
     );
   }
 
@@ -112,8 +114,10 @@ const SettingsActiveWebsites: FC<OwnProps & StateProps> = ({
       >
         <Avatar className={styles.avatar} peer={bot} size="tiny" />
         <div className="multiline-item full-size" dir="auto">
-          <span className="date">{formatPastTimeShort(lang, session.dateActive * 1000)}</span>
-          {bot && <FullNameTitle className={styles.title} peer={bot} />}
+          <div className="title title-with-date">
+            {bot && <FullNameTitle className={styles.title} peer={bot} />}
+            <span className="date">{formatPastTimeShort(lang, session.dateActive * 1000)}</span>
+          </div>
           <span className={buildClassName('subtitle', 'black', 'tight', styles.platform)}>
             {session.domain}
             ,
@@ -135,7 +139,7 @@ const SettingsActiveWebsites: FC<OwnProps & StateProps> = ({
 
   return (
     <div className="settings-content custom-scroll">
-      <div className="settings-item">
+      <Island>
         <ListItem
           className="destructive mb-0 no-icon"
           icon="stop"
@@ -145,10 +149,10 @@ const SettingsActiveWebsites: FC<OwnProps & StateProps> = ({
         >
           {lang('AuthSessions.LogOutApplications')}
         </ListItem>
-        <p className={buildClassName('settings-item-description', styles.clearHelp)}>
-          {lang('ClearOtherWebSessionsHelp')}
-        </p>
-      </div>
+      </Island>
+      <IslandDescription className={styles.clearHelp}>
+        {lang('ClearOtherWebSessionsHelp')}
+      </IslandDescription>
       {renderSessions(orderedHashes)}
       <ConfirmDialog
         isOpen={isConfirmTerminateAllDialogOpen}

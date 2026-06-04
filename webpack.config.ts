@@ -24,6 +24,8 @@ const {
   HEAD,
   APP_ENV = 'production',
   APP_MOCKED_CLIENT = '',
+  HTTPS_CERT_PATH = '',
+  HTTPS_KEY_PATH = '',
 } = process.env;
 
 const DEFAULT_APP_TITLE = `Telegram${APP_ENV !== 'production' ? ' Beta' : ''}`;
@@ -57,6 +59,17 @@ export default function createConfig(
   _: any,
   { mode = 'production' }: { mode: 'none' | 'development' | 'production' },
 ): Configuration {
+  let server: Required<Configuration>['devServer']['server'] = 'http';
+  if (HTTPS_CERT_PATH && HTTPS_KEY_PATH) {
+    server = {
+      type: 'https',
+      options: {
+        key: HTTPS_KEY_PATH,
+        cert: HTTPS_CERT_PATH,
+      },
+    };
+  }
+
   return {
     mode,
     entry: './src/index.tsx',
@@ -70,6 +83,7 @@ export default function createConfig(
       client: {
         overlay: false,
       },
+      server,
       static: [
         {
           directory: path.resolve(__dirname, 'public'),
@@ -82,12 +96,6 @@ export default function createConfig(
         },
         {
           directory: path.resolve(__dirname, 'src/lib/rlottie'),
-        },
-        {
-          directory: path.resolve(__dirname, 'src/lib/video-preview'),
-        },
-        {
-          directory: path.resolve(__dirname, 'src/lib/secret-sauce'),
         },
       ],
       devMiddleware: {
@@ -150,7 +158,7 @@ export default function createConfig(
           ],
         },
         {
-          test: /\.(woff(2)?|ttf|eot|svg|png|jpg|tgs)(\?v=\d+\.\d+\.\d+)?$/,
+          test: /\.(woff(2)?|ttf|eot|svg|png|jpg|tgs|webp)(\?v=\d+\.\d+\.\d+)?$/,
           type: 'asset/resource',
         },
         {
@@ -169,6 +177,7 @@ export default function createConfig(
       alias: {
         '@teact$': path.resolve(__dirname, './src/lib/teact/teact.ts'),
         '@teact': path.resolve(__dirname, './src/lib/teact'),
+        '@gili': path.resolve(__dirname, './src/components/gili'),
       },
       fallback: {
         path: require.resolve('path-browserify'),

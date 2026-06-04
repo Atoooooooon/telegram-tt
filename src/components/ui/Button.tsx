@@ -1,6 +1,5 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import type { ElementRef, FC } from '../../lib/teact/teact';
-import type React from '../../lib/teact/teact';
+import type { ElementRef, TeactNode } from '../../lib/teact/teact';
 import { useRef, useState } from '../../lib/teact/teact';
 
 import type { IconName } from '../../types/icons';
@@ -22,11 +21,12 @@ import './Button.scss';
 export type OwnProps = {
   ref?: ElementRef<HTMLButtonElement | HTMLAnchorElement>;
   type?: 'button' | 'submit' | 'reset';
-  children?: React.ReactNode;
+  children?: TeactNode;
   size?: 'default' | 'smaller' | 'tiny';
   color?: (
     'primary' | 'secondary' | 'gray' | 'danger' | 'translucent' | 'translucent-white' | 'translucent-black'
-    | 'translucent-bordered' | 'dark' | 'green' | 'adaptive' | 'stars' | 'bluredStarsBadge' | 'transparentBlured'
+    | 'translucent-bordered' | 'translucent-primary' | 'dark' | 'green' | 'adaptive' | 'stars' | 'bluredStarsBadge'
+    | 'transparentBlured'
   );
   backgroundImage?: string;
   id?: string;
@@ -40,6 +40,7 @@ export type OwnProps = {
   isLoading?: boolean;
   ariaLabel?: string;
   ariaControls?: string;
+  ariaSelected?: boolean;
   hasPopup?: boolean;
   href?: string;
   download?: string;
@@ -60,6 +61,7 @@ export type OwnProps = {
   noForcedUpperCase?: boolean;
   shouldStopPropagation?: boolean;
   style?: string;
+  autoFocus?: boolean;
   iconName?: IconName;
   iconAlignment?: 'top' | 'bottom' | 'start' | 'end';
   iconClassName?: string;
@@ -76,7 +78,7 @@ export type OwnProps = {
 // Longest animation duration;
 const CLICKED_TIMEOUT = 400;
 
-const Button: FC<OwnProps> = ({
+const Button = ({
   ref,
   type = 'button',
   id,
@@ -98,6 +100,7 @@ const Button: FC<OwnProps> = ({
   noSparkleAnimation,
   ariaLabel,
   ariaControls,
+  ariaSelected,
   hasPopup,
   href,
   download,
@@ -114,6 +117,7 @@ const Button: FC<OwnProps> = ({
   shouldStopPropagation,
   noForcedUpperCase,
   style,
+  autoFocus,
   iconName,
   iconAlignment = 'start',
   iconClassName,
@@ -125,7 +129,7 @@ const Button: FC<OwnProps> = ({
   onMouseLeave,
   onFocus,
   onTransitionEnd,
-}) => {
+}: OwnProps) => {
   let elementRef = useRef<HTMLButtonElement | HTMLAnchorElement>();
   if (ref) {
     elementRef = ref;
@@ -241,6 +245,7 @@ const Button: FC<OwnProps> = ({
         title={ariaLabel}
         download={download}
         tabIndex={tabIndex}
+        autoFocus={autoFocus}
         dir={isRtl ? 'rtl' : undefined}
         aria-label={ariaLabel}
         aria-controls={ariaControls}
@@ -268,9 +273,12 @@ const Button: FC<OwnProps> = ({
       onMouseLeave={onMouseLeave && !isNotInteractive ? onMouseLeave : undefined}
       onTransitionEnd={onTransitionEnd}
       onFocus={onFocus && !isNotInteractive ? onFocus : undefined}
+      disabled={disabled}
+      autoFocus={autoFocus}
       aria-label={ariaLabel}
       aria-controls={ariaControls}
       aria-haspopup={hasPopup}
+      aria-selected={ariaSelected}
       title={ariaLabel}
       tabIndex={tabIndex}
       dir={isRtl ? 'rtl' : undefined}

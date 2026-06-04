@@ -1,9 +1,15 @@
-import type { TeactNode } from '../../lib/teact/teact';
-
 import type { CallbackAction } from '../../global/types';
 import type { IconName } from '../../types/icons';
-import type { RegularLangFnParameters } from '../../util/localization';
-import type { ApiDocument, ApiPhoto, ApiReaction } from './messages';
+import type { LangFnParameters, RegularLangFnParameters } from '../../util/localization';
+import type {
+  ApiContact,
+  ApiDocument,
+  ApiFormattedText,
+  ApiMessageEntity,
+  ApiPhoto,
+  ApiReaction,
+  ApiVideo,
+} from './messages';
 import type { ApiPremiumSection } from './payments';
 import type { ApiBotVerification } from './peers';
 import type { ApiStarsSubscriptionPricing } from './stars';
@@ -25,7 +31,16 @@ export interface ApiInitialArgs {
   langCode: string;
   isTestServerRequested?: boolean;
   accountIds?: string[];
+  hasPasskeySupport?: boolean;
 }
+
+export type ApiPasskeyOption = {
+  publicKey: PublicKeyCredentialRequestOptionsJSON;
+};
+
+export type ApiPasskeyRegistrationOption = {
+  publicKey: PublicKeyCredentialCreationOptionsJSON;
+};
 
 export interface ApiOnProgress {
   (
@@ -37,7 +52,7 @@ export interface ApiOnProgress {
 }
 
 export interface ApiAttachment {
-  blob: Blob;
+  blob?: Blob;
   blobUrl: string;
   compressedBlobUrl?: string;
   filename: string;
@@ -65,6 +80,8 @@ export interface ApiAttachment {
   uniqueId?: string;
   ttlSeconds?: number;
   shouldSendInHighQuality?: boolean;
+
+  gif?: ApiVideo;
 }
 
 export interface ApiWallpaper {
@@ -114,8 +131,7 @@ export type ApiNotification = {
   localId: string;
   containerSelector?: string;
   type?: 'paidMessage' | undefined;
-  title?: string | RegularLangFnParameters;
-  message: TeactNode | RegularLangFnParameters;
+  title?: string | LangFnParameters;
   cacheBreaker?: string;
   actionText?: string | RegularLangFnParameters;
   action?: CallbackAction | CallbackAction[];
@@ -127,10 +143,39 @@ export type ApiNotification = {
   customEmojiIconId?: string;
   shouldUseCustomIcon?: boolean;
   dismissAction?: CallbackAction;
+} & ({
+  message: string;
+  messageEntities?: ApiMessageEntity[];
+} | {
+  message: LangFnParameters;
+  messageEntities?: undefined;
+});
+
+export type ApiDialogError = {
+  type: 'error';
+} & ApiError;
+
+export type ApiDialogMessage = {
+  type: 'message';
+  text: ApiFormattedText;
 };
+
+export type ApiDialogContact = {
+  type: 'contact';
+  contact: ApiContact;
+};
+
+export type ApiDialogLocalizedMessage = {
+  type: 'localized';
+  text: LangFnParameters;
+};
+
+export type ApiDialog = ApiDialogError | ApiDialogMessage | ApiDialogContact | ApiDialogLocalizedMessage;
 
 export type ApiError = {
   message: string;
+  code?: number;
+  entities?: ApiMessageEntity[];
   hasErrorKey?: boolean;
   isSlowMode?: boolean;
   textParams?: Record<string, string>;
@@ -207,6 +252,7 @@ export interface ApiAppConfig {
   autologinDomains: string[];
   urlAuthDomains: string[];
   whitelistedDomains: string[];
+  webAppAllowedProtocols: string[];
   premiumInvoiceSlug?: string;
   premiumBotUsername: string;
   isPremiumPurchaseBlocked: boolean;
@@ -231,6 +277,7 @@ export interface ApiAppConfig {
   starsPaidMessageCommissionPermille?: number;
   starsPaidMessageAmountMax?: number;
   starsUsdWithdrawRateX1000: number;
+  starsUsdSellRateX1000?: number;
   bandwidthPremiumNotifyPeriod?: number;
   bandwidthPremiumUploadSpeedup?: number;
   bandwidthPremiumDownloadSpeedup?: number;
@@ -251,12 +298,14 @@ export interface ApiAppConfig {
   starsStargiftResaleAmountMin?: number;
   starsStargiftResaleAmountMax?: number;
   starsStargiftResaleCommissionPermille?: number;
+  stargiftsCraftAttributePermilles?: number[];
   starsSuggestedPostAmountMax: number;
   starsSuggestedPostAmountMin: number;
   starsSuggestedPostCommissionPermille: number;
   starsSuggestedPostAgeMin: number;
   starsSuggestedPostFutureMax: number;
   starsSuggestedPostFutureMin: number;
+  noForwardsRequestExpirePeriod: number;
   tonSuggestedPostCommissionPermille: number;
   tonSuggestedPostAmountMax: number;
   tonSuggestedPostAmountMin: number;
@@ -265,7 +314,8 @@ export interface ApiAppConfig {
   tonStargiftResaleCommissionPermille?: number;
   tonUsdRate?: number;
   tonTopupUrl: string;
-  pollMaxAnswers?: number;
+  pollMaxAnswers: number;
+  pollClosePeriodMax: number;
   todoItemsMax: number;
   todoTitleLengthMax: number;
   todoItemLengthMax: number;
@@ -276,6 +326,17 @@ export interface ApiAppConfig {
   verifyAgeMin?: number;
   typingDraftTtl: number;
   contactNoteLimit?: number;
+  whitelistedBotIds?: string[];
+  arePasskeysAvailable: boolean;
+  passkeysMaxCount: number;
+  diceEmojies: string[];
+  diceEmojiesSuccess: Record<string, {
+    value: number;
+    frameStart: number;
+  }>;
+  aiComposeToneExamplesNum?: number;
+  aiComposeToneTitleLengthMax?: number;
+  aiComposeTonePromptLengthMax?: number;
 }
 
 export interface ApiConfig {
@@ -288,6 +349,38 @@ export interface ApiConfig {
   maxMessageLength: number;
   editTimeLimit: number;
   maxForwardedCount: number;
+  ratingEDecay: number;
+}
+
+export type ApiTopPeerCategory = 'correspondents' | 'botsInline' | 'botsApp' | 'botsGuestChat';
+
+export type ApiTopPeer = {
+  peerId: string;
+  rating: number;
+};
+
+export type ApiTopPeersResult = {
+  type: 'topPeers';
+  category: ApiTopPeerCategory;
+  topPeers: ApiTopPeer[];
+} | {
+  type: 'unchanged';
+} | {
+  type: 'disabled';
+};
+
+export interface ApiPromoData {
+  expires: number;
+  pendingSuggestions: string[];
+  dismissedSuggestions: string[];
+  customPendingSuggestion?: ApiPendingSuggestion;
+}
+
+export interface ApiPendingSuggestion {
+  suggestion: string;
+  title: ApiFormattedText;
+  description: ApiFormattedText;
+  url: string;
 }
 
 export interface ApiTimezone {
@@ -308,23 +401,41 @@ export interface ApiEmojiInteraction {
   timestamps: number[];
 }
 
-type ApiUrlAuthResultRequest = {
+export type ApiUrlAuthResultRequest = {
   type: 'request';
   bot: ApiUser;
   domain: string;
+  isApp?: boolean;
   shouldRequestWriteAccess?: boolean;
+  shouldRequestPhoneNumber?: boolean;
+  browser?: string;
+  platform?: string;
+  ip?: string;
+  region?: string;
+  matchCodes?: string[];
+  matchCodesFirst?: boolean;
+  userIdHint?: string;
+  verifiedAppName?: string;
 };
 
 type ApiUrlAuthResultAccepted = {
   type: 'accepted';
-  url: string;
+  url?: string;
+};
+
+type ApiUrlAuthResultExpired = {
+  type: 'expired';
 };
 
 type ApiUrlAuthResultDefault = {
   type: 'default';
 };
 
-export type ApiUrlAuthResult = ApiUrlAuthResultRequest | ApiUrlAuthResultAccepted | ApiUrlAuthResultDefault;
+export type ApiUrlAuthResult =
+  ApiUrlAuthResultRequest
+  | ApiUrlAuthResultAccepted
+  | ApiUrlAuthResultExpired
+  | ApiUrlAuthResultDefault;
 
 export interface ApiCollectibleInfo {
   amount: number;
@@ -351,15 +462,17 @@ export type ApiLimitType =
   | 'recommendedChannels'
   | 'savedDialogsPinned'
   | 'maxReactions'
-  | 'moreAccounts';
+  | 'moreAccounts'
+  | 'aiComposeToneSaved';
 
 export type ApiLimitTypeWithModal = Exclude<ApiLimitType, (
   'captionLength' | 'aboutLength' | 'stickersFaved' | 'savedGifs' | 'recommendedChannels' | 'moreAccounts'
-  | 'maxReactions'
+  | 'maxReactions' | 'aiComposeToneSaved'
 )>;
 
 export type ApiLimitTypeForPromo = Exclude<ApiLimitType,
-'uploadMaxFileparts' | 'chatlistInvites' | 'chatlistJoined' | 'savedDialogsPinned' | 'maxReactions'
+  'uploadMaxFileparts' | 'chatlistInvites' | 'chatlistJoined' | 'savedDialogsPinned' | 'maxReactions'
+  | 'aiComposeToneSaved'
 >;
 
 export type ApiPeerNotifySettings = {
@@ -375,4 +488,12 @@ export interface ApiRestrictionReason {
   reason: string;
   text: string;
   platform: string;
+}
+
+export interface ApiPasskey {
+  id: string;
+  name: string;
+  date: number;
+  softwareEmojiId?: string;
+  lastUsageDate?: number;
 }

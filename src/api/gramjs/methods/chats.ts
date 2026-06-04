@@ -1,24 +1,26 @@
 import { Api as GramJs } from '../../../lib/gramjs';
-import { RPCError } from '../../../lib/gramjs/errors';
+import { PasswordFreshError, RPCError, SessionFreshError } from '../../../lib/gramjs/errors';
 
-import type { ChatListType } from '../../../types';
-import type {
-  ApiChat,
-  ApiChatAdminRights,
-  ApiChatBannedRights,
-  ApiChatFolder,
-  ApiChatFullInfo,
-  ApiChatReactions,
-  ApiDraft,
-  ApiGroupCall,
-  ApiMessage,
-  ApiMissingInvitedUser,
-  ApiPeer,
-  ApiPeerNotifySettings,
-  ApiPhoto,
-  ApiProfileTab,
-  ApiUser,
-  ApiUserStatus,
+import type { ChatListType, ThreadReadState } from '../../../types';
+import {
+  type ApiChat,
+  type ApiChatAdminRights,
+  type ApiChatBannedRights,
+  type ApiChatFolder,
+  type ApiChatFullInfo,
+  type ApiChatReactions,
+  type ApiDraft,
+  type ApiGroupCall,
+  type ApiMessage,
+  type ApiMissingInvitedUser,
+  type ApiPeer,
+  type ApiPeerNotifySettings,
+  type ApiPhoto,
+  type ApiProfileTab,
+  type ApiThreadInfo,
+  type ApiUser,
+  type ApiUserStatus,
+  MAIN_THREAD_ID,
 } from '../../types';
 
 import {
@@ -43,8 +45,10 @@ import {
   buildApiChatReactions,
   buildApiMissingInvitedUser,
   buildApiSponsoredPeer,
+  buildApiThreadInfoFromDialog,
   buildChatMember,
   buildChatMembers,
+  buildThreadReadState,
   getPeerKey,
 } from '../apiBuilders/chats';
 import { buildApiPhoto } from '../apiBuilders/common';
@@ -78,13 +82,16 @@ import {
 import {
   addPhotoToLocalDb,
 } from '../helpers/localDb';
-import { isChatFolder } from '../helpers/misc';
+import {
+  buildApiError, checkErrorType, isChatFolder, wrapError,
+} from '../helpers/misc';
 import { scheduleMutedChatUpdate } from '../scheduleUnmute';
 import { sendApiUpdate } from '../updates/apiUpdateEmitter';
 import {
   applyState, updateChannelState,
 } from '../updates/updateManager';
 import { handleGramJsUpdate, invokeRequest, uploadFile } from './client';
+import { getPassword } from './twoFaSettings';
 
 type FullChatData = {
   fullInfo: ApiChatFullInfo;
@@ -101,6 +108,8 @@ type ChatListData = {
   users: ApiUser[];
   userStatusesById: Record<string, ApiUserStatus>;
   draftsById: Record<string, ApiDraft>;
+  threadReadStatesById?: Record<string, ThreadReadState>;
+  threadInfos: ApiThreadInfo[];
   orderedPinnedIds: string[] | undefined;
   totalChatCount: number;
   messages: ApiMessage[];
@@ -161,6 +170,8 @@ export async function fetchChats({
   const chats: ApiChat[] = [];
   const draftsById: Record<string, ApiDraft> = {};
   const notifyExceptionById: Record<string, ApiPeerNotifySettings> = {};
+  const threadReadStatesById: Record<string, ThreadReadState> = {};
+  const threadInfos: ApiThreadInfo[] = [];
 
   const dialogs = (resultPinned?.dialogs || []).concat(result.dialogs);
 
@@ -181,7 +192,8 @@ export async function fetchChats({
     const chat = buildApiChatFromDialog(dialog, peerEntity);
     lastMessageByChatId[chat.id] = dialog.topMessage;
 
-    if (dialog.pts) {
+    const isChannel = getEntityTypeById(chat.id) === 'channel';
+    if (dialog.pts && isChannel) {
       updateChannelState(chat.id, dialog.pts);
     }
 
@@ -216,6 +228,12 @@ export async function fetchChats({
         draftsById[chat.id] = draft;
       }
     }
+
+    const readState = buildThreadReadState(dialog);
+    threadReadStatesById[chat.id] = readState;
+
+    const threadInfo = buildApiThreadInfoFromDialog(chat.id, dialog);
+    threadInfos.push(threadInfo);
   });
 
   const chatIds = chats.map((chat) => chat.id);
@@ -251,26 +269,33 @@ export async function fetchChats({
     nextOffsetId,
     nextOffsetPeerId,
     nextOffsetDate,
+    threadReadStatesById,
+    threadInfos,
   };
 }
 
 export async function fetchSavedChats({
+  parentPeer,
   limit,
   offsetDate,
   offsetPeer,
   offsetId,
   withPinned,
 }: {
+  parentPeer: ApiPeer;
   limit: number;
   offsetDate?: number;
   offsetPeer?: ApiPeer;
   offsetId?: number;
   withPinned?: boolean;
 }): Promise<ChatListData | undefined> {
+  const isMonoforum = 'title' in parentPeer;
+  const inputParentPeer = isMonoforum ? buildInputPeer(parentPeer.id, parentPeer.accessHash) : undefined;
   const peer = (offsetPeer && buildInputPeer(offsetPeer.id, offsetPeer.accessHash)) || new GramJs.InputPeerEmpty();
   const result = await invokeRequest(new GramJs.messages.GetSavedDialogs({
     offsetPeer: peer,
     offsetId: offsetId ?? DEFAULT_PRIMITIVES.INT,
+    parentPeer: inputParentPeer,
     limit,
     offsetDate: offsetDate ?? DEFAULT_PRIMITIVES.INT,
     hash: DEFAULT_PRIMITIVES.BIGINT,
@@ -301,6 +326,7 @@ export async function fetchSavedChats({
   const chatIds: string[] = [];
   const orderedPinnedIds: string[] = [];
   const lastMessageByChatId: Record<string, number> = {};
+  const threadInfos: ApiThreadInfo[] = [];
 
   const chats: ApiChat[] = [];
 
@@ -321,6 +347,9 @@ export async function fetchSavedChats({
     lastMessageByChatId[chatId] = dialog.topMessage;
 
     chats.push(chat);
+
+    const threadInfo = buildApiThreadInfoFromDialog(parentPeer.id, dialog);
+    threadInfos.push(threadInfo);
   });
 
   const users = result.users.map(buildApiUser).filter(Boolean);
@@ -355,6 +384,7 @@ export async function fetchSavedChats({
     nextOffsetId,
     nextOffsetPeerId,
     nextOffsetDate,
+    threadInfos,
   };
 }
 
@@ -495,6 +525,25 @@ export async function requestChatUpdate({
     : lastRemoteMessage;
 
   const chatUpdate = buildApiChatFromDialog(dialog, peerEntity);
+
+  const isChannel = getEntityTypeById(chat.id) === 'channel';
+  if (dialog.pts && isChannel) {
+    updateChannelState(chat.id, dialog.pts);
+  }
+
+  const readState = buildThreadReadState(dialog);
+  const threadInfo = buildApiThreadInfoFromDialog(chat.id, dialog);
+  sendApiUpdate({
+    '@type': 'updateThreadReadState',
+    chatId: id,
+    threadId: MAIN_THREAD_ID,
+    readState,
+  });
+
+  sendApiUpdate({
+    '@type': 'updateThreadInfo',
+    threadInfo,
+  });
 
   sendApiUpdate({
     '@type': 'updateChat',
@@ -920,16 +969,86 @@ export function deleteChat({
   });
 }
 
-export function leaveChannel({
-  channelId, accessHash,
-}: {
-  channelId: string; accessHash: string;
-}) {
+export function leaveChannel({ chat }: { chat: ApiChat }) {
   return invokeRequest(new GramJs.channels.LeaveChannel({
-    channel: buildInputChannel(channelId, accessHash),
+    channel: buildInputChannel(chat.id, chat.accessHash),
   }), {
     shouldReturnTrue: true,
   });
+}
+
+export async function fetchFutureCreatorAfterLeave({ chat }: { chat: ApiChat }) {
+  const result = await invokeRequest(new GramJs.messages.GetFutureChatCreatorAfterLeave({
+    peer: buildInputPeer(chat.id, chat.accessHash),
+  }));
+
+  if (!result) {
+    return undefined;
+  }
+
+  return buildApiUser(result);
+}
+
+export async function verifyTransferOwnership({
+  chat, user,
+}: {
+  chat: ApiChat;
+  user: ApiUser;
+}) {
+  try {
+    await invokeRequest(new GramJs.messages.EditChatCreator({
+      peer: buildInputPeer(chat.id, chat.accessHash),
+      userId: buildInputUser(user.id, user.accessHash),
+      password: new GramJs.InputCheckPasswordEmpty(),
+    }), {
+      shouldReturnTrue: true,
+      shouldThrow: true,
+    });
+
+    return { canTransfer: true };
+  } catch (err: any) {
+    if (!checkErrorType(err)) return undefined;
+
+    if (err instanceof RPCError && err.errorMessage === 'PASSWORD_HASH_INVALID') return { canTransfer: true };
+
+    if (err instanceof PasswordFreshError) return { errorMessage: 'PASSWORD_TOO_FRESH' };
+    if (err instanceof SessionFreshError) return { errorMessage: 'SESSION_TOO_FRESH' };
+    if (err instanceof RPCError && err.errorMessage === 'PASSWORD_MISSING') return { errorMessage: 'PASSWORD_MISSING' };
+
+    return wrapError(err);
+  }
+}
+
+export async function editChatCreator({
+  chat, user, password,
+}: {
+  chat: ApiChat;
+  user: ApiUser;
+  password: string;
+}) {
+  try {
+    const passwordCheck = await getPassword(password);
+
+    if (!passwordCheck) {
+      return undefined;
+    }
+
+    if ('error' in passwordCheck) {
+      return passwordCheck;
+    }
+
+    return invokeRequest(new GramJs.messages.EditChatCreator({
+      peer: buildInputPeer(chat.id, chat.accessHash),
+      userId: buildInputUser(user.id, user.accessHash),
+      password: passwordCheck,
+    }), {
+      shouldReturnTrue: true,
+      shouldThrow: true,
+    });
+  } catch (err) {
+    if (!checkErrorType(err)) return undefined;
+    return wrapError(err);
+  }
 }
 
 export function deleteChannel({
@@ -1195,7 +1314,7 @@ export function toggleDialogFilterTags(isEnabled: boolean) {
 export async function toggleDialogUnread({
   chat, hasUnreadMark,
 }: {
-  chat: ApiChat; hasUnreadMark: boolean | undefined;
+  chat: ApiChat; hasUnreadMark?: true;
 }) {
   const { id, accessHash } = chat;
 
@@ -1203,14 +1322,17 @@ export async function toggleDialogUnread({
     peer: new GramJs.InputDialogPeer({
       peer: buildInputPeer(id, accessHash),
     }),
-    unread: hasUnreadMark || undefined,
+    unread: hasUnreadMark,
   }));
 
   if (isActionSuccessful) {
     sendApiUpdate({
-      '@type': 'updateChat',
-      id: chat.id,
-      chat: { hasUnreadMark },
+      '@type': 'updateThreadReadState',
+      chatId: chat.id,
+      threadId: MAIN_THREAD_ID,
+      readState: {
+        hasUnreadMark,
+      },
     });
   }
 }
@@ -1297,8 +1419,8 @@ export function updateChatMemberBannedRights({
 }
 
 export function updateChatAdmin({
-  chat, user, adminRights, customTitle = DEFAULT_PRIMITIVES.STRING,
-}: { chat: ApiChat; user: ApiUser; adminRights: ApiChatAdminRights; customTitle?: string }) {
+  chat, user, adminRights, rank,
+}: { chat: ApiChat; user: ApiUser; adminRights: ApiChatAdminRights; rank?: string }) {
   const channel = buildInputChannel(chat.id, chat.accessHash);
   const userId = buildInputUser(user.id, user.accessHash);
 
@@ -1306,7 +1428,7 @@ export function updateChatAdmin({
     channel,
     userId,
     adminRights: buildChatAdminRights(adminRights),
-    rank: customTitle,
+    rank,
   }), {
     shouldReturnTrue: true,
   });
@@ -1562,12 +1684,10 @@ export async function addChatMembers(chat: ApiChat, users: ApiUser[]) {
       return addChatUsersResult.flat().filter(Boolean);
     }
   } catch (err: unknown) {
-    const message = err instanceof RPCError ? err.errorMessage : (err as Error).message;
+    const apiError = buildApiError(err as Error);
     sendApiUpdate({
       '@type': 'error',
-      error: {
-        message,
-      },
+      error: apiError,
     });
   }
   return undefined;

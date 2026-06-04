@@ -1,4 +1,3 @@
-import type { FC } from '../../../lib/teact/teact';
 import {
   memo,
   useCallback,
@@ -34,10 +33,10 @@ type StateProps = {
 const LESS_GRID_ITEMS_AMOUNT = 5;
 const runThrottled = throttle((cb) => cb(), 500, true);
 
-const MoreAppsTabContent: FC<StateProps> = ({
+const MoreAppsTabContent = ({
   foundIds,
   recentBotIds,
-}) => {
+}: StateProps) => {
   const oldLang = useOldLang();
   const lang = useLang();
   const [shouldShowMoreMine, setShouldShowMoreMine] = useState<boolean>(false);
@@ -134,6 +133,6 @@ export default memo(withGlobal((global): Complete<StateProps> => {
   return {
     isLoading: !foundIds && globalSearch.fetchingStatus?.botApps,
     foundIds,
-    recentBotIds: global.topBotApps.userIds,
+    recentBotIds: global.topPeerCategories.botsApp?.peerIds,
   };
 })(MoreAppsTabContent));

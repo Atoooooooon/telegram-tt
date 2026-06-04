@@ -1,7 +1,7 @@
 import type { FC } from '@teact';
 import {
-  memo, useEffect, useMemo, useRef, useState,
-} from '@teact';
+  memo, useEffect,
+  useMemo, useRef, useState } from '@teact';
 import type React from '../../../lib/teact/teact';
 import { getActions, withGlobal } from '../../../global';
 
@@ -15,17 +15,19 @@ import type {
   ApiStarsAmount,
 } from '../../../api/types';
 import type { TabState } from '../../../global/types';
-import type { StarGiftCategory } from '../../../types';
+import type { ResaleGiftsFilterOptions, StarGiftCategory } from '../../../types';
 
 import { STARS_CURRENCY_CODE } from '../../../config';
 import { getUserFullName } from '../../../global/helpers';
 import { getPeerTitle, isApiPeerChat, isApiPeerUser } from '../../../global/helpers/peers';
-import { selectTabState } from '../../../global/selectors';
-import { selectPeer, selectUserFullInfo } from '../../../global/selectors';
+import { selectPeer, selectTabState, selectUserFullInfo } from '../../../global/selectors';
 import buildClassName from '../../../util/buildClassName';
+import { NEXT_ARROW_REPLACEMENT } from '../../../util/localization/format';
 import { throttle } from '../../../util/schedulers';
+import { REM } from '../../common/helpers/mediaDimensions';
 
 import useCurrentOrPrev from '../../../hooks/useCurrentOrPrev';
+import useFlag from '../../../hooks/useFlag';
 import { useIntersectionObserver } from '../../../hooks/useIntersectionObserver';
 import useLang from '../../../hooks/useLang';
 import useLastCallback from '../../../hooks/useLastCallback';
@@ -35,11 +37,11 @@ import Avatar from '../../common/Avatar';
 import InteractiveSparkles from '../../common/InteractiveSparkles';
 import SafeLink from '../../common/SafeLink';
 import Button from '../../ui/Button';
+import Checkbox from '../../ui/Checkbox';
 import InfiniteScroll from '../../ui/InfiniteScroll';
 import Modal from '../../ui/Modal';
 import Transition from '../../ui/Transition';
-import BalanceBlock from '../stars/BalanceBlock';
-import GiftSendingOptions from './GiftComposer';
+import GiftComposer from './GiftComposer';
 import GiftItemPremium from './GiftItemPremium';
 import GiftItemStar from './GiftItemStar';
 import GiftModalResaleScreen from './GiftModalResaleScreen';
@@ -62,11 +64,12 @@ type StateProps = {
   myUniqueGiftIds?: string[];
   starBalance?: ApiStarsAmount;
   peer?: ApiPeer;
-  isSelf?: boolean;
+  currentUserId?: string;
   disallowedGifts?: ApiDisallowedGifts;
   resaleGiftsCount?: number;
   areResaleGiftsLoading?: boolean;
   selectedResaleGift?: ApiStarGift;
+  resaleFilter?: ResaleGiftsFilterOptions;
   tabId: number;
 };
 
@@ -74,6 +77,7 @@ const AVATAR_SIZE = 100;
 const INTERSECTION_THROTTLE = 200;
 const SCROLL_THROTTLE = 200;
 const AVATAR_SPARKLES_CENTER_SHIFT = [0, -50] as const;
+const CATEGORY_LIST_STICKY_TOP = 3.5 * REM;
 
 const runThrottledForScroll = throttle((cb) => cb(), SCROLL_THROTTLE, true);
 
@@ -85,11 +89,12 @@ const GiftModal: FC<OwnProps & StateProps> = ({
   myUniqueGiftIds,
   starBalance,
   peer,
-  isSelf,
+  currentUserId,
   disallowedGifts,
   resaleGiftsCount,
   areResaleGiftsLoading,
   selectedResaleGift,
+  resaleFilter,
   tabId,
 }) => {
   const {
@@ -100,26 +105,32 @@ const GiftModal: FC<OwnProps & StateProps> = ({
     openGiftInMarket,
     closeResaleGiftsMarket,
     loadMyUniqueGifts,
+    updateResaleGiftsFilter,
     openGiftTransferConfirmModal,
+    setGiftModalSelectedGift,
   } = getActions();
   const dialogRef = useRef<HTMLDivElement>();
   const transitionRef = useRef<HTMLDivElement>();
   const giftHeaderRef = useRef<HTMLHeadingElement>();
+  const categoryListRef = useRef<HTMLDivElement>();
 
   const scrollerRef = useRef<HTMLDivElement>();
 
   const isOpen = Boolean(modal);
   const renderingModal = useCurrentOrPrev(modal);
+  const renderingPeer = useCurrentOrPrev(peer);
 
-  const user = peer && isApiPeerUser(peer) ? peer : undefined;
-  const chat = peer && isApiPeerChat(peer) ? peer : undefined;
+  const user = renderingPeer && isApiPeerUser(renderingPeer) ? renderingPeer : undefined;
+  const chat = renderingPeer && isApiPeerChat(renderingPeer) ? renderingPeer : undefined;
+  const isSelf = Boolean(currentUserId && renderingModal?.forPeerId === currentUserId);
 
-  const [selectedGift, setSelectedGift] = useState<GiftOption | undefined>();
+  const selectedGift = renderingModal?.selectedGift;
   const [shouldShowMainScreenHeader, setShouldShowMainScreenHeader] = useState(false);
   const [isMainScreenHeaderForStarGifts, setIsMainScreenHeaderForStarGifts] = useState(false);
   const [isGiftScreenHeaderForStarGifts, setIsGiftScreenHeaderForStarGifts] = useState(false);
-
   const [selectedCategory, setSelectedCategory] = useState<StarGiftCategory>('all');
+  const [isCategoryListPinned, pinCategoryList, unpinCategoryList] = useFlag(false);
+  const [wasStarsOnlyToggleShown, markStarsOnlyToggleShown, resetStarsOnlyToggleShown] = useFlag(false);
   const triggerSparklesRef = useRef<(() => void) | undefined>();
 
   const areAllGiftsDisallowed = useMemo(() => {
@@ -188,10 +199,14 @@ const GiftModal: FC<OwnProps & StateProps> = ({
   useEffect(() => {
     if (!isOpen) {
       setShouldShowMainScreenHeader(false);
-      setSelectedGift(undefined);
+      setGiftModalSelectedGift({ gift: undefined });
       setSelectedCategory('all');
     }
-  }, [isOpen, tabId, closeResaleGiftsMarket]);
+  }, [isOpen]);
+
+  useEffect(() => {
+    setIsGiftScreenHeaderForStarGifts(Boolean(selectedGift && 'id' in selectedGift));
+  }, [selectedGift]);
 
   const handleScroll = useLastCallback((e: React.UIEvent<HTMLDivElement>) => {
     if (isGiftScreen) return;
@@ -207,6 +222,17 @@ const GiftModal: FC<OwnProps & StateProps> = ({
         const { top: transitionTop } = transitionRef.current.getBoundingClientRect();
         setIsMainScreenHeaderForStarGifts(headerTop - transitionTop <= 0);
       }
+
+      if (categoryListRef.current && scrollerRef.current) {
+        const { top: listTop } = categoryListRef.current.getBoundingClientRect();
+        const { top: scrollerTop } = scrollerRef.current.getBoundingClientRect();
+        const isPinned = listTop - scrollerTop <= CATEGORY_LIST_STICKY_TOP;
+        if (isPinned) {
+          pinCategoryList();
+        } else {
+          unpinCategoryList();
+        }
+      }
     });
   });
 
@@ -216,7 +242,12 @@ const GiftModal: FC<OwnProps & StateProps> = ({
       <SafeLink
         text={lang('GiftPremiumDescriptionLinkCaption')}
         url={lang('GiftPremiumDescriptionLink')}
-      />
+      >
+        {lang('GiftPremiumDescriptionLinkCaption', undefined, {
+          withNodes: true,
+          specialReplacement: NEXT_ARROW_REPLACEMENT,
+        })}
+      </SafeLink>
     ),
   }, { withNodes: true });
 
@@ -288,8 +319,7 @@ const GiftModal: FC<OwnProps & StateProps> = ({
       openGiftInMarket({ gift, tabId });
       return;
     }
-    setSelectedGift(gift);
-    setIsGiftScreenHeaderForStarGifts('id' in gift);
+    setGiftModalSelectedGift({ gift });
   });
 
   const handleMyGiftClick = useLastCallback((gift: ApiStarGift) => {
@@ -408,7 +438,7 @@ const GiftModal: FC<OwnProps & StateProps> = ({
   });
 
   const handleCloseModal = useLastCallback(() => {
-    setSelectedGift(undefined);
+    setGiftModalSelectedGift({ gift: undefined });
     resetResaleGifts();
     closeGiftModal();
   });
@@ -419,7 +449,7 @@ const GiftModal: FC<OwnProps & StateProps> = ({
       return;
     }
     if (isGiftScreen) {
-      setSelectedGift(undefined);
+      setGiftModalSelectedGift({ gift: undefined });
       return;
     }
     handleCloseModal();
@@ -433,6 +463,28 @@ const GiftModal: FC<OwnProps & StateProps> = ({
     triggerSparklesRef.current = animate;
   });
 
+  const handleStarsOnlyChange = useLastCallback((isChecked: boolean) => {
+    updateResaleGiftsFilter({
+      filter: {
+        ...resaleFilter,
+        sortType: resaleFilter?.sortType || 'byDate',
+        starsOnly: isChecked,
+      },
+    });
+  });
+
+  const isStarsOnly = Boolean(resaleFilter?.starsOnly);
+
+  useEffect(() => {
+    resetStarsOnlyToggleShown();
+  }, [selectedResaleGift, resetStarsOnlyToggleShown]);
+
+  useEffect(() => {
+    if (resaleGiftsCount && !areResaleGiftsLoading) {
+      markStarsOnlyToggleShown();
+    }
+  }, [resaleGiftsCount, areResaleGiftsLoading, markStarsOnlyToggleShown]);
+
   function renderMainScreen() {
     return (
       <div ref={scrollerRef} className={buildClassName(styles.main, 'custom-scroll')} onScroll={handleScroll}>
@@ -440,7 +492,7 @@ const GiftModal: FC<OwnProps & StateProps> = ({
           <Avatar
             className={styles.avatar}
             size={AVATAR_SIZE}
-            peer={peer}
+            peer={renderingPeer}
             onMouseMove={handleAvatarMouseMove}
           />
           <InteractiveSparkles
@@ -463,10 +515,12 @@ const GiftModal: FC<OwnProps & StateProps> = ({
             {renderStarGiftsHeader()}
             {renderStarGiftsDescription()}
             <StarGiftCategoryList
+              ref={categoryListRef}
               areUniqueStarGiftsDisallowed={areUniqueStarGiftsDisallowed}
               areLimitedStarGiftsDisallowed={areLimitedStarGiftsDisallowed}
               isSelf={isSelf}
               hasMyUnique={Boolean(myUniqueGiftIds?.length)}
+              isPinned={isCategoryListPinned}
               onCategoryChanged={onCategoryChanged}
             />
             <Transition
@@ -495,23 +549,25 @@ const GiftModal: FC<OwnProps & StateProps> = ({
       const isFirstLoading = areResaleGiftsLoading && !resaleGiftsCount;
       return (
         <div className={styles.resaleHeaderContentContainer}>
-          <h2 className={styles.resaleHeaderText}>
-            {selectedResaleGift.title}
-          </h2>
-          {isFirstLoading
-            && (
-              <div className={styles.resaleHeaderDescription}>
-                {lang('Loading')}
-              </div>
-            )}
-          {!isFirstLoading && resaleGiftsCount !== undefined
-            && (
-              <div className={styles.resaleHeaderDescription}>
-                {lang('HeaderDescriptionResaleGifts', {
-                  count: resaleGiftsCount,
-                }, { withNodes: true, withMarkdown: true, pluralValue: resaleGiftsCount })}
-              </div>
-            )}
+          <div className={styles.resaleHeaderTextBlock}>
+            <h2 className={styles.resaleHeaderText}>
+              {selectedResaleGift.title}
+            </h2>
+            {isFirstLoading
+              && (
+                <div className={styles.resaleHeaderDescription}>
+                  {lang('Loading')}
+                </div>
+              )}
+            {!isFirstLoading && resaleGiftsCount !== undefined
+              && (
+                <div className={styles.resaleHeaderDescription}>
+                  {lang('HeaderDescriptionResaleGifts', {
+                    count: resaleGiftsCount,
+                  }, { withNodes: true, withMarkdown: true, pluralValue: resaleGiftsCount })}
+                </div>
+              )}
+          </div>
           <GiftResaleFilters dialogRef={dialogRef} />
         </div>
       );
@@ -532,22 +588,23 @@ const GiftModal: FC<OwnProps & StateProps> = ({
       contentClassName={styles.content}
       className={buildClassName(styles.modalDialog, styles.root)}
       isLowStackPriority
+      withBalanceBar
     >
       <Button
         className={styles.closeButton}
         round
         color="translucent"
-        size="smaller"
+        size="tiny"
         onClick={handleCloseButtonClick}
         ariaLabel={isBackButton ? oldLang('Common.Back') : oldLang('Common.Close')}
       >
         <div className={buttonClassName} />
       </Button>
-      <BalanceBlock className={styles.balance} balance={starBalance} withAddButton />
       <div className={buildClassName(
         styles.header,
         isResaleScreen && styles.resaleHeader,
-        !shouldShowHeader && styles.hiddenHeader)}
+        !shouldShowHeader && styles.hiddenHeader,
+        isCategoryListPinned && !isResaleScreen && styles.noBorder)}
       >
         <Transition
           name="slideVerticalFade"
@@ -571,13 +628,25 @@ const GiftModal: FC<OwnProps & StateProps> = ({
             />
           )}
         {isGiftScreen && renderingModal?.forPeerId && (
-          <GiftSendingOptions
+          <GiftComposer
             gift={selectedGift}
             giftByStars={giftsByStars.get(selectedGift)}
             peerId={renderingModal.forPeerId}
           />
         )}
       </Transition>
+      {isResaleScreen && (
+        <Checkbox
+          className={buildClassName(
+            styles.starsOnlyToggle,
+            wasStarsOnlyToggleShown && styles.starsOnlyToggleVisible,
+          )}
+          label={lang('GiftResaleStarsOnly')}
+          checked={isStarsOnly}
+          isRound
+          onCheck={handleStarsOnlyChange}
+        />
+      )}
     </Modal>
   );
 };
@@ -590,7 +659,6 @@ export default memo(withGlobal<OwnProps>((global, { modal }): Complete<StateProp
   } = global;
 
   const peer = modal?.forPeerId ? selectPeer(global, modal.forPeerId) : undefined;
-  const isSelf = Boolean(currentUserId && modal?.forPeerId === currentUserId);
   const userFullInfo = peer ? selectUserFullInfo(global, peer?.id) : undefined;
 
   const { resaleGifts } = selectTabState(global);
@@ -606,11 +674,12 @@ export default memo(withGlobal<OwnProps>((global, { modal }): Complete<StateProp
     myUniqueGiftIds: global.myUniqueGifts?.ids,
     starBalance: stars?.balance,
     peer,
-    isSelf,
+    currentUserId,
     disallowedGifts: userFullInfo?.disallowedGifts,
     resaleGiftsCount,
     areResaleGiftsLoading,
     selectedResaleGift,
+    resaleFilter: resaleGifts.filter,
     tabId: selectTabState(global).id,
   };
 })(GiftModal));

@@ -2,13 +2,13 @@ import type { FC } from '@teact';
 import { memo, useEffect, useRef } from '@teact';
 import { getActions, withGlobal } from '../../../global';
 
-import type { ApiChatFolder, ApiChatlistExportedInvite, ApiSession } from '../../../api/types';
+import type { ApiChatFolder, ApiChatlistExportedInvite } from '../../../api/types';
 import type { GlobalState } from '../../../global/types';
 import type { FolderEditDispatch } from '../../../hooks/reducers/useFoldersReducer';
 import type { AnimationLevel } from '../../../types';
 
 import { ALL_FOLDER_ID } from '../../../config';
-import { selectIsCurrentUserFrozen, selectTabState } from '../../../global/selectors';
+import { selectTabState } from '../../../global/selectors';
 import { selectCurrentLimit } from '../../../global/selectors/limits';
 import { selectSharedSettings } from '../../../global/selectors/sharedState';
 import { IS_TOUCH_ENV } from '../../../util/browser/windowEnvironment';
@@ -22,11 +22,12 @@ import useFolderTabs from '../../../hooks/useFolderTabs';
 import useHistoryBack from '../../../hooks/useHistoryBack';
 import useLang from '../../../hooks/useLang';
 import useLastCallback from '../../../hooks/useLastCallback';
+import useScrolledState from '../../../hooks/useScrolledState';
 import useShowTransition from '../../../hooks/useShowTransition';
 
 import StoryRibbon from '../../story/StoryRibbon';
-import TabList from '../../ui/TabList';
 import Transition from '../../ui/Transition';
+import ChatFolderTabList from './ChatFolderTabList';
 import ChatList from './ChatList';
 
 type OwnProps = {
@@ -51,8 +52,6 @@ type StateProps = {
   hasArchivedStories?: boolean;
   archiveSettings: GlobalState['archiveSettings'];
   isStoryRibbonShown?: boolean;
-  sessions?: Record<string, ApiSession>;
-  isAccountFrozen?: boolean;
 };
 
 const SAVED_MESSAGES_HOTKEY = '0';
@@ -76,8 +75,6 @@ const ChatFolders: FC<OwnProps & StateProps> = ({
   hasArchivedStories,
   archiveSettings,
   isStoryRibbonShown,
-  sessions,
-  isAccountFrozen,
   isFoldersSidebarShown,
 }) => {
   const {
@@ -90,9 +87,16 @@ const ChatFolders: FC<OwnProps & StateProps> = ({
 
   const lang = useLang();
 
+  const { handleScroll, updateScrollState } = useScrolledState();
+
   useEffect(() => {
     loadChatFolders();
   }, []);
+
+  useEffect(() => {
+    const activeList = transitionRef.current?.querySelector<HTMLElement>('.chat-list.Transition_slide-active');
+    updateScrollState(activeList ?? undefined);
+  }, [activeChatFolder, updateScrollState]);
 
   const {
     ref,
@@ -115,6 +119,7 @@ const ChatFolders: FC<OwnProps & StateProps> = ({
 
   const { displayedFolders, folderTabs } = useFolderTabs({
     sidebarMode: false,
+    noEmoticons: true,
     orderedFolderIds,
     chatFoldersById,
     maxFolders,
@@ -212,7 +217,7 @@ const ChatFolders: FC<OwnProps & StateProps> = ({
     ref: placeholderRef,
     shouldRender: shouldRenderPlaceholder,
   } = useShowTransition({
-    isOpen: !orderedFolderIds,
+    isOpen: !orderedFolderIds && !isFoldersSidebarShown,
     noMountTransition: true,
     withShouldRender: true,
   });
@@ -232,46 +237,47 @@ const ChatFolders: FC<OwnProps & StateProps> = ({
         isMainList
         canDisplayArchive={(hasArchivedChats || hasArchivedStories) && !archiveSettings.isHidden}
         archiveSettings={archiveSettings}
-        sessions={sessions}
-        isAccountFrozen={isAccountFrozen}
         isFoldersSidebarShown={isFoldersSidebarShown}
         isStoryRibbonShown={isStoryRibbonShown}
         withTags
+        onScroll={handleScroll}
       />
     );
   }
 
-  const shouldRenderFolders = folderTabs && folderTabs.length > 1;
+  const hasFolders = folderTabs && folderTabs.length > 1;
+  const shouldRenderFolders = hasFolders && !isFoldersSidebarShown;
 
   return (
     <div
       ref={ref}
       className={buildClassName(
         'ChatFolders',
-        shouldRenderFolders && shouldHideFolderTabs && !isFoldersSidebarShown && 'ChatFolders--tabs-hidden',
         shouldRenderStoryRibbon && 'with-story-ribbon',
         isFoldersSidebarShown && 'ChatFolders--tabs-sidebar-shown',
       )}
     >
       {shouldRenderStoryRibbon && <StoryRibbon isClosing={isStoryRibbonClosing} />}
-      {shouldRenderFolders && !isFoldersSidebarShown ? (
-        <TabList
-          contextRootElementSelector="#LeftColumn"
-          tabs={folderTabs}
-          activeTab={activeChatFolder}
-          onSwitchTab={handleSwitchTab}
-        />
-      ) : shouldRenderPlaceholder ? (
-        <div ref={placeholderRef} className="tabs-placeholder" />
-      ) : undefined}
-      <Transition
-        ref={transitionRef}
-        name={resolveTransitionName('slideOptimized', animationLevel, shouldSkipHistoryAnimations, lang.isRtl)}
-        activeKey={activeChatFolder}
-        renderCount={shouldRenderFolders ? folderTabs.length : undefined}
-      >
-        {renderCurrentTab}
-      </Transition>
+      <div className={buildClassName('ChatFolders-content', shouldRenderFolders && 'with-tabs')}>
+        {shouldRenderFolders ? (
+          <ChatFolderTabList
+            tabs={folderTabs}
+            activeTab={activeChatFolder}
+            isHidden={shouldHideFolderTabs}
+            onSwitchTab={handleSwitchTab}
+          />
+        ) : shouldRenderPlaceholder ? (
+          <div ref={placeholderRef} className="tabs-placeholder" />
+        ) : undefined}
+        <Transition
+          ref={transitionRef}
+          name={resolveTransitionName('slideOptimized', animationLevel, shouldSkipHistoryAnimations, lang.isRtl)}
+          activeKey={activeChatFolder}
+          renderCount={hasFolders ? folderTabs.length : undefined}
+        >
+          {renderCurrentTab}
+        </Transition>
+      </div>
     </div>
   );
 };
@@ -294,16 +300,12 @@ export default memo(withGlobal<OwnProps>(
           archived: archivedStories,
         },
       },
-      activeSessions: {
-        byHash: sessions,
-      },
       currentUserId,
       archiveSettings,
     } = global;
     const { animationLevel } = selectSharedSettings(global);
     const { shouldSkipHistoryAnimations, activeChatFolder } = selectTabState(global);
     const { storyViewer: { isRibbonShown: isStoryRibbonShown } } = selectTabState(global);
-    const isAccountFrozen = selectIsCurrentUserFrozen(global);
 
     return {
       chatFoldersById,
@@ -320,8 +322,6 @@ export default memo(withGlobal<OwnProps>(
       maxChatLists: selectCurrentLimit(global, 'chatlistJoined'),
       archiveSettings,
       isStoryRibbonShown,
-      sessions,
-      isAccountFrozen,
     };
   },
 )(ChatFolders));

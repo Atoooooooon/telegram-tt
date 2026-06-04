@@ -1,10 +1,11 @@
 import {
   beginHeavyAnimation,
-  memo, useEffect, useMemo, useRef, useState,
+  memo, useCallback, useEffect, useMemo, useRef, useState,
 } from '../../../../lib/teact/teact';
 import { getActions, withGlobal } from '../../../../global';
 
 import type { ApiChat } from '../../../../api/types';
+import type { GlobalState } from '../../../../global/types';
 import type { TopicsInfo } from '../../../../types';
 import { MAIN_THREAD_ID } from '../../../../api/types';
 
@@ -18,16 +19,20 @@ import {
   selectChat,
   selectCurrentMessageList,
   selectIsForumPanelOpen,
+  selectIsSynced,
   selectTabState,
   selectTopicsInfo,
 } from '../../../../global/selectors';
+import { selectThread } from '../../../../global/selectors/threads';
 import { IS_TOUCH_ENV } from '../../../../util/browser/windowEnvironment';
 import buildClassName from '../../../../util/buildClassName';
 import captureEscKeyListener from '../../../../util/captureEscKeyListener';
 import { captureEvents, SwipeDirection } from '../../../../util/captureEvents';
 import { waitForTransitionEnd } from '../../../../util/cssAnimationEndListeners';
 import { isUserId } from '../../../../util/entities/ids';
+import { mapTruthyValues, mapValues } from '../../../../util/iteratees';
 
+import useSelector from '../../../../hooks/data/useSelector';
 import useAppLayout from '../../../../hooks/useAppLayout';
 import useHistoryBack from '../../../../hooks/useHistoryBack';
 import useInfiniteScroll from '../../../../hooks/useInfiniteScroll';
@@ -62,6 +67,7 @@ type StateProps = {
   chat?: ApiChat;
   topicsInfo?: TopicsInfo;
   currentTopicId?: number;
+  isSynced?: boolean;
   withInterfaceAnimations?: boolean;
 };
 
@@ -72,6 +78,7 @@ const ForumPanel = ({
   currentTopicId,
   isOpen,
   isHidden,
+  isSynced,
   topicsInfo,
   withInterfaceAnimations,
   onTopicSearch,
@@ -90,10 +97,10 @@ const ForumPanel = ({
   const chatId = chat?.id;
 
   useEffect(() => {
-    if (chatId && !topicsInfo) {
-      loadTopics({ chatId });
-    }
-  }, [topicsInfo, chatId]);
+    if (!chatId || !isSynced) return;
+    if (topicsInfo && !topicsInfo.isCache) return;
+    loadTopics({ chatId });
+  }, [chatId, topicsInfo, isSynced]);
 
   const [isScrolled, setIsScrolled] = useState(false);
   const lang = useLang();
@@ -122,10 +129,18 @@ const ForumPanel = ({
     setIsScrolled(!isIntersecting);
   });
 
+  const topicsThreadSelector = useCallback((global: GlobalState) => {
+    if (!chat?.id) return undefined;
+    return mapTruthyValues(topicsInfo?.topicsById || {}, (t) => selectThread(global, chat.id, t.id));
+  }, [chat?.id, topicsInfo?.topicsById]);
+  const topicsThreads = useSelector(topicsThreadSelector);
+
   const orderedIds = useMemo(() => {
-    const ids = topicsInfo
+    const topicsThreadInfos = topicsThreads && mapValues(topicsThreads, (t) => t.threadInfo);
+    const ids = topicsInfo && topicsThreads
       ? getOrderedTopics(
         Object.values(topicsInfo.topicsById),
+        topicsThreadInfos,
         topicsInfo.orderedPinnedTopicIds,
       ).map(({ id }) => id)
       : [];
@@ -133,12 +148,12 @@ const ForumPanel = ({
     if (!chat?.isBotForum) return ids;
 
     return [MAIN_THREAD_ID, ...ids];
-  }, [chat?.isBotForum, topicsInfo]);
+  }, [chat?.isBotForum, topicsInfo, topicsThreads]);
 
-  const { orderDiffById, getAnimationType, onReorderAnimationEnd } = useOrderDiff(orderedIds, chat?.id);
+  const { orderDiffById, shiftDiff, getAnimationType, onReorderAnimationEnd } = useOrderDiff(orderedIds, 0, chat?.id);
 
   const [viewportIds, getMore] = useInfiniteScroll(() => {
-    if (!chat) return;
+    if (!chat || !isSynced) return;
     loadTopics({ chatId: chat.id });
   }, orderedIds, !topicsInfo?.totalCount || orderedIds.length >= topicsInfo.totalCount, TOPICS_SLICE);
 
@@ -223,6 +238,7 @@ const ForumPanel = ({
           observeIntersection={observe}
           animationType={getAnimationType(id)}
           orderDiff={orderDiffById[id]}
+          shiftDiff={shiftDiff}
           onReorderAnimationEnd={onReorderAnimationEnd}
         />
       );
@@ -323,6 +339,7 @@ export default memo(withGlobal<OwnProps>(
     return {
       chat,
       currentTopicId: chatId === currentChatId ? Number(currentThreadId) : undefined,
+      isSynced: selectIsSynced(global),
       withInterfaceAnimations: selectCanAnimateInterface(global),
       topicsInfo,
     };

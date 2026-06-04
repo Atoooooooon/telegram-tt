@@ -1,4 +1,3 @@
-import type { FC } from '../../lib/teact/teact';
 import { memo, useEffect } from '../../lib/teact/teact';
 import { getActions, getGlobal, withGlobal } from '../../global';
 
@@ -23,9 +22,9 @@ const GLOBAL_UPDATE_DEBOUNCE = 1000;
 const processedHashes = new Set<string>();
 const downloadedHashes = new Set<string>();
 
-const DownloadManager: FC<StateProps> = ({
+const DownloadManager = ({
   activeDownloads,
-}) => {
+}: StateProps) => {
   const { cancelMediaHashDownloads, showNotification } = getActions();
 
   const runDebounced = useRunDebounced(GLOBAL_UPDATE_DEBOUNCE, true);
@@ -82,11 +81,12 @@ const DownloadManager: FC<StateProps> = ({
           const url = new URL(result, window.document.baseURI);
           url.searchParams.set('filename', encodeURIComponent(filename));
           const downloadWindow = window.open(url.toString());
+          // eslint-disable-next-line @eslint-react/web-api/no-leaked-event-listener
           downloadWindow?.addEventListener('beforeunload', () => {
             showNotification({
               message: 'Download started. Please, do not close the app before it is finished.',
             });
-          });
+          }, { once: true });
         } else if (result) {
           download(result, filename);
         }

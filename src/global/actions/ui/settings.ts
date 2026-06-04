@@ -7,11 +7,13 @@ import { requestMutation } from '../../../lib/fasterdom/fasterdom';
 import { IS_IOS } from '../../../util/browser/windowEnvironment';
 import { disableDebugConsole, initDebugConsole } from '../../../util/debugConsole';
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
-import { oldSetLanguage, setTimeFormat } from '../../../util/oldLangProvider';
+import { setTimeFormat as setLocalizedTimeFormat } from '../../../util/localization';
+import { oldSetLanguage, setTimeFormat as setLegacyTimeFormat } from '../../../util/oldLangProvider';
 import { applyPerformanceSettings } from '../../../util/perfomanceSettings';
 import switchTheme from '../../../util/switchTheme';
 import { updatePeerColors } from '../../../util/theme';
 import { callApi, setShouldEnableDebugLog } from '../../../api/gramjs';
+import { addTabStateResetterAction } from '../../helpers/meta';
 import {
   addActionHandler, getActions, setGlobal,
 } from '../../index';
@@ -58,7 +60,8 @@ addCallback((global: GlobalState) => {
   }
 
   if (sharedSettings.timeFormat !== oldSharedSettings.timeFormat) {
-    setTimeFormat(sharedSettings.timeFormat);
+    setLocalizedTimeFormat(sharedSettings.timeFormat);
+    setLegacyTimeFormat(sharedSettings.timeFormat);
   }
 
   if (sharedSettings.messageTextSize !== oldSharedSettings.messageTextSize) {
@@ -66,7 +69,7 @@ addCallback((global: GlobalState) => {
       '--composer-text-size', `${Math.max(sharedSettings.messageTextSize, IS_IOS ? 16 : 15)}px`,
     );
     document.documentElement.style.setProperty('--message-meta-height',
-      `${Math.floor(sharedSettings.messageTextSize * 1.3125)}px`);
+      `${Math.floor(sharedSettings.messageTextSize * 1.25)}px`);
     document.documentElement.style.setProperty('--message-text-size', `${sharedSettings.messageTextSize}px`);
     document.documentElement.setAttribute('data-message-text-size', sharedSettings.messageTextSize.toString());
   }
@@ -163,6 +166,8 @@ addActionHandler('openLeftColumnContent', (global, actions, payload): ActionRetu
 addActionHandler('openSettingsScreen', (global, actions, payload): ActionReturnType => {
   const { screen, tabId = getCurrentTabId() } = payload;
   const tabState = selectTabState(global, tabId);
+
+  actions.loadPrivacySettings({ skipIfCached: true });
   // Force settings only if new screen is passed, do not on resets
   if (payload.screen !== undefined) actions.openLeftColumnContent({ contentKey: LeftColumnContent.Settings, tabId });
   return updateTabState(global, {
@@ -224,3 +229,12 @@ addActionHandler('closeShareChatFolderModal', (global, actions, payload): Action
     shareFolderScreen: undefined,
   }, tabId);
 });
+
+addActionHandler('openPasskeyModal', (global, actions, payload): ActionReturnType => {
+  const { tabId = getCurrentTabId() } = payload || {};
+  return updateTabState(global, {
+    isPasskeyModalOpen: true,
+  }, tabId);
+});
+
+addTabStateResetterAction('closePasskeyModal', 'isPasskeyModalOpen');

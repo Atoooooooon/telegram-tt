@@ -1,13 +1,12 @@
-import { getActions } from '../../../global';
-
 import type {
-  ApiChat, ApiGlobalMessageSearchType, ApiMessage, ApiMessageSearchContext, ApiPeer, ApiSearchPostsFlood, ApiTopic,
+  ApiChat, ApiGlobalMessageSearchType, ApiMessage, ApiMessageSearchContext, ApiPeer, ApiSearchPostsFlood,
+  ApiTopicWithState,
   ApiUserStatus,
 } from '../../../api/types';
 import type { ActionReturnType, GlobalState, TabArgs } from '../../types';
 
 import { GLOBAL_SEARCH_SLICE, GLOBAL_TOPIC_SEARCH_SLICE } from '../../../config';
-import { timestampPlusDay } from '../../../util/dates/dateFormat';
+import { timestampPlusDay } from '../../../util/dates/oldDateFormat';
 import { isDeepLink, tryParseDeepLink } from '../../../util/deepLinkParser';
 import { toChannelId } from '../../../util/entities/ids';
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
@@ -15,16 +14,16 @@ import { getTranslationFn } from '../../../util/localization';
 import { formatStarsAsText } from '../../../util/localization/format';
 import { throttle } from '../../../util/schedulers';
 import { callApi } from '../../../api/gramjs';
+import { addActionHandler, getActions, getGlobal, setGlobal } from '../..';
 import { isChatChannel, isChatGroup } from '../../helpers/chats';
 import { isApiPeerChat } from '../../helpers/peers';
-import { addActionHandler, getGlobal, setGlobal } from '../../index';
 import {
   addMessages,
   addUserStatuses,
   updateGlobalSearch,
   updateGlobalSearchFetchingStatus,
   updateGlobalSearchResults,
-  updateTopics,
+  updateTopicWithState,
 } from '../../reducers';
 import {
   selectChat, selectChatByUsername, selectChatMessage, selectCurrentGlobalSearchQuery, selectPeer, selectTabState,
@@ -205,7 +204,7 @@ async function searchMessagesGlobal<T extends GlobalState>(global: T, params: {
   let result: {
     messages: ApiMessage[];
     userStatusesById?: Record<number, ApiUserStatus>;
-    topics?: ApiTopic[];
+    topics?: ApiTopicWithState[];
     totalTopicsCount?: number;
     totalCount: number;
     nextOffsetRate?: number;
@@ -239,13 +238,13 @@ async function searchMessagesGlobal<T extends GlobalState>(global: T, params: {
 
     if (inChatResult) {
       const {
-        messages, totalCount, nextOffsetId,
+        messages, totalCount, nextOffsetId, topics: messagesTopics,
       } = inChatResult;
 
       const { topics: localTopics, count } = topics || {};
 
       result = {
-        topics: localTopics,
+        topics: messagesTopics.concat(localTopics || []),
         totalTopicsCount: count,
         messages,
         totalCount,
@@ -264,11 +263,16 @@ async function searchMessagesGlobal<T extends GlobalState>(global: T, params: {
       maxDate,
       minDate,
     });
+
     if (isDeepLink(query)) {
       const link = tryParseDeepLink(query);
       if (link?.type === 'publicMessageLink') {
+        global = getGlobal();
         messageLink = await getMessageByPublicLink(global, link);
-      } else if (link?.type === 'privateMessageLink') {
+      }
+
+      if (link?.type === 'privateMessageLink') {
+        global = getGlobal();
         messageLink = await getMessageByPrivateLink(global, link);
       }
     }
@@ -321,13 +325,17 @@ async function searchMessagesGlobal<T extends GlobalState>(global: T, params: {
     tabId,
   );
 
-  if (result.topics) {
-    global = updateTopics(global, peer!.id, result.totalTopicsCount!, result.topics);
+  if (peer && result.topics?.length) {
+    result.topics.forEach((topicState) => {
+      global = updateTopicWithState(global, peer.id, topicState);
+    });
   }
 
-  const sortedTopics = result.topics?.map(({ id }) => id).sort((a, b) => b - a);
+  const sortedTopicIds = result.topics?.sort((a, b) => (
+    (b.lastMessageId || b.topic.id) - (a.lastMessageId || a.topic.id)
+  )).map(({ topic }) => topic.id);
   global = updateGlobalSearch(global, {
-    foundTopicIds: sortedTopics,
+    foundTopicIds: sortedTopicIds,
   }, tabId);
 
   setGlobal(global);

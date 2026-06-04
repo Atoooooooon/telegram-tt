@@ -26,6 +26,7 @@ import { isGraph } from './helpers/isGraph';
 import useForceUpdate from '../../../hooks/useForceUpdate';
 import useOldLang from '../../../hooks/useOldLang';
 
+import Island from '../../gili/layout/Island';
 import Loading from '../../ui/Loading';
 import StatisticsOverview from './StatisticsOverview';
 import StatisticsRecentMessage from './StatisticsRecentMessage';
@@ -96,8 +97,8 @@ const Statistics = ({
   const lang = useOldLang();
   const containerRef = useRef<HTMLDivElement>();
   const [isReady, setIsReady] = useState(false);
-  const loadedCharts = useRef<Set<string>>(new Set());
-  const errorCharts = useRef<Set<string>>(new Set());
+  const loadedChartsRef = useRef<Set<string>>(new Set());
+  const errorChartsRef = useRef<Set<string>>(new Set());
 
   const { loadStatistics, loadStatisticsAsyncGraph } = getActions();
   const forceUpdate = useForceUpdate();
@@ -161,13 +162,13 @@ const Statistics = ({
         const isAsync = graph.graphType === 'async';
         const isError = graph.graphType === 'error';
 
-        if (isAsync || loadedCharts.current.has(name)) {
+        if (isAsync || loadedChartsRef.current.has(name)) {
           return;
         }
 
         if (isError) {
-          loadedCharts.current.add(name);
-          errorCharts.current.add(name);
+          loadedChartsRef.current.add(name);
+          errorChartsRef.current.add(name);
 
           return;
         }
@@ -186,7 +187,7 @@ const Statistics = ({
           },
         );
 
-        loadedCharts.current.add(name);
+        loadedChartsRef.current.add(name);
 
         containerRef.current!.children[index].classList.remove(styles.hidden);
       });
@@ -200,18 +201,20 @@ const Statistics = ({
   return (
     <div className={buildClassName(styles.root, 'panel-content custom-scroll', isReady && styles.ready)}>
       {statistics && (
-        <StatisticsOverview
-          statistics={statistics}
-          type={isGroup ? 'group' : 'channel'}
-          title={lang('StatisticOverview')}
-        />
+        <Island>
+          <StatisticsOverview
+            statistics={statistics}
+            type={isGroup ? 'group' : 'channel'}
+            title={lang('StatisticOverview')}
+          />
+        </Island>
       )}
 
-      {!loadedCharts.current.size && <Loading />}
+      {!loadedChartsRef.current.size && <Loading />}
 
-      <div ref={containerRef}>
+      <div ref={containerRef} data-stricterdom-ignore className={styles.graphContainer}>
         {graphs.map((graph) => {
-          const isGraphReady = loadedCharts.current.has(graph) && !errorCharts.current.has(graph);
+          const isGraphReady = loadedChartsRef.current.has(graph) && !errorChartsRef.current.has(graph);
           return (
             <div className={buildClassName(styles.graph, !isGraphReady && styles.hidden)} />
           );
@@ -219,7 +222,7 @@ const Statistics = ({
       </div>
 
       {Boolean((statistics as ApiChannelStatistics)?.recentPosts?.length) && (
-        <div className={styles.messages}>
+        <Island className={styles.messages}>
           <h2 className={styles.messagesTitle}>{lang('ChannelStats.Recent.Header')}</h2>
 
           {(statistics as ApiChannelStatistics).recentPosts.map((postStatistic) => {
@@ -251,7 +254,7 @@ const Statistics = ({
 
             return undefined;
           })}
-        </div>
+        </Island>
       )}
     </div>
   );

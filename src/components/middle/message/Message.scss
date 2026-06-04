@@ -1,4 +1,5 @@
 @use "message-content";
+@use "../../../styles/mixins";
 
 // General styles
 .Message {
@@ -153,6 +154,10 @@
       padding-left: 0;
     }
 
+    &.has-guest-avatar {
+      padding-left: 2.5rem;
+    }
+
     &.first-in-group:not(.last-in-group) {
       --border-bottom-left-radius: var(--border-radius-messages-small);
     }
@@ -181,6 +186,10 @@
       &.is-thread-top {
         padding-left: 0.25rem;
       }
+
+      &.has-guest-avatar {
+        padding-left: 2.875rem;
+      }
     }
   }
 
@@ -196,7 +205,7 @@
     --active-color: var(--color-reply-own-active);
     --max-width: 30rem;
     --accent-color: var(--color-accent-own);
-    --accent-shade-color: var(--color-green);
+    --accent-shade-color: var(--color-active);
     --secondary-color: var(--color-accent-own);
     --color-code: var(--color-code-own);
     --color-code-bg: var(--color-code-own-bg);
@@ -331,7 +340,6 @@
         mask:
           linear-gradient(to bottom, #fff 0%, #fff 100%) content-box,
           linear-gradient(to bottom, #fff 0%, #fff 100%);
-
         mask-composite: exclude;
       }
 
@@ -411,13 +419,13 @@
 
   &.is-selected {
     .message-select-control {
-      background: var(--color-green);
+      background: var(--color-active);
 
       &.group-select {
         background: transparent;
 
         &.is-selected {
-          background: var(--color-green);
+          background: var(--color-active);
         }
       }
     }
@@ -425,7 +433,7 @@
 
   .File.file-is-selected {
     .message-select-control {
-      background: var(--color-green);
+      background: var(--color-active);
     }
   }
 
@@ -440,8 +448,8 @@
   }
 
   .Audio .message-select-control {
-    top: 1.375rem;
-    left: 1.0625rem;
+    top: 1.75rem;
+    left: 1.75rem;
   }
 
   html.theme-dark &.own .Audio .toggle-play:not(.with-image) + .media-loading {
@@ -488,7 +496,7 @@
 
     &.is-selected {
       .message-select-control {
-        background: var(--color-green);
+        background: var(--color-active);
       }
 
       img,
@@ -501,7 +509,7 @@
   &.is-selected,
   &.is-forwarding {
     .message-select-control {
-      background: var(--color-green);
+      background: var(--color-active);
     }
 
     .Menu .bubble {
@@ -655,11 +663,8 @@
 
     transition: opacity var(--select-transition);
 
-    .icon-select {
-      position: absolute;
-      top: -3px;
-      left: -3px;
-      font-size: 1.625rem;
+    &-icon {
+      font-weight: 600;
     }
 
     .theme-dark & {
@@ -669,12 +674,17 @@
 
   .message-content {
     &.has-replies:not(.custom-shape),
-    &.has-footer:not(.web-page) {
+    &.has-footer:not(.web-page):not(.poll) {
       .media-inner,
       .Album {
         --border-bottom-left-radius: 0;
         --border-bottom-right-radius: 0;
       }
+    }
+
+    &.poll > .content-inner > .media-inner {
+      --border-bottom-left-radius: 0;
+      --border-bottom-right-radius: 0;
     }
 
     &.text.is-inverted-media {
@@ -709,17 +719,52 @@
     }
   }
 
-  .message-action-buttons {
+  .message-summary {
+    cursor: var(--custom-cursor, pointer);
+
+    display: flex;
+    flex-direction: column;
+
+    padding-block: 0.1875rem;
+
+    font-size: 0.875rem;
+    line-height: 1.25;
+
+    &-title {
+      font-weight: var(--font-weight-medium);
+    }
+  }
+
+  .message-action-buttons-container {
     position: absolute;
     bottom: 0;
 
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+
+    height: 100%;
+  }
+
+  .message-action-buttons-sticky-zone {
+    position: relative;
+    height: 100%;
+  }
+
+  .message-action-button-sticky {
+    position: sticky;
+    top: 0.5rem;
+  }
+
+  .message-action-buttons {
     display: flex;
     flex-direction: column;
 
     border-radius: 1.125rem;
 
     opacity: 0;
-    background-color: var(--pattern-color);
+
+    @include mixins.action-message-bg;
 
     transition: opacity 150ms;
 
@@ -729,7 +774,14 @@
   }
 
   .message-action-button {
+    overflow: visible;
+    width: 2.25rem;
+    height: 2.25rem;
     color: white;
+
+    &.action-summary .icon {
+      font-size: 1.25rem;
+    }
   }
 
   &:hover,
@@ -743,11 +795,11 @@
     opacity: 1;
   }
 
-  &.own .message-action-buttons {
+  &.own .message-action-buttons-container {
     left: -3rem;
   }
 
-  &:not(.own) .message-action-buttons {
+  &:not(.own) .message-action-buttons-container {
     right: -3rem;
   }
 

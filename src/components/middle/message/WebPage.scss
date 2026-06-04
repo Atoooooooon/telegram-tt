@@ -72,6 +72,11 @@
       opacity: 0.85;
       background-color: transparent !important;
     }
+
+    .icon {
+      margin-inline-end: 0.25rem;
+      font-size: 1rem !important;
+    }
   }
 
   .with-gift &--quick-button {
@@ -189,6 +194,23 @@
 
     body.is-ios & {
       line-height: 1.125rem;
+    }
+  }
+
+  &--ai-tone-emoji {
+    --custom-emoji-size: 3rem;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &--ai-tone {
+    max-width: 20rem;
+
+    .WebPage--ai-tone-emoji {
+      width: 3rem;
+      height: 3rem;
     }
   }
 

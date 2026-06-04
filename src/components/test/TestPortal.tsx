@@ -1,4 +1,4 @@
-import type { FC } from '../../lib/teact/teact';
+/* eslint-disable @eslint-react/purity */
 import { useState } from '../../lib/teact/teact';
 
 import Portal from '../ui/Portal';
@@ -17,7 +17,7 @@ const StateChecker = () => {
   );
 };
 
-const TestPortal: FC = () => {
+const TestPortal = () => {
   const [value, setValue] = useState(0);
   const position = 100 + Math.round(Math.random() * 300);
 

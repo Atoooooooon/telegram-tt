@@ -1,24 +1,29 @@
-import type { FC } from '../../lib/teact/teact';
-
 import buildClassName from '../../util/buildClassName';
 
-import './Spinner.scss';
+import styles from './Spinner.module.scss';
 
-const Spinner: FC<{
+type OwnProps = {
   color?: 'blue' | 'white' | 'black' | 'green' | 'gray' | 'yellow';
   backgroundColor?: 'light' | 'dark';
   className?: string;
-}> = ({
+};
+
+const Spinner = ({
   color = 'blue',
   backgroundColor,
   className,
-}) => {
+}: OwnProps) => {
   return (
     <div className={buildClassName(
-      'Spinner', className, color, backgroundColor && 'with-background', backgroundColor && `bg-${backgroundColor}`,
+      'Spinner',
+      styles.root,
+      color && styles[color],
+      backgroundColor && styles.withBackground,
+      backgroundColor && styles[`${backgroundColor}Bg`],
+      className,
     )}
     >
-      <div className="Spinner__inner" />
+      <div className={buildClassName('Spinner__inner', styles.inner)} />
     </div>
   );
 };

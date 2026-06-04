@@ -27,18 +27,14 @@ export function drawDatasets(
     let datasetProjection = hasOwnYAxis ? secondaryProjection : projection;
 
     if (datasetType === 'area') {
-      const { yMin, yMax } = projection.getParams();
-      const yHeight = yMax - yMin;
       const bottomLine = [
         { labelIndex: range.from, stackValue: 0 },
         { labelIndex: range.to, stackValue: 0 },
       ];
-      const topLine = [
-        { labelIndex: range.to, stackValue: yHeight },
-        { labelIndex: range.from, stackValue: yHeight },
-      ];
+      const lowerBoundary = points[i - 1] || bottomLine;
+      const upperBoundary = points[i].slice().reverse();
 
-      datasetPoints = mergeArrays([points[i - 1] || bottomLine, topLine]);
+      datasetPoints = mergeArrays([lowerBoundary, upperBoundary]);
     }
 
     if (datasetType === 'pie') {
@@ -88,20 +84,30 @@ function drawDataset(type, ...args) {
 function drawDatasetLine(context, points, projection, options) {
   context.beginPath();
 
-  let pixels = [];
-
+  const segments = [];
+  let current = [];
   for (let j = 0, l = points.length; j < l; j++) {
-    const { labelIndex, stackValue } = points[j];
-    pixels.push(toPixels(projection, labelIndex, stackValue));
+    const point = points[j];
+    if (point.gap) {
+      if (current.length) {
+        segments.push(current);
+        current = [];
+      }
+      continue;
+    }
+    current.push(toPixels(projection, point.labelIndex, point.stackValue));
   }
+  if (current.length) segments.push(current);
 
-  if (options.simplification) {
-    const simplifierFn = simplify(pixels);
-    pixels = simplifierFn(options.simplification).points;
-  }
-
-  pixels.forEach(([x, y]) => {
-    context.lineTo(x, y);
+  segments.forEach((segment) => {
+    let pixels = segment;
+    if (options.simplification) {
+      pixels = simplify(pixels)(options.simplification).points;
+    }
+    pixels.forEach(([x, y], k) => {
+      if (k === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    });
   });
 
   context.save();
@@ -123,6 +129,7 @@ function drawDatasetBars(context, points, projection, options) {
   context.fillStyle = options.color;
 
   for (let j = 0, l = points.length; j < l; j++) {
+    if (points[j].gap) continue;
     const { labelIndex, stackValue, stackOffset = 0 } = points[j];
 
     const [, yFrom] = toPixels(projection, labelIndex, Math.max(stackOffset, yMin));
@@ -143,18 +150,29 @@ function drawDatasetBars(context, points, projection, options) {
 function drawDatasetSteps(context, points, projection, options) {
   context.beginPath();
 
-  let pixels = [];
-
+  const segments = [];
+  let current = [];
   for (let j = 0, l = points.length; j < l; j++) {
-    const { labelIndex, stackValue } = points[j];
-    pixels.push(
-      toPixels(projection, labelIndex - PLOT_BARS_WIDTH_SHIFT, stackValue),
-      toPixels(projection, labelIndex + PLOT_BARS_WIDTH_SHIFT, stackValue),
+    const point = points[j];
+    if (point.gap) {
+      if (current.length) {
+        segments.push(current);
+        current = [];
+      }
+      continue;
+    }
+    current.push(
+      toPixels(projection, point.labelIndex - PLOT_BARS_WIDTH_SHIFT, point.stackValue),
+      toPixels(projection, point.labelIndex + PLOT_BARS_WIDTH_SHIFT, point.stackValue),
     );
   }
+  if (current.length) segments.push(current);
 
-  pixels.forEach(([x, y]) => {
-    context.lineTo(x, y);
+  segments.forEach((segment) => {
+    segment.forEach(([x, y], k) => {
+      if (k === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    });
   });
 
   context.save();
@@ -244,7 +262,8 @@ function drawDatasetPie(context, points, projection, options) {
   context.fill();
 
   if (percent >= PIE_MINIMUM_VISIBLE_PERCENT) {
-    context.font = `700 ${getPieTextSize(percent, radius)}px Helvetica, Arial, sans-serif`;
+    const fontFamily = getComputedStyle(context.canvas).fontFamily || 'sans-serif';
+    context.font = `700 ${getPieTextSize(percent, radius)}px ${fontFamily}`;
     context.textAlign = 'center';
     context.textBaseline = 'middle';
     context.fillStyle = 'white';

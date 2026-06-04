@@ -431,14 +431,16 @@ export default class MTProtoSender {
       throw new Error('Cannot send requests while disconnected');
     }
     const state = new RequestState(request, undefined);
-    const data = await this._sendQueue.getBeacon(state);
+    const data = this._sendQueue.getBeacon(state);
     if (!data) return;
     const encryptedData = await this._state.encryptMessageData(data);
 
     postMessage({
-      type: 'sendBeacon',
-      data: encryptedData,
-      url: this._fallbackConnection.href,
+      payloads: [{
+        type: 'sendBeacon',
+        data: encryptedData,
+        url: this._fallbackConnection.href,
+      }],
     });
   }
 
@@ -450,6 +452,8 @@ export default class MTProtoSender {
    * @private
    */
   async _connect(connection: Connection) {
+    const wasReconnecting = this.isReconnecting;
+
     if (!connection.isConnected()) {
       this._log.info('Connecting to {0}...'.replace('{0}', connection._ip));
       await connection.connect();
@@ -488,6 +492,8 @@ export default class MTProtoSender {
     if (!this._sendLoopHandle) {
       this._log.debug('Starting send loop');
       this._sendLoopHandle = this._sendLoop();
+    } else if (wasReconnecting) {
+      this.retryPendingStates();
     }
 
     if (!this._recvLoopHandle) {
@@ -529,7 +535,7 @@ export default class MTProtoSender {
       && this.getConnection()!.shouldLongPoll) {
       await this._sendQueueLongPoll.wait();
 
-      const res = await this._sendQueueLongPoll.get();
+      const res = this._sendQueueLongPoll.get();
 
       if (this.isReconnecting || !this._isFallback) {
         this._longPollLoopHandle = undefined;
@@ -548,8 +554,9 @@ export default class MTProtoSender {
       try {
         await this._fallbackConnection?.send(data);
       } catch (e: any) {
-        this._log.error(e);
         this._log.info('Connection closed while sending data');
+        // eslint-disable-next-line no-console
+        console.error(e);
         this._longPollLoopHandle = undefined;
         this.isSendingLongPoll = false;
         if (!this.userDisconnected) {
@@ -573,9 +580,7 @@ export default class MTProtoSender {
    * @private
    */
   async _sendLoop() {
-    // Retry previous pending requests
-    this._sendQueue.prepend(this._pendingState.values());
-    this._pendingState.clear();
+    this.retryPendingStates();
 
     while (this._userConnected && !this.isReconnecting) {
       const appendAcks = () => {
@@ -611,7 +616,7 @@ export default class MTProtoSender {
       // If we've had new ACKs appended while waiting for messages to send, add them to queue
       appendAcks();
 
-      const res = await this._sendQueue.get();
+      const res = this._sendQueue.get();
 
       this.logWithIndex.debug(`Got ${res?.batch.length} message(s) to send`);
 
@@ -644,15 +649,28 @@ export default class MTProtoSender {
 
       this._log.debug(`Encrypting ${batch.length} message(s) in ${data.length} bytes for sending`);
       this.logWithIndex.debug('Sending', batch.map((m) => m.request.className));
+      const connection = this.getConnection();
 
       data = await this._state.encryptMessageData(data);
 
+      if (this.isReconnecting) {
+        this.logWithIndex.debug('Reconnecting :(');
+        this._sendLoopHandle = undefined;
+        return;
+      }
+
+      if (!connection || connection !== this.getConnection()) {
+        this.retryPendingStates();
+        continue;
+      }
+
       try {
-        await this.getConnection()!.send(data);
+        await connection.send(data);
       } catch (e: any) {
         this.logWithIndex.debug(`Connection closed while sending data ${e}`);
-        this._log.error(e);
         this._log.info('Connection closed while sending data');
+        // eslint-disable-next-line no-console
+        console.error(e);
         this._sendLoopHandle = undefined;
         if (!this.userDisconnected) {
           this.reconnect();
@@ -694,8 +712,9 @@ export default class MTProtoSender {
         // this._log.info('Connection closed while receiving data');
         /** when the server disconnects us we want to reconnect */
         if (!this.userDisconnected) {
-          this._log.error(e);
           this._log.warn('Connection closed while receiving data');
+          // eslint-disable-next-line no-console
+          console.error(e);
           this.reconnect();
         }
         this._recvLoopHandle = undefined;
@@ -731,7 +750,8 @@ export default class MTProtoSender {
           return;
         } else {
           this._log.error('Unhandled error while receiving data');
-          this._log.error(e);
+          // eslint-disable-next-line no-console
+          console.error(e);
           this.reconnect();
           this._recvLoopHandle = undefined;
           return;
@@ -750,7 +770,8 @@ export default class MTProtoSender {
           }
         } else {
           this._log.error('Unhandled error while receiving data');
-          this._log.error(e);
+          // eslint-disable-next-line no-console
+          console.error(e);
         }
       }
 
@@ -1185,11 +1206,17 @@ export default class MTProtoSender {
     await this.connect(newConnection, true, newFallbackConnection);
 
     this.isReconnecting = false;
-    this._sendQueue.prepend(this._pendingState.values());
-    this._pendingState.clear();
 
     if (this._autoReconnectCallback) {
       await this._autoReconnectCallback();
     }
+  }
+
+  private retryPendingStates() {
+    const pendingStates = this._pendingState.values();
+    if (!pendingStates.length) return;
+
+    this._sendQueue.prepend(pendingStates);
+    this._pendingState.clear();
   }
 }

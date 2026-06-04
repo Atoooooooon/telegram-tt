@@ -166,7 +166,7 @@ async function fetchFromCacheOrRemote(
     return fetchFromCacheOrRemote(url, mediaFormat, isHtmlAllowed, retryNumber + 1);
   }
 
-  let { mimeType } = remote;
+  const { mimeType } = remote;
   let prepared = prepareMedia(remote.dataBlob);
 
   if (mimeType === 'audio/ogg' && !IS_OPUS_SUPPORTED) {
@@ -174,12 +174,19 @@ async function fetchFromCacheOrRemote(
     URL.revokeObjectURL(prepared);
     const media = await oggToWav(blob);
     prepared = prepareMedia(media);
-    mimeType = media.type;
   }
 
   memoryCache.set(url, prepared);
 
   return prepared;
+}
+
+export async function unload(url: string) {
+  memoryCache.delete(url);
+  if (!MEDIA_CACHE_DISABLED) {
+    const cacheName = url.startsWith('avatar') ? MEDIA_CACHE_NAME_AVATARS : MEDIA_CACHE_NAME;
+    await cacheApi.remove(cacheName, url);
+  }
 }
 
 function makeOnProgress(url: string) {

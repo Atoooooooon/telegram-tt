@@ -1,4 +1,4 @@
-import type { ElementRef, FC } from '../../lib/teact/teact';
+import type { ElementRef } from '../../lib/teact/teact';
 import {
   getIsHeavyAnimating,
   memo,
@@ -39,6 +39,7 @@ export type OwnProps = {
   tgsUrl?: string;
   play?: boolean | string;
   playSegment?: [number, number];
+  seekToEnd?: boolean;
   speed?: number;
   noLoop?: boolean;
   size: number;
@@ -55,11 +56,12 @@ export type OwnProps = {
   onLoad?: NoneToVoidFunction;
   onEnded?: NoneToVoidFunction;
   onLoop?: NoneToVoidFunction;
+  onFrame?: (index: number) => void;
 };
 
 const THROTTLE_MS = 150;
 
-const AnimatedSticker: FC<OwnProps> = ({
+const AnimatedSticker = ({
   ref,
   renderId,
   className,
@@ -68,6 +70,7 @@ const AnimatedSticker: FC<OwnProps> = ({
   play,
   playSegment,
   speed,
+  seekToEnd,
   noLoop,
   size,
   quality,
@@ -83,7 +86,8 @@ const AnimatedSticker: FC<OwnProps> = ({
   onLoad,
   onEnded,
   onLoop,
-}) => {
+  onFrame,
+}: OwnProps) => {
   let containerRef = useRef<HTMLDivElement>();
   if (ref) {
     containerRef = ref;
@@ -93,7 +97,7 @@ const AnimatedSticker: FC<OwnProps> = ({
 
   const [animation, setAnimation] = useState<RLottieInstance>();
   const animationRef = useRef<RLottieInstance>();
-  const isFirstRender = useRef(true);
+  const isFirstRenderRef = useRef(true);
 
   const shouldUseColorFilter = !sharedCanvas && color;
   const colorFilter = useColorFilter(shouldUseColorFilter ? color : undefined);
@@ -102,7 +106,7 @@ const AnimatedSticker: FC<OwnProps> = ({
   const playRef = useStateRef(play);
   const playSegmentRef = useStateRef(playSegment);
 
-  const rgbColor = useRef<[number, number, number] | undefined>();
+  const rgbColorRef = useRef<[number, number, number] | undefined>();
 
   const shouldForceOnHeavyAnimation = forceAlways || forceOnHeavyAnimation;
   // Delay initialization until heavy animation ends
@@ -117,9 +121,9 @@ const AnimatedSticker: FC<OwnProps> = ({
   useSyncEffect(() => {
     if (color && !shouldUseColorFilter) {
       const { r, g, b } = hex2rgbaObj(color);
-      rgbColor.current = [r, g, b];
+      rgbColorRef.current = [r, g, b];
     } else {
-      rgbColor.current = undefined;
+      rgbColorRef.current = undefined;
     }
   }, [color, shouldUseColorFilter]);
 
@@ -156,14 +160,19 @@ const AnimatedSticker: FC<OwnProps> = ({
         coords: sharedCanvasCoords,
       },
       viewId,
-      rgbColor.current,
+      rgbColorRef.current,
       onLoad,
       onEnded,
       onLoop,
+      onFrame,
     );
 
     if (speed) {
       newAnimation.setSpeed(speed);
+    }
+
+    if (seekToEnd) {
+      newAnimation.seekToEnd();
     }
 
     setAnimation(newAnimation);
@@ -183,7 +192,7 @@ const AnimatedSticker: FC<OwnProps> = ({
   useSharedIntersectionObserver(sharedCanvas, throttledInit);
 
   useEffect(() => {
-    animation?.setColor(rgbColor.current);
+    animation?.setColor(rgbColorRef.current);
   }, [color, animation]);
 
   useEffect(() => {
@@ -207,6 +216,8 @@ const AnimatedSticker: FC<OwnProps> = ({
 
     if (playSegmentRef.current) {
       animation.playSegment(playSegmentRef.current, shouldRestart, viewId);
+    } else if (seekToEnd) {
+      animation.seekToEnd();
     } else {
       animation.play(shouldRestart, viewId);
     }
@@ -250,8 +261,8 @@ const AnimatedSticker: FC<OwnProps> = ({
 
   useEffect(() => {
     if (animation) {
-      if (isFirstRender.current) {
-        isFirstRender.current = false;
+      if (isFirstRenderRef.current) {
+        isFirstRenderRef.current = false;
       } else if (tgsUrl) {
         animation.changeData(tgsUrl);
         playAnimation();

@@ -1,25 +1,38 @@
-import type { FC } from '../../../lib/teact/teact';
-import type React from '../../../lib/teact/teact';
+import type { ElementRef, TeactNode } from '../../../lib/teact/teact';
 import {
-  memo, useCallback, useMemo, useRef, useState,
+  memo, useCallback, useEffect, useMemo, useRef, useState,
 } from '../../../lib/teact/teact';
-import { getActions, getGlobal } from '../../../global';
+import { getActions, getGlobal, withGlobal } from '../../../global';
 
-import type { ApiTopic } from '../../../api/types';
 import type { GlobalState } from '../../../global/types';
-import type { ThreadId } from '../../../types';
+import type { AnimationLevel, ThreadId } from '../../../types';
 
 import { PEER_PICKER_ITEM_HEIGHT_PX } from '../../../config';
 import {
-  getCanPostInChat, getGroupStatus, getUserStatus, isUserOnline,
+  getCanPostInChat, getGroupStatus, getOrderedTopics, getUserStatus, isUserOnline,
 } from '../../../global/helpers';
 import { isApiPeerChat } from '../../../global/helpers/peers';
-import { selectMonoforumChannel, selectPeer, selectTopics, selectUserStatus } from '../../../global/selectors';
+import {
+  selectMonoforumChannel,
+  selectPeer,
+  selectTabState,
+  selectTopicsInfo,
+  selectUserStatus,
+} from '../../../global/selectors';
+import { selectAnimationLevel } from '../../../global/selectors/sharedState';
+import { selectThread } from '../../../global/selectors/threads';
 import buildClassName from '../../../util/buildClassName';
+import { mapTruthyValues, mapValues } from '../../../util/iteratees';
+import {
+  buildChatSelectionKey,
+  type ChatSelectionKey,
+  includesChatSelectionKey,
+} from '../../../util/keys/chatSelectionKey';
+import { resolveTransitionName } from '../../../util/resolveTransitionName';
 import { REM } from '../helpers/mediaDimensions';
 import renderText from '../helpers/renderText';
 
-import useSelector from '../../../hooks/data/useSelector';
+import useSelector, { useShallowSelector } from '../../../hooks/data/useSelector';
 import useInfiniteScroll from '../../../hooks/useInfiniteScroll';
 import useInputFocusOnOpen from '../../../hooks/useInputFocusOnOpen';
 import useKeyboardListNavigation from '../../../hooks/useKeyboardListNavigation';
@@ -27,14 +40,13 @@ import useLang from '../../../hooks/useLang';
 import useLastCallback from '../../../hooks/useLastCallback';
 import useOldLang from '../../../hooks/useOldLang';
 
-import Button from '../../ui/Button';
-import InfiniteScroll from '../../ui/InfiniteScroll';
-import InputText from '../../ui/InputText';
+import InfiniteScroll, { type OwnProps as InfiniteScrollProps } from '../../ui/InfiniteScroll';
 import Loading from '../../ui/Loading';
 import Modal from '../../ui/Modal';
 import Transition from '../../ui/Transition';
 import Avatar from '../Avatar';
 import FullNameTitle from '../FullNameTitle';
+import Icon from '../icons/Icon';
 import TopicIcon from '../TopicIcon';
 import PickerItem from './PickerItem';
 
@@ -44,15 +56,27 @@ export type OwnProps = {
   currentUserId?: string;
   chatOrUserIds: string[];
   isOpen: boolean;
+  title?: string;
   searchPlaceholder: string;
   search: string;
   className?: string;
   isLowStackPriority?: boolean;
+  listActiveKey?: number;
+  subheader?: TeactNode;
+  renderSearchRow?: (props: SearchRowRenderProps) => TeactNode;
+  footer?: TeactNode;
+  viewportFooter?: TeactNode;
+  selectedIds?: ChatSelectionKey[];
   loadMore?: NoneToVoidFunction;
   onSearchChange: (search: string) => void;
   onSelectChatOrUser: (chatOrUserId: string, threadId?: ThreadId) => void;
   onClose: NoneToVoidFunction;
   onCloseAnimationEnd?: NoneToVoidFunction;
+};
+
+type StateProps = {
+  animationLevel: AnimationLevel;
+  shouldSkipHistoryAnimations?: boolean;
 };
 
 const CHAT_LIST_SLIDE = 0;
@@ -61,25 +85,42 @@ const TOPIC_ICON_SIZE = 2.75 * REM;
 const ITEM_CLASS_NAME = 'ChatOrUserPicker-item';
 const TOPIC_ITEM_HEIGHT_PX = 56;
 
-const ChatOrUserPicker: FC<OwnProps> = ({
+export type SearchRowRenderProps = {
+  inputRef: ElementRef<HTMLInputElement>;
+  value: string;
+  placeholder: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
+};
+
+const ChatOrUserPicker = ({
   isOpen,
   currentUserId,
   chatOrUserIds,
+  title,
   search,
   searchPlaceholder,
   className,
+  isLowStackPriority,
+  subheader,
+  renderSearchRow,
+  footer,
+  viewportFooter,
+  listActiveKey,
+  selectedIds,
+  animationLevel,
+  shouldSkipHistoryAnimations,
   loadMore,
   onSearchChange,
   onSelectChatOrUser,
   onClose,
   onCloseAnimationEnd,
-  isLowStackPriority,
-}) => {
+}: OwnProps & StateProps) => {
   const { loadTopics } = getActions();
 
   const oldLang = useOldLang();
   const lang = useLang();
-  const containerRef = useRef<HTMLDivElement>();
+  const [chatKeyDownHandler, setChatKeyDownHandler] = useState<React.KeyboardEventHandler<HTMLDivElement>>();
   const topicContainerRef = useRef<HTMLDivElement>();
   const searchRef = useRef<HTMLInputElement>();
   const topicSearchRef = useRef<HTMLInputElement>();
@@ -95,15 +136,25 @@ const ChatOrUserPicker: FC<OwnProps> = ({
   useInputFocusOnOpen(searchRef, isOpen && activeKey === CHAT_LIST_SLIDE, resetSearch);
   useInputFocusOnOpen(topicSearchRef, isOpen && activeKey === TOPIC_LIST_SLIDE);
 
-  const selectTopicsById = useLastCallback((global: GlobalState) => {
+  const selectForumTopicsInfo = useCallback((global: GlobalState) => {
     if (!forumId) {
       return undefined;
     }
 
-    return selectTopics(global, forumId);
-  });
+    return selectTopicsInfo(global, forumId);
+  }, [forumId]);
 
-  const forumTopicsById = useSelector(selectTopicsById);
+  const topicsInfo = useSelector(selectForumTopicsInfo);
+
+  const selectTopicThreads = useCallback((global: GlobalState) => {
+    if (!forumId) {
+      return undefined;
+    }
+
+    return mapTruthyValues(topicsInfo?.topicsById || {}, (topic) => selectThread(global, forumId, topic.id));
+  }, [forumId, topicsInfo?.topicsById]);
+
+  const topicThreads = useShallowSelector(selectTopicThreads);
 
   const [topicIds, topics] = useMemo(() => {
     const global = getGlobal();
@@ -112,27 +163,25 @@ const ChatOrUserPicker: FC<OwnProps> = ({
 
     const chat = chatsById[forumId!];
 
-    if (!chat || !forumTopicsById) {
+    if (!chat || !topicsInfo) {
       return [undefined, undefined];
     }
 
     const searchTitle = topicSearch.toLowerCase();
 
-    const result = forumTopicsById
-      ? Object.values(forumTopicsById).reduce((acc, topic) => {
-        if (
-          getCanPostInChat(chat, topic, undefined, chatFullInfoById[forumId!])
-          && (!searchTitle || topic.title.toLowerCase().includes(searchTitle))
-        ) {
-          acc[topic.id] = topic;
-        }
+    const filteredTopics = Object.values(topicsInfo.topicsById).filter((topic) => (
+      getCanPostInChat(chat, topic, undefined, chatFullInfoById[forumId!])
+      && (!searchTitle || topic.title.toLowerCase().includes(searchTitle))
+    ));
+    const topicThreadInfos = topicThreads && mapValues(topicThreads, (topicThread) => topicThread.threadInfo);
+    const orderedTopics = getOrderedTopics(
+      filteredTopics,
+      topicThreadInfos,
+      topicsInfo.orderedPinnedTopicIds,
+    );
 
-        return acc;
-      }, {} as Record<number, ApiTopic>)
-      : forumTopicsById;
-
-    return [Object.keys(result).map(Number), result];
-  }, [forumId, topicSearch, forumTopicsById]);
+    return [orderedTopics.map(({ id }) => id), topicsInfo.topicsById];
+  }, [forumId, topicSearch, topicsInfo, topicThreads]);
 
   const handleHeaderBackClick = useLastCallback(() => {
     setForumId(undefined);
@@ -147,20 +196,24 @@ const ChatOrUserPicker: FC<OwnProps> = ({
     setTopicSearch(e.currentTarget.value);
   });
 
-  const handleKeyDown = useKeyboardListNavigation(containerRef, isOpen, (index) => {
+  const handleChatSelect = useLastCallback((index) => {
     if (viewportIds && viewportIds.length > 0) {
       const chatsById = getGlobal().chats.byId;
 
       const chatId = viewportIds[index === -1 ? 0 : index];
       const chat = chatsById[chatId];
       if (chat?.isForum) {
-        if (!forumTopicsById) loadTopics({ chatId });
+        if (!topicsInfo || topicsInfo.isCache) loadTopics({ chatId });
         setForumId(chatId);
       } else {
         onSelectChatOrUser(chatId);
       }
     }
-  }, `.${ITEM_CLASS_NAME}`, true);
+  });
+
+  const handleKeyDownHandlerUpdate = useLastCallback((handler: React.KeyboardEventHandler<HTMLDivElement>) => {
+    setChatKeyDownHandler(() => handler);
+  });
 
   const handleTopicKeyDown = useKeyboardListNavigation(topicContainerRef, isOpen, (index) => {
     if (topicIds?.length) {
@@ -168,11 +221,13 @@ const ChatOrUserPicker: FC<OwnProps> = ({
     }
   }, `.${ITEM_CLASS_NAME}`, true);
 
+  const isMultiSelect = Boolean(selectedIds);
+
   const handleClick = useLastCallback((chatId: string) => {
     const chatsById = getGlobal().chats.byId;
     const chat = chatsById?.[chatId];
     if (chat?.isForum) {
-      if (!forumTopicsById) loadTopics({ chatId });
+      if (!topicsInfo || topicsInfo.isCache) loadTopics({ chatId });
       setForumId(chatId);
       resetSearch();
     } else {
@@ -192,13 +247,22 @@ const ChatOrUserPicker: FC<OwnProps> = ({
       peer = monoforumChannel;
     }
 
+    const chat = global.chats.byId[id];
+    const isForum = chat?.isForum;
+
     const isSelf = peer && !isApiPeerChat(peer) ? peer.isSelf : undefined;
+    const isSelected = selectedIds && includesChatSelectionKey(selectedIds, buildChatSelectionKey(id));
+
+    const selectedTopicsCount = isForum && selectedIds
+      ? selectedIds.filter((key) => key.peerId === id && key.topicId !== undefined).length
+      : 0;
+    const hasSelectedTopics = selectedTopicsCount > 0;
 
     function getSubtitle() {
       if (!peer) return undefined;
       if (peer.id === currentUserId) return [oldLang('SavedMessagesInfo')];
       if (isApiPeerChat(peer)) {
-        return [getGroupStatus(oldLang, peer)];
+        return [getGroupStatus(lang, peer)];
       }
 
       const userStatus = selectUserStatus(global, peer.id);
@@ -209,6 +273,15 @@ const ChatOrUserPicker: FC<OwnProps> = ({
     }
 
     const [subtitle, subtitleClassName] = getSubtitle() || [];
+
+    const checkboxElement = selectedIds ? (
+      <div className={buildClassName('picker-checkbox', (isSelected || hasSelectedTopics) && 'selected')}>
+        {(isSelected || hasSelectedTopics) && <Icon name="check-bold" />}
+        {hasSelectedTopics && (
+          <div className="picker-checkbox-count">{selectedTopicsCount}</div>
+        )}
+      </div>
+    ) : undefined;
 
     return (
       <PickerItem
@@ -225,13 +298,18 @@ const ChatOrUserPicker: FC<OwnProps> = ({
           </div>
         )}
         avatarElement={(
-          <Avatar
-            peer={peer}
-            asMessageBubble={Boolean(monoforumChannel)}
-            isSavedMessages={isSelf}
-            size="medium"
-          />
+          <div className="picker-avatar-wrapper">
+            <Avatar
+              peer={peer}
+              asMessageBubble={Boolean(monoforumChannel)}
+              isSavedMessages={isSelf}
+              size="medium"
+            />
+            {isForum && <Icon name="forums" className="forum-badge" />}
+          </div>
         )}
+        inputElement={checkboxElement}
+        inputPosition="end"
         subtitle={subtitle}
         subtitleClassName={subtitleClassName}
         ripple
@@ -240,56 +318,89 @@ const ChatOrUserPicker: FC<OwnProps> = ({
         onClick={() => handleClick(id)}
       />
     );
-  }, [currentUserId, oldLang, viewportOffset]);
+  }, [currentUserId, oldLang, lang, viewportOffset, selectedIds]);
 
   function renderTopicList() {
     return (
       <>
-        <div className="modal-header modal-header-condensed" dir={lang.isRtl ? 'rtl' : undefined}>
-          <Button
-            round
-            color="translucent"
-            size="smaller"
-            ariaLabel={oldLang('Back')}
-            onClick={handleHeaderBackClick}
-            iconName="arrow-left"
-          />
-          <InputText
-            ref={topicSearchRef}
-            value={topicSearch}
-            onChange={handleTopicSearchChange}
-            onKeyDown={handleTopicKeyDown}
-            placeholder={searchPlaceholder}
-          />
+        <div className="picker-header" dir={lang.isRtl ? 'rtl' : undefined}>
+          {renderSearchRow ? renderSearchRow({
+            inputRef: topicSearchRef,
+            value: topicSearch,
+            placeholder: searchPlaceholder,
+            onChange: handleTopicSearchChange,
+            onKeyDown: handleTopicKeyDown,
+          }) : (
+            <div className="search-input-wrapper">
+              <i className="icon icon-search" />
+              <input
+                ref={topicSearchRef}
+                className="search-input"
+                type="text"
+                dir="auto"
+                placeholder={searchPlaceholder}
+                value={topicSearch}
+                onChange={handleTopicSearchChange}
+                onKeyDown={handleTopicKeyDown}
+              />
+            </div>
+          )}
         </div>
-        <InfiniteScroll
-          ref={topicContainerRef}
-          className="picker-list custom-scroll"
-          items={topicIds}
-          withAbsolutePositioning
-          maxHeight={(topicIds?.length || 0) * TOPIC_ITEM_HEIGHT_PX}
-          onKeyDown={handleTopicKeyDown}
-        >
-          {!topicIds && <Loading />}
-          {topicIds?.map((topicId, i) => (
-            <PickerItem
-              key={`${forumId}_${topicId}`}
-              className={ITEM_CLASS_NAME}
+        {topicIds?.length ? (
+          <InfiniteScroll
+            ref={topicContainerRef}
+            className="picker-list custom-scroll"
+            items={topicIds}
+            withAbsolutePositioning
+            maxHeight={(topicIds?.length || 0) * TOPIC_ITEM_HEIGHT_PX}
+            onKeyDown={handleTopicKeyDown}
+          >
+            {topicIds.map((topicId, i) => {
+              const chatSelectionKey = buildChatSelectionKey(forumId!, topicId);
+              const isTopicSelected = selectedIds && includesChatSelectionKey(selectedIds, chatSelectionKey);
 
-              onClick={() => onSelectChatOrUser(forumId!, topicId)}
-              style={`top: ${(viewportOffset + i) * TOPIC_ITEM_HEIGHT_PX}px;`}
-              avatarElement={(
-                <TopicIcon
-                  size={TOPIC_ICON_SIZE}
-                  topic={topics[topicId]}
-                  className="topic-icon"
-                  letterClassName="topic-icon-letter"
+              const topicCheckboxElement = isMultiSelect ? (
+                <div className={buildClassName('picker-checkbox', isTopicSelected && 'selected')}>
+                  {isTopicSelected && <Icon name="check-bold" />}
+                </div>
+              ) : undefined;
+
+              return (
+                <PickerItem
+                  key={`${forumId}_${topicId}`}
+                  className={ITEM_CLASS_NAME}
+                  onClick={() => onSelectChatOrUser(forumId!, topicId)}
+                  style={`top: ${i * TOPIC_ITEM_HEIGHT_PX}px;`}
+                  avatarElement={(
+                    <div className="picker-avatar-wrapper">
+                      <TopicIcon
+                        size={TOPIC_ICON_SIZE}
+                        topic={topics[topicId]}
+                        className="topic-icon"
+                        letterClassName="topic-icon-letter"
+                      />
+                    </div>
+                  )}
+                  title={renderText(topics[topicId].title)}
+                  inputElement={topicCheckboxElement}
+                  inputPosition="end"
                 />
-              )}
-              title={renderText(topics[topicId].title)}
-            />
-          ))}
-        </InfiniteScroll>
+              );
+            })}
+            {Boolean(viewportFooter) && (
+              <div
+                className="picker-list-spacer"
+                style={`top: ${topicIds.length * TOPIC_ITEM_HEIGHT_PX}px`}
+              />
+            )}
+          </InfiniteScroll>
+        ) : topicIds && !topicIds.length ? (
+          <p className="no-results">{lang('NothingFound')}</p>
+        ) : (
+          <div className="picker-list picker-list-loading">
+            <Loading />
+          </div>
+        )}
       </>
     );
   }
@@ -297,51 +408,68 @@ const ChatOrUserPicker: FC<OwnProps> = ({
   function renderChatList() {
     return (
       <>
-        <div className="modal-header modal-header-condensed" dir={lang.isRtl ? 'rtl' : undefined}>
-          <Button
-            round
-            color="translucent"
-            size="smaller"
-            ariaLabel={oldLang('Close')}
-            onClick={onClose}
-            iconName="close"
-          />
-          <InputText
-            ref={searchRef}
-            value={search}
-            onChange={handleSearchChange}
-            onKeyDown={handleKeyDown}
-            placeholder={searchPlaceholder}
-          />
+        <div className="picker-header" dir={lang.isRtl ? 'rtl' : undefined}>
+          {renderSearchRow ? renderSearchRow({
+            inputRef: searchRef,
+            value: search,
+            placeholder: searchPlaceholder,
+            onChange: handleSearchChange,
+            onKeyDown: chatKeyDownHandler,
+          }) : (
+            <div className="search-input-wrapper">
+              <i className="icon icon-search" />
+              <input
+                ref={searchRef}
+                className="search-input"
+                type="text"
+                dir="auto"
+                placeholder={searchPlaceholder}
+                value={search}
+                onChange={handleSearchChange}
+                onKeyDown={chatKeyDownHandler}
+              />
+            </div>
+          )}
+          {subheader}
         </div>
-        {viewportIds?.length ? (
-          <InfiniteScroll
-            ref={containerRef}
-            className="picker-list custom-scroll"
-            items={viewportIds}
-            itemSelector={`.${ITEM_CLASS_NAME}`}
-            onLoadMore={getMore}
-            withAbsolutePositioning
+        <Transition
+          activeKey={listActiveKey || 0}
+          name={resolveTransitionName('slideOptimized', animationLevel, shouldSkipHistoryAnimations, lang.isRtl)}
+          slideClassName="ChatOrUserPicker_slide"
+        >
+          <ChatListContent
+            isOpen={isOpen}
+            viewportIds={viewportIds}
             maxHeight={chatOrUserIds.length * PEER_PICKER_ITEM_HEIGHT_PX}
-            onKeyDown={handleKeyDown}
-          >
-            {viewportIds.map(renderChatItem)}
-          </InfiniteScroll>
-        ) : viewportIds && !viewportIds.length ? (
-          <p className="no-results">{oldLang('lng_blocked_list_not_found')}</p>
-        ) : (
-          <Loading />
-        )}
+            viewportFooter={viewportFooter}
+            onLoadMore={getMore}
+            onSelect={handleChatSelect}
+            renderItem={renderChatItem}
+            onKeyDownHandlerUpdate={handleKeyDownHandlerUpdate}
+          />
+        </Transition>
       </>
     );
   }
 
+  const handleModalClose = useLastCallback(() => {
+    if (forumId) {
+      handleHeaderBackClick();
+    } else {
+      onClose();
+    }
+  });
+
   return (
     <Modal
       isOpen={isOpen}
+      title={title}
+      hasCloseButton
+      isBackButton={Boolean(forumId)}
+      headerClassName="modal-header-condensed-wide"
       className={buildClassName('ChatOrUserPicker', className)}
       isLowStackPriority={isLowStackPriority}
-      onClose={onClose}
+      onClose={handleModalClose}
       onCloseAnimationEnd={onCloseAnimationEnd}
     >
       <Transition activeKey={activeKey} name="slideFade" slideClassName="ChatOrUserPicker_slide">
@@ -349,8 +477,73 @@ const ChatOrUserPicker: FC<OwnProps> = ({
           return activeKey === TOPIC_LIST_SLIDE ? renderTopicList() : renderChatList();
         }}
       </Transition>
+      {footer}
     </Modal>
   );
 };
 
-export default memo(ChatOrUserPicker);
+type ChatListContentProps = {
+  isOpen: boolean;
+  viewportIds?: string[];
+  maxHeight: number;
+  viewportFooter?: TeactNode;
+  onLoadMore: InfiniteScrollProps['onLoadMore'];
+  onSelect: (index: number) => void;
+  renderItem: (id: string, index: number) => TeactNode;
+  onKeyDownHandlerUpdate: (handler: React.KeyboardEventHandler<HTMLDivElement>) => void;
+};
+
+function ChatListContent({
+  isOpen,
+  viewportIds,
+  maxHeight,
+  viewportFooter,
+  onLoadMore,
+  onSelect,
+  onKeyDownHandlerUpdate,
+  renderItem,
+}: ChatListContentProps) {
+  const lang = useLang();
+  const containerRef = useRef<HTMLDivElement>();
+
+  const handleKeyDown = useKeyboardListNavigation(containerRef, isOpen, onSelect, `.${ITEM_CLASS_NAME}`, true);
+
+  useEffect(() => {
+    onKeyDownHandlerUpdate(handleKeyDown);
+  }, [handleKeyDown, onKeyDownHandlerUpdate]);
+
+  return (
+    <>
+      {viewportIds?.length ? (
+        <InfiniteScroll
+          ref={containerRef}
+          className="picker-list custom-scroll"
+          items={viewportIds}
+          itemSelector={`.${ITEM_CLASS_NAME}`}
+          onLoadMore={onLoadMore}
+          withAbsolutePositioning
+          maxHeight={maxHeight}
+          onKeyDown={handleKeyDown}
+        >
+          {viewportIds.map(renderItem)}
+          {Boolean(viewportFooter) && (
+            <div className="picker-list-spacer" style={`top: ${maxHeight}px`} />
+          )}
+        </InfiniteScroll>
+      ) : viewportIds && !viewportIds.length ? (
+        <p className="no-results">{lang('NothingFound')}</p>
+      ) : (
+        <Loading />
+      )}
+    </>
+  );
+}
+
+export default memo(withGlobal<OwnProps>(
+  (global): Complete<StateProps> => {
+    return {
+      animationLevel: selectAnimationLevel(global),
+      shouldSkipHistoryAnimations: selectTabState(global).shouldSkipHistoryAnimations,
+    };
+  },
+)(ChatOrUserPicker));

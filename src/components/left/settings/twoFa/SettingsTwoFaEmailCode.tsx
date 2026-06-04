@@ -10,11 +10,11 @@ import type { ApiSticker } from '../../../../api/types';
 import { selectAnimatedEmoji, selectTabState } from '../../../../global/selectors';
 import { IS_TOUCH_ENV } from '../../../../util/browser/windowEnvironment';
 
-import useAppLayout from '../../../../hooks/useAppLayout';
 import useHistoryBack from '../../../../hooks/useHistoryBack';
 import useOldLang from '../../../../hooks/useOldLang';
 
 import AnimatedIconFromSticker from '../../../common/AnimatedIconFromSticker';
+import Island from '../../../gili/layout/Island';
 import InputText from '../../../ui/InputText';
 import Loading from '../../../ui/Loading';
 
@@ -47,18 +47,14 @@ const SettingsTwoFaEmailCode: FC<OwnProps & StateProps> = ({
   recoveryEmail,
 }) => {
   const inputRef = useRef<HTMLInputElement>();
-  const { isMobile } = useAppLayout();
-  const focusDelayTimeoutMs = isMobile ? 550 : 400;
 
   const [value, setValue] = useState<string>('');
 
   useEffect(() => {
-    if (!IS_TOUCH_ENV) {
-      setTimeout(() => {
-        inputRef.current!.focus();
-      }, focusDelayTimeoutMs);
+    if (!IS_TOUCH_ENV && isActive) {
+      inputRef.current!.focus();
     }
-  }, [focusDelayTimeoutMs]);
+  }, [isActive]);
 
   const lang = useOldLang();
 
@@ -93,7 +89,7 @@ const SettingsTwoFaEmailCode: FC<OwnProps & StateProps> = ({
         )}
       </div>
 
-      <div className="settings-item settings-group">
+      <Island>
         <InputText
           value={value}
           ref={inputRef}
@@ -103,7 +99,7 @@ const SettingsTwoFaEmailCode: FC<OwnProps & StateProps> = ({
           onChange={handleInputChange}
         />
         {isLoading && <Loading />}
-      </div>
+      </Island>
     </div>
   );
 };

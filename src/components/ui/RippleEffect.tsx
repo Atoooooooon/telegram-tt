@@ -1,6 +1,4 @@
-import type { FC } from '../../lib/teact/teact';
-import type React from '../../lib/teact/teact';
-import { memo, useMemo, useState } from '../../lib/teact/teact';
+import { memo, useEffect, useMemo, useRef, useState } from '../../lib/teact/teact';
 
 import { debounce } from '../../util/schedulers';
 
@@ -16,8 +14,9 @@ interface Ripple {
 
 const ANIMATION_DURATION_MS = 700;
 
-const RippleEffect: FC = () => {
+const RippleEffect = () => {
   const [ripples, setRipples] = useState<Ripple[]>([]);
+  const containerRef = useRef<HTMLDivElement>();
 
   const cleanUpDebounced = useMemo(() => {
     return debounce(() => {
@@ -25,17 +24,17 @@ const RippleEffect: FC = () => {
     }, ANIMATION_DURATION_MS, false);
   }, []);
 
-  const handleMouseDown = useLastCallback((e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-    if (e.button !== 0) {
-      return;
-    }
+  const handleMouseDown = useLastCallback((e: MouseEvent) => {
+    if (e.button !== 0) return;
 
-    const container = e.currentTarget;
-    const position = container.getBoundingClientRect();
-    const rippleSize = container.offsetWidth / 2;
+    const parent = containerRef.current?.parentElement;
+    if (!parent) return;
 
-    setRipples([
-      ...ripples,
+    const position = parent.getBoundingClientRect();
+    const rippleSize = parent.offsetWidth / 2;
+
+    setRipples((prev) => [
+      ...prev,
       {
         x: e.clientX - position.x - (rippleSize / 2),
         y: e.clientY - position.y - (rippleSize / 2),
@@ -46,8 +45,16 @@ const RippleEffect: FC = () => {
     cleanUpDebounced();
   });
 
+  useEffect(() => {
+    const parent = containerRef.current?.parentElement;
+    if (!parent) return undefined;
+
+    parent.addEventListener('mousedown', handleMouseDown);
+    return () => parent.removeEventListener('mousedown', handleMouseDown);
+  }, [handleMouseDown]);
+
   return (
-    <div className="ripple-container" onMouseDown={handleMouseDown}>
+    <div ref={containerRef} className="ripple-container">
       {ripples.map(({ x, y, size }) => (
         <div
           className="ripple-wave"

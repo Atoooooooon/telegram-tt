@@ -8,15 +8,12 @@ import type {
 } from '../../../api/types';
 import type { MessageListType, ThemeKey, ThreadId } from '../../../types/index';
 
-import { isChatChannel, stripCustomEmoji } from '../../../global/helpers';
+import { canEditMediaInEditor, isChatChannel, stripCustomEmoji } from '../../../global/helpers';
 import {
   selectCanAnimateInterface,
   selectChat,
   selectChatMessage,
-  selectDraft,
-  selectEditingId,
   selectEditingMessage,
-  selectEditingScheduledId,
   selectForwardedSender,
   selectIsChatWithSelf,
   selectIsCurrentUserPremium,
@@ -25,19 +22,22 @@ import {
   selectTheme,
 } from '../../../global/selectors';
 import { selectIsMediaNsfw } from '../../../global/selectors/media';
+import { selectDraft, selectEditingId, selectEditingScheduledId } from '../../../global/selectors/threads';
 import buildClassName from '../../../util/buildClassName';
 import captureEscKeyListener from '../../../util/captureEscKeyListener';
 import { unique } from '../../../util/iteratees';
 
+import useAppLayout from '../../../hooks/useAppLayout';
 import useContextMenuHandlers from '../../../hooks/useContextMenuHandlers';
 import useCurrentOrPrev from '../../../hooks/useCurrentOrPrev';
+import useFrozenProps from '../../../hooks/useFrozenProps';
 import useLang from '../../../hooks/useLang';
 import useLastCallback from '../../../hooks/useLastCallback';
 import useOldLang from '../../../hooks/useOldLang';
 import usePeerColor from '../../../hooks/usePeerColor';
 import useShowTransitionDeprecated from '../../../hooks/useShowTransitionDeprecated';
 
-import { ClosableEmbeddedMessage } from '../../common/embedded/EmbeddedMessage';
+import EmbeddedMessage from '../../common/embedded/EmbeddedMessage';
 import Icon from '../../common/icons/Icon';
 import Button from '../../ui/Button';
 import Menu from '../../ui/Menu';
@@ -76,38 +76,26 @@ type OwnProps = {
   chatId: string;
   threadId: ThreadId;
   messageListType: MessageListType;
-  onClear?: () => void;
+  onClear?: NoneToVoidFunction;
 };
 
 const CLOSE_DURATION = 350;
 
-const ComposerEmbeddedMessage = ({
-  replyInfo,
-  suggestedPostInfo,
-  editingId,
-  message,
-  sender,
-  shouldAnimate,
-  forwardedMessagesCount,
-  noAuthors,
-  noCaptions,
-  forwardsHaveCaptions,
-  shouldForceShowEditing,
-  isCurrentUserPremium,
-  isContextMenuDisabled,
-  isReplyToDiscussion,
-  isInChangingRecipientMode,
-  shouldPreventComposerAnimation,
-  senderChat,
-  chatId,
-  currentUserId,
-  isSenderChannel,
-  forwardMessageIds,
-  fromChatId,
-  isMediaNsfw,
-  theme,
-  onClear,
-}: OwnProps & StateProps) => {
+const ComposerEmbeddedMessage = (props: OwnProps & StateProps) => {
+  const {
+    shouldAnimate,
+    isReplyToDiscussion,
+    isInChangingRecipientMode,
+    forwardMessageIds,
+    fromChatId,
+    replyInfo,
+    editingId,
+    suggestedPostInfo,
+    shouldForceShowEditing,
+    message,
+    forwardedMessagesCount,
+  } = props;
+
   const {
     resetDraftReplyInfo,
     resetDraftSuggestedPostInfo,
@@ -121,25 +109,24 @@ const ComposerEmbeddedMessage = ({
     exitForwardMode,
     setShouldPreventComposerAnimation,
     openSuggestMessageModal,
+    requestMessageMediaEditor,
   } = getActions();
   const ref = useRef<HTMLDivElement>();
   const oldLang = useOldLang();
   const lang = useLang();
+  const { isMobile } = useAppLayout();
 
   const isReplyToTopicStart = message?.content.action?.type === 'topicCreate';
-  const isShowingReply = replyInfo && !shouldForceShowEditing;
-  const isReplyWithQuote = Boolean(replyInfo?.quoteText);
   const isShowingSuggestedPost = Boolean(suggestedPostInfo) && !shouldForceShowEditing;
-
   const isForwarding = Boolean(forwardedMessagesCount);
 
   const selectSenderFromForwardedMessage = useLastCallback((forwardedMessage: ApiMessage) => {
     const global = getGlobal();
-    sender = selectForwardedSender(global, forwardedMessage);
-    if (!sender) {
-      sender = selectSender(global, forwardedMessage);
+    let localSender = selectForwardedSender(global, forwardedMessage);
+    if (!localSender) {
+      localSender = selectSender(global, forwardedMessage);
     }
-    return sender;
+    return localSender;
   });
 
   const forwardSenders = useMemo(() => {
@@ -159,7 +146,7 @@ const ComposerEmbeddedMessage = ({
   })();
 
   const {
-    shouldRender, transitionClassNames,
+    shouldRender, transitionClassNames, isClosing,
   } = useShowTransitionDeprecated(
     isShown && !isReplyToTopicStart && !isReplyToDiscussion,
     undefined,
@@ -169,6 +156,37 @@ const ComposerEmbeddedMessage = ({
     CLOSE_DURATION,
     !shouldAnimate,
   );
+
+  const {
+    chatId,
+    currentUserId,
+    theme,
+    onClear,
+    isCurrentUserPremium,
+    isContextMenuDisabled,
+    shouldPreventComposerAnimation,
+    sender,
+    senderChat,
+    isMediaNsfw,
+    noAuthors,
+    noCaptions,
+    forwardsHaveCaptions,
+    forwardedMessagesCount: frozenForwardedMessagesCount,
+    message: frozenMessage,
+    shouldForceShowEditing: frozenShouldForceShowEditing,
+    suggestedPostInfo: frozenSuggestedPostInfo,
+    replyInfo: frozenReplyInfo,
+    editingId: frozenEditingId,
+    isSenderChannel,
+  } = useFrozenProps(props, isClosing);
+
+  const isForwardingRendering = Boolean(frozenForwardedMessagesCount);
+  const isShowingReplyRendering = Boolean(frozenReplyInfo) && !frozenShouldForceShowEditing;
+  const isReplyWithQuoteRendering = Boolean(frozenReplyInfo?.quoteText);
+  const isShowingSuggestedPostRendering = Boolean(frozenSuggestedPostInfo) && !frozenShouldForceShowEditing;
+
+  const canMediaBeEdited = frozenMessage && canEditMediaInEditor(frozenMessage) && !isMobile;
+
   useEffect(() => {
     if (shouldPreventComposerAnimation) {
       setShouldPreventComposerAnimation({ shouldPreventComposerAnimation: false });
@@ -176,14 +194,14 @@ const ComposerEmbeddedMessage = ({
   });
 
   const clearEmbedded = useLastCallback(() => {
-    if (editingId) {
+    if (frozenEditingId) {
       setEditingId({ messageId: undefined });
-    } else if (forwardedMessagesCount) {
+    } else if (frozenForwardedMessagesCount) {
       exitForwardMode();
-    } else if (isShowingSuggestedPost) {
+    } else if (isShowingSuggestedPostRendering) {
       resetDraftSuggestedPostInfo();
       resetDraftReplyInfo();
-    } else if (replyInfo && !shouldForceShowEditing) {
+    } else if (frozenReplyInfo && !frozenShouldForceShowEditing) {
       resetDraftReplyInfo();
     }
     onClear?.();
@@ -197,14 +215,22 @@ const ComposerEmbeddedMessage = ({
   } = useContextMenuHandlers(ref);
 
   const focusMessageFromDraft = () => {
-    focusMessage({ chatId: message!.chatId, messageId: message!.id, noForumTopicPanel: true });
+    focusMessage({ chatId: frozenMessage!.chatId, messageId: frozenMessage!.id, noForumTopicPanel: true });
   };
   const handleMessageClick = useLastCallback((e: React.MouseEvent): void => {
-    if (suggestedPostInfo) {
+    if (frozenSuggestedPostInfo) {
       openSuggestMessageModal({ chatId });
       return;
     }
     handleContextMenu(e);
+  });
+
+  const handlePictogramClick = useLastCallback((e: React.MouseEvent): void => {
+    e.stopPropagation();
+    if ((frozenEditingId || frozenReplyInfo?.type === 'message') && canMediaBeEdited) {
+      requestMessageMediaEditor();
+      return;
+    }
   });
 
   const handleClearClick = useLastCallback((e: React.MouseEvent<HTMLButtonElement, MouseEvent>): void => {
@@ -231,6 +257,13 @@ const ComposerEmbeddedMessage = ({
   });
   const handleDoNotReplyClick = useLastCallback(buildAutoCloseMenuItemHandler(clearEmbedded));
 
+  const handleIconKeyDown = useLastCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleContextMenu(e as unknown as React.MouseEvent);
+    }
+  });
+
   const getTriggerElement = useLastCallback(() => ref.current);
   const getRootElement = useLastCallback(() => ref.current!);
   const getMenuElement = useLastCallback(() => ref.current!.querySelector('.forward-context-menu .bubble'));
@@ -243,47 +276,47 @@ const ComposerEmbeddedMessage = ({
   }, [handleContextMenuClose, handleContextMenuHide, shouldRender]);
 
   const className = buildClassName('ComposerEmbeddedMessage', transitionClassNames);
-  const renderingSender = useCurrentOrPrev(sender, true);
 
   const { className: peerColorClass, style: peerColorStyle } = usePeerColor({
-    peer: renderingSender,
+    peer: sender,
     theme,
   });
   const innerClassName = buildClassName('ComposerEmbeddedMessage_inner', peerColorClass);
 
   const leftIcon = useMemo(() => {
-    if (editingId) {
+    if (frozenEditingId) {
       return 'edit';
     }
-    if (isShowingSuggestedPost) {
+    if (isShowingSuggestedPostRendering) {
       return 'cash-circle';
     }
-    if (isForwarding) {
+    if (isForwardingRendering) {
       return 'forward';
     }
-    if (isShowingReply) {
+    if (isShowingReplyRendering) {
       return 'reply';
     }
 
     return undefined;
-  }, [editingId, isForwarding, isShowingReply, isShowingSuggestedPost]);
+  }, [frozenEditingId, isForwardingRendering, isShowingReplyRendering, isShowingSuggestedPostRendering]);
 
-  const customText = forwardedMessagesCount && forwardedMessagesCount > 1
-    ? oldLang('ForwardedMessageCount', forwardedMessagesCount)
+  const customText = frozenForwardedMessagesCount && frozenForwardedMessagesCount > 1
+    ? oldLang('ForwardedMessageCount', frozenForwardedMessagesCount)
     : undefined;
 
   const strippedMessage = useMemo(() => {
-    if (!message || !isForwarding || !message.content.text || !noAuthors || isCurrentUserPremium) return message;
+    if (!frozenMessage || !isForwardingRendering || !frozenMessage.content.text
+      || !noAuthors || isCurrentUserPremium) return frozenMessage;
 
-    const strippedText = stripCustomEmoji(message.content.text);
+    const strippedText = stripCustomEmoji(frozenMessage.content.text);
     return {
-      ...message,
+      ...frozenMessage,
       content: {
-        ...message.content,
+        ...frozenMessage.content,
         text: strippedText,
       },
     };
-  }, [isCurrentUserPremium, isForwarding, message, noAuthors]);
+  }, [isCurrentUserPremium, isForwardingRendering, frozenMessage, noAuthors]);
 
   const renderingLeftIcon = useCurrentOrPrev(leftIcon, true);
 
@@ -291,22 +324,29 @@ const ComposerEmbeddedMessage = ({
     return undefined;
   }
 
-  const canReplyInSenderChat = sender && !isSenderChannel && chatId !== sender.id && sender.id !== currentUserId;
+  const canReplyInSenderChat = sender && !isSenderChannel
+    && chatId !== sender.id && sender.id !== currentUserId;
 
   return (
     <div className={className} ref={ref} onContextMenu={handleContextMenu}>
       <div className={innerClassName} style={peerColorStyle}>
-        <div className="embedded-left-icon" onClick={handleContextMenu}>
+        <div
+          className="embedded-left-icon"
+          role="button"
+          tabIndex={0}
+          onClick={handleContextMenu}
+          onKeyDown={handleIconKeyDown}
+        >
           {renderingLeftIcon && <Icon name={renderingLeftIcon} />}
-          {Boolean(replyInfo?.quoteText) && (
+          {Boolean(frozenReplyInfo?.quoteText) && (
             <Icon name="quote" className="quote-reply" />
           )}
         </div>
-        <ClosableEmbeddedMessage
+        <EmbeddedMessage
           isOpen={isShown}
           className="inside-input"
-          replyInfo={replyInfo}
-          suggestedPostInfo={suggestedPostInfo}
+          replyInfo={frozenReplyInfo}
+          suggestedPostInfo={frozenSuggestedPostInfo}
           isMediaNsfw={isMediaNsfw}
           isInComposer
           message={strippedMessage}
@@ -314,9 +354,11 @@ const ComposerEmbeddedMessage = ({
           composerForwardSenders={forwardSenders}
           customText={customText}
           noCaptions={noCaptions}
-          title={(editingId && !isShowingReply) ? oldLang('EditMessage')
+          title={(frozenEditingId && !isShowingReplyRendering) ? oldLang('EditMessage')
             : noAuthors ? oldLang('HiddenSendersNameDescription') : undefined}
           onClick={handleMessageClick}
+          onPictogramClick={canMediaBeEdited ? handlePictogramClick : undefined}
+          pictogramActionIcon={canMediaBeEdited ? 'edit' : undefined}
           senderChat={senderChat}
         />
         <Button
@@ -328,7 +370,7 @@ const ComposerEmbeddedMessage = ({
           onClick={handleClearClick}
           iconName="close"
         />
-        {(isShowingReply || isForwarding) && !isContextMenuDisabled && (
+        {(isShowingReplyRendering || isForwardingRendering) && !isContextMenuDisabled && (
           <Menu
             isOpen={isContextMenuOpen}
             anchor={contextMenuAnchor}
@@ -339,7 +381,7 @@ const ComposerEmbeddedMessage = ({
             onClose={handleContextMenuClose}
             onCloseAnimationEnd={handleContextMenuHide}
           >
-            {isForwarding && (
+            {isForwardingRendering && (
               <>
                 <MenuItem
                   icon={!noAuthors ? 'message-succeeded' : undefined}
@@ -349,7 +391,7 @@ const ComposerEmbeddedMessage = ({
                     noAuthors: false,
                   })}
                 >
-                  {oldLang(forwardedMessagesCount > 1 ? 'ShowSenderNames' : 'ShowSendersName')}
+                  {oldLang(frozenForwardedMessagesCount > 1 ? 'ShowSenderNames' : 'ShowSendersName')}
                 </MenuItem>
                 <MenuItem
                   icon={noAuthors ? 'message-succeeded' : undefined}
@@ -359,7 +401,7 @@ const ComposerEmbeddedMessage = ({
                     noAuthors: true,
                   })}
                 >
-                  {oldLang(forwardedMessagesCount > 1 ? 'HideSenderNames' : 'HideSendersName')}
+                  {oldLang(frozenForwardedMessagesCount > 1 ? 'HideSenderNames' : 'HideSendersName')}
                 </MenuItem>
                 {forwardsHaveCaptions && (
                   <>
@@ -372,7 +414,8 @@ const ComposerEmbeddedMessage = ({
                         noCaptions: false,
                       })}
                     >
-                      {oldLang(forwardedMessagesCount > 1 ? 'Conversation.ForwardOptions.ShowCaption' : 'ShowCaption')}
+                      {oldLang(frozenForwardedMessagesCount > 1
+                        ? 'Conversation.ForwardOptions.ShowCaption' : 'ShowCaption')}
                     </MenuItem>
                     <MenuItem
                       icon={noCaptions ? 'message-succeeded' : undefined}
@@ -382,7 +425,8 @@ const ComposerEmbeddedMessage = ({
                         noCaptions: true,
                       })}
                     >
-                      {oldLang(forwardedMessagesCount > 1 ? 'Conversation.ForwardOptions.HideCaption' : 'HideCaption')}
+                      {oldLang(frozenForwardedMessagesCount > 1
+                        ? 'Conversation.ForwardOptions.HideCaption' : 'HideCaption')}
                     </MenuItem>
                   </>
                 )}
@@ -392,7 +436,7 @@ const ComposerEmbeddedMessage = ({
                 </MenuItem>
               </>
             )}
-            {isShowingReply && (
+            {isShowingReplyRendering && (
               <>
                 <MenuItem
                   icon="show-message"
@@ -400,7 +444,7 @@ const ComposerEmbeddedMessage = ({
                 >
                   {oldLang('Message.Context.Goto')}
                 </MenuItem>
-                {isReplyWithQuote && (
+                {isReplyWithQuoteRendering && (
                   <MenuItem
                     icon="remove-quote"
                     onClick={handleRemoveQuoteClick}

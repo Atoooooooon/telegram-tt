@@ -2,6 +2,7 @@ import type { TeactNode } from '../../lib/teact/teact';
 
 import type {
   ApiAttachment,
+  ApiInputMessageReplyInfo,
   ApiMessage,
   ApiMessageEntityTextUrl,
   ApiPeer,
@@ -9,8 +10,7 @@ import type {
   ApiTypeStory,
 } from '../../api/types';
 import type {
-  ApiFormattedText,
-  ApiPoll, ApiReplyInfo, ApiWebPage, MediaContainer, StatefulMediaContent,
+  ApiFormattedText, ApiMessagePoll, ApiReplyInfo, ApiWebPage, MediaContainer, StatefulMediaContent,
 } from '../../api/types/messages';
 import type { ThreadId } from '../../types';
 import type { LangFn } from '../../util/localization';
@@ -35,7 +35,13 @@ import { areSortedArraysIntersecting, unique } from '../../util/iteratees';
 import { isLocalMessageId } from '../../util/keys/messageKey';
 import { getServerTime } from '../../util/serverTime';
 import { getGlobal } from '../index';
-import { selectPollFromMessage, selectWebPageFromMessage } from '../selectors';
+import {
+  selectChatMessage,
+  selectPollFromMessage,
+  selectScheduledMessage,
+  selectWebPageFromMessage,
+} from '../selectors';
+import { selectThreadIdFromMessage } from '../selectors/threads';
 import { getMainUsername } from './users';
 
 const RE_LINK = new RegExp(RE_LINK_TEMPLATE, 'i');
@@ -63,13 +69,15 @@ export function getMessageTranscription(message: ApiMessage) {
 
 export function hasMessageText(message: MediaContainer) {
   const {
-    action, text, sticker, photo, video, audio, voice, document, pollId, todo,
+    action, text, sticker, photo, video, audio, voice, document, pollId, todo, dice,
     webPage, contact, invoice, location, game, storyData, giveaway, giveawayResults, paidMedia,
   } = message.content;
 
+  if (pollId) return false;
+
   return Boolean(text) || !(
     sticker || photo || video || audio || voice || document || contact || pollId || todo || webPage
-    || invoice || location || game || storyData || giveaway || giveawayResults
+    || invoice || location || game || storyData || giveaway || giveawayResults || dice
     || paidMedia || action?.type === 'phoneCall'
   );
 }
@@ -89,7 +97,7 @@ export function groupStatefulContent({
   story,
   webPage,
 }: {
-  poll?: ApiPoll;
+  poll?: ApiMessagePoll;
   story?: ApiTypeStory;
   webPage?: ApiWebPage;
 }) {
@@ -104,6 +112,55 @@ export function getMessageText(message: MediaContainer) {
   return hasMessageText(message) ? message.content.text : undefined;
 }
 
+function getSharedPrefixLength(firstText: string, secondText: string) {
+  const minLength = Math.min(firstText.length, secondText.length);
+
+  let index = 0;
+  while (index < minLength && firstText[index] === secondText[index]) {
+    index++;
+  }
+
+  return index;
+}
+
+export function pickMatchingTypingDraftMessage<T extends ApiMessage>(
+  incomingMessage: MediaContainer,
+  typingDraftMessages: T[],
+) {
+  const incomingText = getMessageText(incomingMessage)?.text;
+  if (!incomingText) {
+    return undefined;
+  }
+
+  if (typingDraftMessages.length === 1) {
+    return typingDraftMessages[0];
+  }
+
+  let bestMatch: T | undefined;
+  let bestScore = 0;
+
+  typingDraftMessages.forEach((typingDraftMessage) => {
+    const draftText = getMessageText(typingDraftMessage)?.text;
+    if (!draftText) return;
+
+    const score = getSharedPrefixLength(incomingText, draftText);
+    if (!score) return;
+
+    if (!bestMatch) {
+      bestMatch = typingDraftMessage;
+      bestScore = score;
+      return;
+    }
+
+    if (score > bestScore) {
+      bestMatch = typingDraftMessage;
+      bestScore = score;
+    }
+  });
+
+  return bestMatch;
+}
+
 export function getMessageTextWithFallback(lang: LangFn, message: MediaContainer) {
   return hasMessageText(message) ? message.content.text || { text: lang('MessageUnsupported') } : undefined;
 }
@@ -112,10 +169,10 @@ export function getMessageCustomShape(message: ApiMessage): boolean {
   const {
     text, sticker, photo, video, audio, voice,
     document, pollId, webPage, contact, action,
-    game, invoice, location, storyData,
+    game, invoice, location, storyData, dice,
   } = message.content;
 
-  if (sticker || (video?.isRound)) {
+  if (sticker || (video?.isRound) || dice) {
     return true;
   }
 
@@ -544,5 +601,40 @@ export function createApiMessageFromTypingDraft({
     isSilent: true,
     isTypingDraft: true,
     editDate: getServerTime(),
+  };
+}
+
+export function groupMessageIdsByThreadId(
+  global: GlobalState, chatId: string, messageIds: number[], isScheduled: boolean, notShared?: boolean,
+): Record<ThreadId, number[]> {
+  const grouped = messageIds.reduce<Record<ThreadId, number[]>>((acc, messageId) => {
+    const message = isScheduled ? selectScheduledMessage(global, chatId, messageId)
+      : selectChatMessage(global, chatId, messageId);
+    if (!message) return acc;
+
+    const threadId = selectThreadIdFromMessage(global, message);
+    acc[threadId] = acc[threadId] || [];
+    acc[threadId].push(messageId);
+    return acc;
+  }, {});
+
+  if (!notShared) {
+    grouped[MAIN_THREAD_ID] = messageIds;
+  }
+
+  return grouped;
+}
+
+export function prepareMessageReplyInfo(
+  threadId: ThreadId, additionalReplyInfo?: ApiInputMessageReplyInfo,
+): ApiInputMessageReplyInfo | undefined {
+  const isMainThread = threadId === MAIN_THREAD_ID;
+  if (!additionalReplyInfo && isMainThread) return undefined;
+
+  return {
+    type: 'message',
+    ...additionalReplyInfo,
+    replyToMsgId: additionalReplyInfo?.replyToMsgId || Number(threadId),
+    replyToTopId: additionalReplyInfo?.replyToTopId || (!isMainThread ? Number(threadId) : undefined),
   };
 }

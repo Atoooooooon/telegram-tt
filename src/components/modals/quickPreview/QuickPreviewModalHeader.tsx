@@ -1,4 +1,3 @@
-import type { FC } from '@teact';
 import { memo } from '@teact';
 import { getActions, withGlobal } from '../../../global';
 
@@ -7,13 +6,17 @@ import type { ThreadId } from '../../../types';
 import { MAIN_THREAD_ID } from '../../../api/types';
 
 import { getIsSavedDialog } from '../../../global/helpers';
-import { selectChat, selectThreadParam, selectTopic } from '../../../global/selectors';
+import { selectChat } from '../../../global/selectors';
+import {
+  selectThreadLocalStateParam,
+  selectThreadMessagesCount,
+  selectThreadReadState,
+} from '../../../global/selectors/threads';
 import { isUserId } from '../../../util/entities/ids';
 
 import useConnectionStatus from '../../../hooks/useConnectionStatus';
 import useLang from '../../../hooks/useLang';
 import useLastCallback from '../../../hooks/useLastCallback';
-import useOldLang from '../../../hooks/useOldLang';
 
 import GroupChatInfo from '../../common/GroupChatInfo';
 import PrivateChatInfo from '../../common/PrivateChatInfo';
@@ -32,40 +35,49 @@ type StateProps = {
   connectionState?: ApiUpdateConnectionStateType;
   isSyncing?: boolean;
   isFetchingDifference?: boolean;
-  typingStatus?: ApiTypingStatus;
+  typingStatusByPeerId?: Record<string, ApiTypingStatus>;
   isSavedDialog?: boolean;
+  messagesCount?: number;
   unreadCount?: number;
   hasUnreadMark?: boolean;
 };
 
 const EMOJI_STATUS_SIZE = 22;
 
-const QuickPreviewModalHeader: FC<OwnProps & StateProps> = ({
+const QuickPreviewModalHeader = ({
   chatId,
   threadId,
   chat,
   connectionState,
   isSyncing,
   isFetchingDifference,
-  typingStatus,
+  typingStatusByPeerId,
   isSavedDialog,
+  messagesCount,
   unreadCount,
   hasUnreadMark,
   onClose,
-}) => {
+}: OwnProps & StateProps) => {
   const lang = useLang();
-  const oldLang = useOldLang();
-  const { markChatMessagesRead } = getActions();
+  const { markChatMessagesRead, markTopicRead } = getActions();
   const {
     connectionStatusText,
-  } = useConnectionStatus(oldLang, connectionState, isSyncing || isFetchingDifference, true);
+  } = useConnectionStatus(lang, connectionState, isSyncing || isFetchingDifference, true);
 
   const handleMarkAsRead = useLastCallback(() => {
+    if (chat?.isForum && threadId !== undefined && threadId !== MAIN_THREAD_ID) {
+      markTopicRead({ chatId, topicId: Number(threadId) });
+      return;
+    }
+
     markChatMessagesRead({ id: chatId });
   });
 
-  const savedMessagesStatus = isSavedDialog ? lang('SavedMessages') : undefined;
-  const realChatId = isSavedDialog ? String(MAIN_THREAD_ID) : chatId;
+  const savedMessagesStatus = isSavedDialog
+    ? (messagesCount !== undefined
+      ? lang('Messages', { count: messagesCount }, { pluralValue: messagesCount }) : lang('SavedMessages'))
+    : undefined;
+  const realChatId = isSavedDialog && threadId ? String(threadId) : chatId;
   const displayChatId = chat?.isMonoforum ? chat.linkedMonoforumId! : realChatId;
 
   return (
@@ -75,7 +87,7 @@ const QuickPreviewModalHeader: FC<OwnProps & StateProps> = ({
           round
           color="translucent"
           size="smaller"
-          ariaLabel={lang('ChatListContextMaskAsRead')}
+          ariaLabel={lang('ChatListContextMarkAsRead')}
           onClick={handleMarkAsRead}
           className={styles.markAsReadButton}
           iconName="readchats"
@@ -84,7 +96,7 @@ const QuickPreviewModalHeader: FC<OwnProps & StateProps> = ({
       <Button
         round
         color="translucent"
-        size="smaller"
+        size="tiny"
         ariaLabel={lang('Close')}
         onClick={onClose}
         className={styles.closeButton}
@@ -96,7 +108,7 @@ const QuickPreviewModalHeader: FC<OwnProps & StateProps> = ({
             <PrivateChatInfo
               key={displayChatId}
               userId={displayChatId}
-              typingStatus={typingStatus}
+              typingStatusByPeerId={typingStatusByPeerId}
               status={connectionStatusText || savedMessagesStatus}
               withDots={Boolean(connectionStatusText)}
               withFullInfo={false}
@@ -112,7 +124,7 @@ const QuickPreviewModalHeader: FC<OwnProps & StateProps> = ({
               key={displayChatId}
               chatId={displayChatId}
               threadId={!isSavedDialog ? threadId : undefined}
-              typingStatus={typingStatus}
+              typingStatusByPeerId={typingStatusByPeerId}
               withMonoforumStatus={chat?.isMonoforum}
               status={connectionStatusText || savedMessagesStatus}
               withDots={Boolean(connectionStatusText)}
@@ -134,21 +146,29 @@ const QuickPreviewModalHeader: FC<OwnProps & StateProps> = ({
 export default memo(withGlobal<OwnProps>(
   (global, { chatId, threadId }): Complete<StateProps> => {
     const chat = selectChat(global, chatId);
-    const typingStatus = selectThreadParam(global, chatId, threadId || MAIN_THREAD_ID, 'typingStatus');
+    const typingStatusByPeerId = selectThreadLocalStateParam(
+      global,
+      chatId,
+      threadId || MAIN_THREAD_ID,
+      'typingStatusByPeerId',
+    );
     const isSavedDialog = getIsSavedDialog(chatId, threadId || MAIN_THREAD_ID, global.currentUserId);
-    const unreadCount = chat?.isForum && threadId
-      ? selectTopic(global, chatId, threadId)?.unreadCount
-      : chat?.unreadCount;
+    const messagesCount = isSavedDialog && threadId
+      ? selectThreadMessagesCount(global, chatId, threadId)
+      : undefined;
+    const readState = selectThreadReadState(global, chatId, threadId || MAIN_THREAD_ID);
+    const unreadCount = readState?.unreadCount;
 
     return {
       chat,
       connectionState: global.connectionState,
       isSyncing: global.isSyncing,
       isFetchingDifference: global.isFetchingDifference,
-      typingStatus,
+      typingStatusByPeerId,
       isSavedDialog,
+      messagesCount,
       unreadCount,
-      hasUnreadMark: chat?.hasUnreadMark,
+      hasUnreadMark: readState?.hasUnreadMark,
     };
   },
 )(QuickPreviewModalHeader));

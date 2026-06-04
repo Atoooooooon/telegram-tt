@@ -8,7 +8,7 @@ import {
 import { addExtraClass } from '../../lib/teact/teact-dom';
 import { getActions, getGlobal, withGlobal } from '../../global';
 
-import type { ApiChatFolder, ApiLimitTypeWithModal, ApiUser } from '../../api/types';
+import type { ApiChatFolder, ApiLimitTypeWithModal, ApiStarGiftAuctionState, ApiUser } from '../../api/types';
 import type { TabState } from '../../global/types';
 
 import { BASE_EMOJI_KEYWORD_LANG, DEBUG, FOLDERS_POSITION_LEFT, INACTIVE_MARKER } from '../../config';
@@ -28,6 +28,7 @@ import {
   selectIsServiceChatReady,
   selectIsStoryViewerOpen,
   selectPerformanceSettingsValue,
+  selectTabSelectedGiftAuction,
   selectTabState,
   selectUser,
 } from '../../global/selectors';
@@ -77,7 +78,7 @@ import StoryViewer from '../story/StoryViewer.async';
 import AttachBotRecipientPicker from './AttachBotRecipientPicker.async';
 import BotTrustModal from './BotTrustModal.async';
 import DeleteFolderDialog from './DeleteFolderDialog.async';
-import Dialogs from './Dialogs.async';
+import Dialogs from './Dialogs';
 import DownloadManager from './DownloadManager';
 import DraftRecipientPicker from './DraftRecipientPicker.async';
 import FoldersSidebar from './FoldersSidebar';
@@ -85,7 +86,6 @@ import ForwardRecipientPicker from './ForwardRecipientPicker.async';
 import GameModal from './GameModal';
 import HistoryCalendar from './HistoryCalendar.async';
 import NewContactModal from './NewContactModal.async';
-import Notifications from './Notifications.async';
 import PremiumLimitReachedModal from './premium/common/PremiumLimitReachedModal.async';
 import GiveawayModal from './premium/GiveawayModal.async';
 import PremiumMainModal from './premium/PremiumMainModal.async';
@@ -110,8 +110,6 @@ type StateProps = {
   isMediaViewerOpen: boolean;
   isStoryViewerOpen: boolean;
   isForwardModalOpen: boolean;
-  hasNotifications: boolean;
-  hasDialogs: boolean;
   safeLinkModalUrl?: string;
   isHistoryCalendarOpen: boolean;
   shouldSkipHistoryAnimations?: boolean;
@@ -148,6 +146,8 @@ type StateProps = {
   isAccountFrozen?: boolean;
   isAppConfigLoaded?: boolean;
   isFoldersSidebarShown: boolean;
+  diceEmojies?: string[];
+  selectedGiftAuction?: ApiStarGiftAuctionState;
 };
 
 const APP_OUTDATED_TIMEOUT_MS = 5 * 60 * 1000; // 5 min
@@ -163,8 +163,6 @@ const Main = ({
   isMediaViewerOpen,
   isStoryViewerOpen,
   isForwardModalOpen,
-  hasNotifications,
-  hasDialogs,
   activeGroupCallId,
   safeLinkModalUrl,
   isHistoryCalendarOpen,
@@ -203,6 +201,8 @@ const Main = ({
   isAccountFrozen,
   isAppConfigLoaded,
   isFoldersSidebarShown,
+  diceEmojies,
+  selectedGiftAuction,
 }: OwnProps & StateProps) => {
   const {
     initMain,
@@ -213,11 +213,12 @@ const Main = ({
     loadNotificationExceptions,
     updateIsOnline,
     onTabFocusChange,
-    loadTopInlineBots,
+    loadTopPeers,
     loadEmojiKeywords,
     loadCountryList,
     loadAvailableReactions,
     loadStickerSets,
+    loadDiceStickers,
     loadPremiumGifts,
     loadTonGifts,
     loadStarGifts,
@@ -252,10 +253,10 @@ const Main = ({
     loadPeerColors,
     loadSavedReactionTags,
     loadTimezones,
+    loadAiComposeTones,
     loadQuickReplies,
     loadStarStatus,
     loadAvailableEffects,
-    loadTopBotApps,
     loadPaidReactionPrivacy,
     loadPasswordInfo,
     loadBotFreezeAppeal,
@@ -263,11 +264,14 @@ const Main = ({
     loadAllStories,
     loadAllHiddenStories,
     loadContentSettings,
+    loadGiftAuction,
+    loadPromoData,
+    loadActiveGiftAuctions,
   } = getActions();
 
   if (DEBUG && !DEBUG_isLogged) {
     DEBUG_isLogged = true;
-    // eslint-disable-next-line no-console
+    // eslint-disable-next-line no-console, @eslint-react/purity
     console.log('>>> RENDER MAIN');
   }
 
@@ -315,19 +319,21 @@ const Main = ({
       loadAllChats({ listType: 'saved' });
       loadAllStories();
       loadAllHiddenStories();
+      loadPromoData();
       loadContentSettings();
       loadRecentReactions();
       loadDefaultTagReactions();
       loadAttachBots();
       loadNotificationSettings();
       loadNotificationExceptions();
-      loadTopInlineBots();
+      loadTopPeers({ category: 'botsInline' });
       loadTopReactions();
       loadStarStatus();
       loadEmojiKeywords({ language: BASE_EMOJI_KEYWORD_LANG });
       loadFeaturedEmojiStickers();
       loadSavedReactionTags();
-      loadTopBotApps();
+      loadTopPeers({ category: 'botsApp' });
+      loadTopPeers({ category: 'botsGuestChat' });
       loadPaidReactionPrivacy();
       loadDefaultTopicIcons();
       loadAnimatedEmojis();
@@ -343,6 +349,8 @@ const Main = ({
       loadRestrictedEmojiStickers();
       loadQuickReplies();
       loadTimezones();
+      loadAiComposeTones();
+      loadActiveGiftAuctions();
     }
   }, [isMasterTab, isSynced, isAppConfigLoaded, isAccountFrozen]);
 
@@ -363,7 +371,7 @@ const Main = ({
 
       loadCountryList({ langCode: lang.code });
     }
-  }, [lang, isMasterTab]);
+  }, [lang.code, isMasterTab]);
 
   // Re-fetch cached saved emoji for `localDb`
   useEffect(() => {
@@ -390,6 +398,12 @@ const Main = ({
   }, [addedSetIds, addedCustomEmojiIds, isMasterTab, isSynced, isAppConfigLoaded, isAccountFrozen]);
 
   useEffect(() => {
+    if (isMasterTab && isSynced && isAppConfigLoaded && !isAccountFrozen && diceEmojies) {
+      loadDiceStickers();
+    }
+  }, [isMasterTab, isSynced, isAppConfigLoaded, isAccountFrozen, diceEmojies]);
+
+  useEffect(() => {
     loadBotFreezeAppeal();
   }, [isAppConfigLoaded]);
 
@@ -414,7 +428,7 @@ const Main = ({
 
     const parsedInitialLocationHash = parseInitialLocationHash();
     if (parsedInitialLocationHash?.tgaddr) {
-      processDeepLink(decodeURIComponent(parsedInitialLocationHash.tgaddr));
+      processDeepLink(decodeURIComponent(parsedInitialLocationHash.tgaddr), { type: 'inner' });
     }
   }, [isSynced]);
 
@@ -422,7 +436,7 @@ const Main = ({
     try {
       const url = event.payload || '';
       const decodedUrl = decodeURIComponent(url);
-      processDeepLink(decodedUrl);
+      processDeepLink(decodedUrl, { type: 'inner' });
     } catch (e) {
       if (DEBUG) {
         // eslint-disable-next-line no-console
@@ -441,6 +455,15 @@ const Main = ({
       type: parsedLocationHash.type,
     });
   }, [currentUserId]);
+
+  // Refresh gift auction subscription
+  const auctionTimeout = selectedGiftAuction?.state.type === 'active' ? selectedGiftAuction?.timeout : undefined;
+  const auctionGiftId = selectedGiftAuction?.gift.id;
+  useInterval(() => {
+    if (auctionGiftId) {
+      loadGiftAuction({ giftId: auctionGiftId });
+    }
+  }, auctionTimeout ? auctionTimeout * 1000 : undefined);
 
   // Restore Transition slide class after async rendering
   useLayoutEffect(() => {
@@ -562,8 +585,7 @@ const Main = ({
       <StoryViewer isOpen={isStoryViewerOpen} />
       <ForwardRecipientPicker isOpen={isForwardModalOpen} />
       <DraftRecipientPicker requestedDraft={requestedDraft} />
-      <Notifications isOpen={hasNotifications} />
-      <Dialogs isOpen={hasDialogs} />
+      <Dialogs />
       <AudioPlayer noUi />
       <ModalContainer />
       <SafeLinkModal url={safeLinkModalUrl} />
@@ -629,8 +651,6 @@ export default memo(withGlobal<OwnProps>(
       openedGame,
       isLeftColumnShown,
       historyCalendarSelectedAt,
-      notifications,
-      dialogs,
       newContact,
       ratingPhoneCall,
       premiumModal,
@@ -642,6 +662,8 @@ export default memo(withGlobal<OwnProps>(
       limitReachedModal,
       deleteFolderDialogModal,
     } = selectTabState(global);
+
+    const selectedGiftAuction = selectTabSelectedGiftAuction(global);
 
     const { wasTimeFormatSetManually, foldersPosition } = selectSharedSettings(global);
 
@@ -663,8 +685,6 @@ export default memo(withGlobal<OwnProps>(
       isStoryViewerOpen: selectIsStoryViewerOpen(global),
       isForwardModalOpen: selectIsForwardModalOpen(global),
       isReactionPickerOpen: selectIsReactionPickerOpen(global),
-      hasNotifications: Boolean(notifications.length),
-      hasDialogs: Boolean(dialogs.length),
       safeLinkModalUrl,
       isHistoryCalendarOpen: Boolean(historyCalendarSelectedAt),
       shouldSkipHistoryAnimations,
@@ -701,6 +721,8 @@ export default memo(withGlobal<OwnProps>(
       isAccountFrozen,
       isAppConfigLoaded: global.isAppConfigLoaded,
       isFoldersSidebarShown: foldersPosition === FOLDERS_POSITION_LEFT && !isMobile && selectAreFoldersPresent(global),
+      diceEmojies: global.appConfig?.diceEmojies,
+      selectedGiftAuction,
     };
   },
 )(Main));

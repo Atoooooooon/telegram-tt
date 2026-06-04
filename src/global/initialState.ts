@@ -19,6 +19,7 @@ import { IS_IOS, IS_MAC_OS } from '../util/browser/windowEnvironment';
 import { DEFAULT_APP_CONFIG } from '../limits';
 
 export const INITIAL_PERFORMANCE_STATE_MAX: PerformanceType = {
+  messageBlur: true,
   animatedEmoji: true,
   autoplayGifs: true,
   autoplayVideos: true,
@@ -34,9 +35,11 @@ export const INITIAL_PERFORMANCE_STATE_MAX: PerformanceType = {
   stickerEffects: true,
   storyRibbonAnimations: true,
   snapEffect: true,
+  textStreaming: true,
 };
 
 export const INITIAL_PERFORMANCE_STATE_MED: PerformanceType = {
+  messageBlur: false,
   animatedEmoji: true,
   autoplayGifs: true,
   autoplayVideos: true,
@@ -52,9 +55,11 @@ export const INITIAL_PERFORMANCE_STATE_MED: PerformanceType = {
   stickerEffects: true,
   storyRibbonAnimations: true,
   snapEffect: false,
+  textStreaming: true,
 };
 
 export const INITIAL_PERFORMANCE_STATE_MIN: PerformanceType = {
+  messageBlur: false,
   animatedEmoji: false,
   autoplayGifs: false,
   autoplayVideos: false,
@@ -70,6 +75,7 @@ export const INITIAL_PERFORMANCE_STATE_MIN: PerformanceType = {
   stickerEffects: false,
   storyRibbonAnimations: false,
   snapEffect: false,
+  textStreaming: false,
 };
 
 export const INITIAL_SHARED_STATE: SharedState = {
@@ -96,7 +102,7 @@ export const INITIAL_SHARED_STATE: SharedState = {
 };
 
 export const INITIAL_GLOBAL_STATE: GlobalState = {
-  cacheVersion: 2,
+  cacheVersion: 3,
   isInited: true,
   attachMenu: { bots: {} },
   passcode: {},
@@ -106,6 +112,7 @@ export const INITIAL_GLOBAL_STATE: GlobalState = {
   appConfig: DEFAULT_APP_CONFIG,
 
   audioPlayer: {
+    volume: DEFAULT_VOLUME,
     lastPlaybackRate: DEFAULT_PLAYBACK_RATE,
   },
 
@@ -113,7 +120,9 @@ export const INITIAL_GLOBAL_STATE: GlobalState = {
     lastPlaybackRate: DEFAULT_PLAYBACK_RATE,
   },
 
-  authRememberMe: true,
+  auth: {
+    rememberMe: true,
+  },
   countryList: {
     phoneCodes: [],
     general: [],
@@ -259,10 +268,7 @@ export const INITIAL_GLOBAL_STATE: GlobalState = {
     saved: {},
   },
 
-  topPeers: {},
-
-  topInlineBots: {},
-  topBotApps: {},
+  topPeerCategories: {},
 
   activeSessions: {
     byHash: {},
@@ -291,6 +297,7 @@ export const INITIAL_GLOBAL_STATE: GlobalState = {
       autoLoadFileMaxSizeMb: 10,
       hasWebNotifications: true,
       hasPushNotifications: true,
+      shouldNotifyAboutPinnedMessages: true,
       notificationSoundVolume: 5,
       shouldSuggestStickers: true,
       shouldSuggestCustomEmoji: true,
@@ -304,6 +311,7 @@ export const INITIAL_GLOBAL_STATE: GlobalState = {
       canTranslate: false,
       canTranslateChats: true,
       doNotTranslate: [],
+      translationTone: 'neutral',
     },
     privacy: {},
     botVerificationShownPeerIds: [],
@@ -424,7 +432,6 @@ export const INITIAL_TAB_STATE: TabState = {
   },
 
   audioPlayer: {
-    volume: DEFAULT_VOLUME,
     playbackRate: DEFAULT_PLAYBACK_RATE,
     isMuted: false,
   },
@@ -452,10 +459,6 @@ export const INITIAL_TAB_STATE: TabState = {
 
   statistics: {
     byChatId: {},
-  },
-
-  pollModal: {
-    isOpen: false,
   },
 
   requestedTranslations: {

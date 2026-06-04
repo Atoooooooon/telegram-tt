@@ -1,15 +1,18 @@
-import type {
-  ApiChat, ApiChatFullInfo, ApiChatMember,
-} from '../../api/types';
 import type { ChatListType } from '../../types';
 import type { GlobalState } from '../types';
+import {
+  type ApiChat, type ApiChatFullInfo, type ApiChatMember,
+  MAIN_THREAD_ID,
+} from '../../api/types';
 
 import { ARCHIVED_FOLDER_ID } from '../../config';
 import { areDeepEqual } from '../../util/areDeepEqual';
 import {
-  areSortedArraysEqual, buildCollectionByKey, omit, omitUndefined, pick, unique,
+  areSortedArraysEqual, buildCollectionByKey, omit, omitUndefined, pick,
 } from '../../util/iteratees';
 import { selectChatFullInfo } from '../selectors';
+import { updateThreadInfoLastMessageId } from './threads';
+import { addUnreadCount, removeUnreadCount } from './unreadCounters';
 
 const DEFAULT_CHAT_LISTS: ChatListType[] = ['active', 'archived'];
 
@@ -53,6 +56,11 @@ export function updateChatLastMessageId<T extends GlobalState>(
   global: T, chatId: string, lastMessageId: number, listType?: ChatListType,
 ): T {
   const key = listType === 'saved' ? 'saved' : 'all';
+
+  if (key === 'all') {
+    global = updateThreadInfoLastMessageId(global, chatId, MAIN_THREAD_ID, lastMessageId);
+  }
+
   return {
     ...global,
     chats: {
@@ -115,49 +123,40 @@ export function replaceChats<T extends GlobalState>(global: T, newById: Record<s
   };
 }
 
-export function addUnreadMentions<T extends GlobalState>(
-  global: T, chatId: string, chat: ApiChat, ids: number[], shouldUpdateCount: boolean = false,
-): T {
-  const prevChatUnreadMentions = (chat.unreadMentions || []);
-  const updatedUnreadMentions = unique([...prevChatUnreadMentions, ...ids]).sort((a, b) => b - a);
-  global = updateChat(global, chatId, {
-    unreadMentions: updatedUnreadMentions,
+export function addUnreadMentions<T extends GlobalState>({
+  global, chatId, ids, totalCount,
+}: {
+  global: T;
+  chatId: string;
+  ids: number[];
+  totalCount?: number;
+}): T {
+  return addUnreadCount({
+    global,
+    chatId,
+    messageIds: ids,
+    totalCount,
+    unreadCountKey: 'unreadMentionsCount',
   });
-
-  if (shouldUpdateCount) {
-    const updatedUnreadMentionsCount = (chat.unreadMentionsCount || 0)
-      + Math.max(0, updatedUnreadMentions.length - prevChatUnreadMentions.length);
-
-    global = updateChat(global, chatId, {
-      unreadMentionsCount: updatedUnreadMentionsCount,
-    });
-  }
-  return global;
 }
 
-export function removeUnreadMentions<T extends GlobalState>(
-  global: T, chatId: string, chat: ApiChat, ids: number[], shouldUpdateCount: boolean = false,
-): T {
-  const prevChatUnreadMentions = (chat.unreadMentions || []);
-  const updatedUnreadMentions = prevChatUnreadMentions?.filter((id) => !ids.includes(id));
-
-  global = updateChat(global, chatId, {
-    unreadMentions: updatedUnreadMentions,
+export function removeUnreadMentions<T extends GlobalState>({
+  global, chatId, ids,
+}: {
+  global: T;
+  chatId: string;
+  ids: number[];
+}): T {
+  return removeUnreadCount({
+    global,
+    chatId,
+    messageIds: ids,
+    unreadCountKey: 'unreadMentionsCount',
   });
-
-  if (shouldUpdateCount && chat.unreadMentionsCount) {
-    const removedCount = prevChatUnreadMentions.length - updatedUnreadMentions.length;
-    const updatedUnreadMentionsCount = Math.max(chat.unreadMentionsCount - removedCount, 0) || undefined;
-
-    global = updateChat(global, chatId, {
-      unreadMentionsCount: updatedUnreadMentionsCount,
-    });
-  }
-  return global;
 }
 
 export function updateChat<T extends GlobalState>(
-  global: T, chatId: string, chatUpdate: Partial<ApiChat>, noOmitUnreadReactionCount = false, withDeepCheck = false,
+  global: T, chatId: string, chatUpdate: Partial<ApiChat>, withDeepCheck = false,
 ): T {
   const { byId } = global.chats;
 
@@ -169,7 +168,7 @@ export function updateChat<T extends GlobalState>(
     }
   }
 
-  const updatedChat = getUpdatedChat(global, chatId, chatUpdate, noOmitUnreadReactionCount);
+  const updatedChat = getUpdatedChat(global, chatId, chatUpdate);
   if (!updatedChat) {
     return global;
   }
@@ -284,7 +283,6 @@ export function addChats<T extends GlobalState>(global: T, newById: Record<strin
 // @optimization Don't spread/unspread global for each element, do it in a batch
 function getUpdatedChat<T extends GlobalState>(
   global: T, chatId: string, chatUpdate: Partial<ApiChat>,
-  noOmitUnreadReactionCount = false,
 ) {
   const { byId } = global.chats;
   const chat = byId[chatId];
@@ -292,10 +290,6 @@ function getUpdatedChat<T extends GlobalState>(
 
   if (chatUpdate.isMin && chat && !chat.isMin) {
     return undefined; // Do not apply updates from min constructor
-  }
-
-  if (!noOmitUnreadReactionCount) {
-    omitProps.push('unreadReactionsCount');
   }
 
   if (areDeepEqual(chat?.usernames, chatUpdate.usernames)) {
@@ -418,6 +412,55 @@ export function addChatMembers<T extends GlobalState>(global: T, chat: ApiChat, 
     members: updatedMembers,
     adminMembersById: buildCollectionByKey(adminMembers, 'userId'),
   });
+}
+
+export function updateChatParticipantRank<T extends GlobalState>(
+  global: T, chatId: string, userId: string, rank: string,
+): T {
+  const fullInfo = selectChatFullInfo(global, chatId);
+  if (!fullInfo) {
+    return global;
+  }
+
+  const { adminMembersById, members } = fullInfo;
+  let fullInfoUpdate: Partial<ApiChatFullInfo> | undefined;
+
+  const currentAdminMember = adminMembersById?.[userId];
+  if (currentAdminMember && currentAdminMember.rank !== rank) {
+    fullInfoUpdate = {
+      ...fullInfoUpdate,
+      adminMembersById: {
+        ...adminMembersById,
+        [userId]: {
+          ...currentAdminMember,
+          rank,
+        },
+      },
+    };
+  }
+
+  let shouldUpdateMembers = false;
+  const updatedMembers = members?.map((member) => {
+    if (member.userId !== userId || member.rank === rank) {
+      return member;
+    }
+
+    shouldUpdateMembers = true;
+
+    return {
+      ...member,
+      rank,
+    };
+  });
+
+  if (shouldUpdateMembers) {
+    fullInfoUpdate = {
+      ...fullInfoUpdate,
+      members: updatedMembers,
+    };
+  }
+
+  return fullInfoUpdate ? updateChatFullInfo(global, chatId, fullInfoUpdate) : global;
 }
 
 export function replaceSimilarChannels<T extends GlobalState>(

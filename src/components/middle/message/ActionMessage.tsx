@@ -1,5 +1,6 @@
 import {
-  memo, useEffect, useMemo, useRef, useUnmountCleanup,
+  memo, useEffect, useMemo, useRef,
+  useUnmountCleanup,
 } from '../../../lib/teact/teact';
 import { getActions, withGlobal } from '../../../global';
 
@@ -10,13 +11,22 @@ import type {
   ThreadId,
 } from '../../../types';
 import type { Signal } from '../../../util/signals';
-import { type ApiMessage, type ApiPeer, MAIN_THREAD_ID } from '../../../api/types';
+import {
+  type ApiKeyboardButton,
+  type ApiMessage,
+  type ApiPeer,
+  type KeyboardButtonGiftOffer,
+  type KeyboardButtonNoForwardsRequest,
+  MAIN_THREAD_ID,
+} from '../../../api/types';
 import { MediaViewerOrigin } from '../../../types';
 
 import { MESSAGE_APPEARANCE_DELAY } from '../../../config';
 import { getMessageHtmlId } from '../../../global/helpers';
+import { getPeerTitle } from '../../../global/helpers/peers';
 import { getMessageReplyInfo } from '../../../global/helpers/replies';
 import {
+  selectActionMessageBg,
   selectChat,
   selectChatMessage,
   selectIsCurrentUserFrozen,
@@ -25,12 +35,13 @@ import {
   selectIsMessageFocused,
   selectSender,
   selectTabState,
-  selectTheme,
 } from '../../../global/selectors';
+import { selectThreadReadState } from '../../../global/selectors/threads';
 import { IS_TAURI } from '../../../util/browser/globalEnvironment';
 import { IS_ANDROID, IS_FLUID_BACKGROUND_SUPPORTED } from '../../../util/browser/windowEnvironment';
 import buildClassName from '../../../util/buildClassName';
 import { isLocalMessageId } from '../../../util/keys/messageKey';
+import { getServerTime } from '../../../util/serverTime';
 import { isElementInViewport } from '../../../util/visibility/isElementInViewport';
 import { preventMessageInputBlur } from '../helpers/preventMessageInputBlur';
 
@@ -39,23 +50,27 @@ import useContextMenuHandlers from '../../../hooks/useContextMenuHandlers';
 import useEnsureMessage from '../../../hooks/useEnsureMessage';
 import useFlag from '../../../hooks/useFlag';
 import { type ObserveFn, useOnIntersect } from '../../../hooks/useIntersectionObserver';
+import useLang from '../../../hooks/useLang';
 import useLastCallback from '../../../hooks/useLastCallback';
 import useShowTransition from '../../../hooks/useShowTransition';
-import { type OnIntersectPinnedMessage } from '../hooks/usePinnedMessage';
 import useFluidBackgroundFilter from './hooks/useFluidBackgroundFilter';
 import useFocusMessageListElement from './hooks/useFocusMessageListElement';
 
+import ConfirmDialog from '../../ui/ConfirmDialog';
 import ActionMessageText from './ActionMessageText';
 import ChannelPhoto from './actions/ChannelPhoto';
 import Gift from './actions/Gift';
 import GiveawayPrize from './actions/GiveawayPrize';
+import NoForwardsRequest from './actions/NoForwardsRequest';
 import StarGift from './actions/StarGift';
+import StarGiftPurchaseOffer from './actions/StarGiftPurchaseOffer';
 import StarGiftUnique from './actions/StarGiftUnique';
 import SuggestedPhoto from './actions/SuggestedPhoto';
 import SuggestedPostApproval from './actions/SuggestedPostApproval';
 import SuggestedPostBalanceTooLow from './actions/SuggestedPostBalanceTooLow';
 import SuggestedPostRejected from './actions/SuggestedPostRejected';
 import ContextMenuContainer from './ContextMenuContainer';
+import InlineButtons from './InlineButtons';
 import Reactions from './reactions/Reactions';
 import SimilarChannels from './SimilarChannels';
 
@@ -69,10 +84,10 @@ type OwnProps = {
   isLastInList?: boolean;
   memoFirstUnreadIdRef?: { current: number | undefined };
   getIsMessageListReady?: Signal<boolean>;
-  onIntersectPinnedMessage?: OnIntersectPinnedMessage;
   observeIntersectionForBottom?: ObserveFn;
   observeIntersectionForLoading?: ObserveFn;
   observeIntersectionForPlaying?: ObserveFn;
+  onMessageUnmount?: (messageId: number) => void;
 };
 
 type StateProps = {
@@ -83,13 +98,15 @@ type StateProps = {
   focusDirection?: FocusDirection;
   noFocusHighlight?: boolean;
   replyMessage?: ApiMessage;
-  patternColor?: string;
+  actionMessageBg?: string;
   isCurrentUserPremium?: boolean;
   isInSelectMode?: boolean;
   hasUnreadReaction?: boolean;
+  hasUnreadPollVote?: boolean;
   isResizingContainer?: boolean;
   scrollTargetPosition?: ScrollTargetPosition;
   isAccountFrozen?: boolean;
+  noForwardsRequestExpirePeriod: number;
 };
 
 const SINGLE_LINE_ACTIONS = new Set<ApiMessageAction['type']>([
@@ -98,10 +115,12 @@ const SINGLE_LINE_ACTIONS = new Set<ApiMessageAction['type']>([
   'chatDeletePhoto',
   'todoCompletions',
   'todoAppendTasks',
+  'pollAppendAnswer',
+  'pollDeleteAnswer',
   'unsupported',
 ]);
 const HIDDEN_TEXT_ACTIONS = new Set<ApiMessageAction['type']>(['giftCode', 'prizeStars',
-  'suggestProfilePhoto', 'suggestedPostApproval']);
+  'suggestProfilePhoto', 'suggestedPostApproval', 'starGiftPurchaseOffer', 'noForwardsRequest']);
 
 const ActionMessage = ({
   message,
@@ -118,17 +137,19 @@ const ActionMessage = ({
   focusDirection,
   noFocusHighlight,
   replyMessage,
-  patternColor,
+  actionMessageBg,
   isCurrentUserPremium,
   isInSelectMode,
   hasUnreadReaction,
+  hasUnreadPollVote,
   isResizingContainer,
   scrollTargetPosition,
   isAccountFrozen,
-  onIntersectPinnedMessage,
+  noForwardsRequestExpirePeriod,
   observeIntersectionForBottom,
   observeIntersectionForLoading,
   observeIntersectionForPlaying,
+  onMessageUnmount,
 }: OwnProps & StateProps) => {
   const {
     requestConfetti,
@@ -142,7 +163,12 @@ const ActionMessage = ({
     toggleChannelRecommendations,
     animateUnreadReaction,
     markMentionsRead,
+    markPollVotesRead,
     focusMessage,
+    openGiftOfferAcceptModal,
+    declineStarGiftOffer,
+    showNotification,
+    toggleNoForwards,
   } = getActions();
 
   const ref = useRef<HTMLDivElement>();
@@ -155,15 +181,95 @@ const ActionMessage = ({
   const isSingleLine = SINGLE_LINE_ACTIONS.has(action.type);
   const isFluidMultiline = IS_FLUID_BACKGROUND_SUPPORTED && !isSingleLine;
   const isClickableText = action.type === 'suggestedPostSuccess';
+  const isNarrowMessage = action.type === 'starGiftPurchaseOfferDeclined';
 
   const messageReplyInfo = getMessageReplyInfo(message);
   const { replyToMsgId, replyToPeerId } = messageReplyInfo || {};
 
   const withServiceReactions = Boolean(message.areReactionsPossible && message?.reactions?.results?.length);
 
+  const hasGiftOfferExpired = action.type === 'starGiftPurchaseOffer' && action.expiresAt <= getServerTime();
+  const shouldRenderGiftOfferButtons = action.type === 'starGiftPurchaseOffer'
+    && !message.isOutgoing && !action.isAccepted && !action.isDeclined && !hasGiftOfferExpired;
+
+  const hasNoForwardsRequestExpired = action.type === 'noForwardsRequest'
+    && (message.date + noForwardsRequestExpirePeriod) <= getServerTime();
+  const shouldRenderNoForwardsButtons = action.type === 'noForwardsRequest'
+    && !message.isOutgoing && !action.isExpired && !hasNoForwardsRequestExpired;
+
+  const shouldRenderInlineButtons = shouldRenderGiftOfferButtons || shouldRenderNoForwardsButtons;
+
   const shouldSkipRender = isInsideTopic && action.type === 'topicCreate';
 
+  const lang = useLang();
   const { isTouchScreen } = useAppLayout();
+
+  const giftOfferInlineButtons: KeyboardButtonGiftOffer[][] = useMemo(() => [
+    [
+      {
+        type: 'giftOffer',
+        buttonType: 'reject',
+        text: lang('GiftOfferReject'),
+      },
+      {
+        type: 'giftOffer',
+        buttonType: 'accept',
+        text: lang('GiftOfferAccept'),
+      },
+    ],
+  ], [lang]);
+
+  const noForwardsInlineButtons: KeyboardButtonNoForwardsRequest[][] = useMemo(() => [
+    [
+      {
+        type: 'noForwardsRequest',
+        buttonType: 'reject',
+        text: lang('NoForwardsRequestReject'),
+      },
+      {
+        type: 'noForwardsRequest',
+        buttonType: 'accept',
+        text: lang('NoForwardsRequestAccept'),
+      },
+    ],
+  ], [lang]);
+
+  const [isRejectOfferDialogOpen, openRejectOfferDialog, closeRejectOfferDialog] = useFlag(false);
+
+  const handleInlineButtonClick = useLastCallback((button: ApiKeyboardButton) => {
+    if (button.type === 'giftOffer') {
+      if (button.buttonType === 'accept') {
+        if (action.type === 'starGiftPurchaseOffer') {
+          openGiftOfferAcceptModal({
+            peerId: chatId,
+            messageId: id,
+            gift: action.gift,
+            price: action.price,
+          });
+        }
+      } else if (button.buttonType === 'reject') {
+        openRejectOfferDialog();
+      }
+    } else if (button.type === 'noForwardsRequest') {
+      if (action.type === 'noForwardsRequest') {
+        const isAccept = button.buttonType === 'accept';
+        toggleNoForwards({
+          userId: chatId,
+          isEnabled: isAccept ? action.newValue : action.prevValue,
+          requestMsgId: id,
+        });
+      }
+    }
+  });
+
+  const handleRejectOfferConfirm = useLastCallback(() => {
+    closeRejectOfferDialog();
+    declineStarGiftOffer({ messageId: id });
+  });
+
+  const handleRejectOfferClose = useLastCallback(() => {
+    closeRejectOfferDialog();
+  });
 
   useOnIntersect(ref, !shouldSkipRender ? observeIntersectionForBottom : undefined);
 
@@ -181,12 +287,6 @@ const ActionMessage = ({
     isResizingContainer,
     isJustAdded,
     scrollTargetPosition,
-  });
-
-  useUnmountCleanup(() => {
-    if (message.isPinned) {
-      onIntersectPinnedMessage?.({ viewportPinnedIdsToRemove: [message.id] });
-    }
   });
 
   const {
@@ -214,8 +314,9 @@ const ActionMessage = ({
       return;
     }
 
+    // Message appearance animation works only if this timeout is not cleared
     setTimeout(markShown, appearanceOrder * MESSAGE_APPEARANCE_DELAY);
-  }, [appearanceOrder, markShown, noAppearanceAnimation]);
+  }, [appearanceOrder, noAppearanceAnimation]);
 
   const { ref: refWithTransition } = useShowTransition({
     isOpen: isShown,
@@ -225,18 +326,34 @@ const ActionMessage = ({
     ref,
   });
 
+  useUnmountCleanup(() => {
+    onMessageUnmount?.(id);
+  });
+
   useEffect(() => {
     const bottomMarker = ref.current;
     if (!bottomMarker || !isElementInViewport(bottomMarker)) return;
 
     if (hasUnreadReaction) {
-      animateUnreadReaction({ messageIds: [id] });
+      animateUnreadReaction({ chatId, messageIds: [id] });
+    }
+
+    if (hasUnreadPollVote) {
+      markPollVotesRead({ chatId, messageIds: [id] });
     }
 
     if (message.hasUnreadMention) {
       markMentionsRead({ chatId, messageIds: [id] });
     }
-  }, [hasUnreadReaction, chatId, id, animateUnreadReaction, message.hasUnreadMention]);
+  }, [
+    hasUnreadReaction,
+    hasUnreadPollVote,
+    chatId,
+    id,
+    animateUnreadReaction,
+    markPollVotesRead,
+    message.hasUnreadMention,
+  ]);
 
   useEffect(() => {
     if (action.type !== 'giftPremium') return;
@@ -245,7 +362,14 @@ const ActionMessage = ({
     }
   }, [action.type, id, isLocal, memoFirstUnreadIdRef]);
 
-  const fluidBackgroundStyle = useFluidBackgroundFilter(isFluidMultiline ? patternColor : undefined);
+  const fluidBackgroundStyle = useFluidBackgroundFilter(isFluidMultiline ? actionMessageBg : undefined);
+
+  const handleKeyDown = useLastCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleClick();
+    }
+  });
 
   const handleClick = useLastCallback(() => {
     switch (action.type) {
@@ -300,12 +424,35 @@ const ActionMessage = ({
         break;
       }
 
-      case 'starGift':
-      case 'starGiftUnique': {
+      case 'starGift': {
         openGiftInfoModalFromMessage({
           chatId: message.chatId,
           messageId: message.id,
         });
+        break;
+      }
+
+      case 'starGiftUnique': {
+        if (action.gift.isBurned) {
+          showNotification({ message: lang('ActionStarGiftUniqueBurnedError') });
+          break;
+        }
+        openGiftInfoModalFromMessage({
+          chatId: message.chatId,
+          messageId: message.id,
+        });
+        break;
+      }
+
+      case 'starGiftPurchaseOffer': {
+        if (shouldRenderGiftOfferButtons) {
+          openGiftOfferAcceptModal({
+            peerId: chatId,
+            messageId: id,
+            gift: action.gift,
+            price: action.price,
+          });
+        }
         break;
       }
 
@@ -408,10 +555,29 @@ const ActionMessage = ({
           />
         );
 
+      case 'starGiftPurchaseOffer':
+        return (
+          <StarGiftPurchaseOffer
+            action={action}
+            message={message}
+            hasButtons={shouldRenderGiftOfferButtons}
+            observeIntersectionForLoading={observeIntersectionForLoading}
+            observeIntersectionForPlaying={observeIntersectionForPlaying}
+            onClick={shouldRenderGiftOfferButtons ? handleClick : undefined}
+          />
+        );
+
       case 'channelJoined':
         return (
           <SimilarChannels
             chatId={message.chatId}
+          />
+        );
+
+      case 'noForwardsRequest':
+        return (
+          <NoForwardsRequest
+            message={message}
           />
         );
 
@@ -442,7 +608,9 @@ const ActionMessage = ({
       default:
         return undefined;
     }
-  }, [action, message, observeIntersectionForLoading, sender, observeIntersectionForPlaying]);
+  }, [
+    action, message, observeIntersectionForLoading, sender, observeIntersectionForPlaying, shouldRenderGiftOfferButtons,
+  ]);
 
   if ((isInsideTopic && action.type === 'topicCreate') || action.type === 'phoneCall') {
     return undefined;
@@ -466,6 +634,7 @@ const ActionMessage = ({
       data-message-id={message.id}
       data-is-pinned={message.isPinned || undefined}
       data-has-unread-mention={message.hasUnreadMention || undefined}
+      data-has-unread-poll-vote={hasUnreadPollVote || undefined}
       data-has-unread-reaction={hasUnreadReaction || undefined}
       onMouseDown={handleMouseDown}
       onContextMenu={handleContextMenu}
@@ -473,20 +642,54 @@ const ActionMessage = ({
       {!isTextHidden && (
         <>
           {isFluidMultiline && (
-            <div className={buildClassName(styles.inlineWrapper, isClickableText && styles.hoverable)}>
+            <div className={buildClassName(
+              styles.inlineWrapper,
+              isClickableText && styles.hoverable,
+              isNarrowMessage && styles.narrowWrapper,
+            )}
+            >
               <span className={styles.fluidBackground} style={fluidBackgroundStyle}>
                 <ActionMessageText message={message} isInsideTopic={isInsideTopic} />
               </span>
             </div>
           )}
-          <div className={buildClassName(styles.inlineWrapper, isClickableText && styles.hoverable)}>
-            <span className={styles.textContent} onClick={handleClick}>
+          <div className={buildClassName(
+            styles.inlineWrapper,
+            isClickableText && styles.hoverable,
+            isNarrowMessage && styles.narrowWrapper,
+          )}
+          >
+            <span
+              className={styles.textContent}
+              role="button"
+              tabIndex={0}
+              onClick={handleClick}
+              onKeyDown={handleKeyDown}
+            >
               <ActionMessageText message={message} isInsideTopic={isInsideTopic} />
             </span>
           </div>
         </>
       )}
-      {fullContent}
+      {(fullContent || shouldRenderInlineButtons) && (
+        <div className={styles.contentWrapper}>
+          {fullContent}
+          {shouldRenderGiftOfferButtons && (
+            <InlineButtons
+              className={styles.inlineButtons}
+              inlineButtons={giftOfferInlineButtons}
+              onClick={handleInlineButtonClick}
+            />
+          )}
+          {shouldRenderNoForwardsButtons && (
+            <InlineButtons
+              className={styles.inlineButtons}
+              inlineButtons={noForwardsInlineButtons}
+              onClick={handleInlineButtonClick}
+            />
+          )}
+        </div>
+      )}
       {contextMenuAnchor && (
         <ContextMenuContainer
           isOpen={isContextMenuOpen}
@@ -508,6 +711,19 @@ const ActionMessage = ({
           isAccountFrozen={isAccountFrozen}
         />
       )}
+      <ConfirmDialog
+        isOpen={isRejectOfferDialogOpen}
+        title={lang('GiftOfferRejectTitle')}
+        textParts={lang(
+          'GiftOfferRejectText',
+          { user: sender ? getPeerTitle(lang, sender) : lang('ActionFallbackSomeone') },
+          { withNodes: true, withMarkdown: true },
+        )}
+        confirmLabel={lang('GiftOfferReject')}
+        confirmIsDestructive
+        confirmHandler={handleRejectOfferConfirm}
+        onClose={handleRejectOfferClose}
+      />
     </div>
   );
 };
@@ -515,7 +731,6 @@ const ActionMessage = ({
 export default memo(withGlobal<OwnProps>(
   (global, { message, threadId }): Complete<StateProps> => {
     const tabState = selectTabState(global);
-    const { themes } = global.settings;
 
     const chat = selectChat(global, message.chatId);
 
@@ -536,7 +751,9 @@ export default memo(withGlobal<OwnProps>(
 
     const isCurrentUserPremium = selectIsCurrentUserPremium(global);
 
-    const hasUnreadReaction = chat?.unreadReactions?.includes(message.id);
+    const readState = selectThreadReadState(global, message.chatId, threadId);
+    const hasUnreadReaction = readState?.unreadReactions?.includes(message.id);
+    const hasUnreadPollVote = readState?.unreadPollVotes?.includes(message.id);
     const isAccountFrozen = selectIsCurrentUserFrozen(global);
 
     return {
@@ -549,11 +766,13 @@ export default memo(withGlobal<OwnProps>(
       isInsideTopic,
       replyMessage,
       isInSelectMode: selectIsInSelectMode(global),
-      patternColor: themes[selectTheme(global)]?.patternColor,
+      actionMessageBg: selectActionMessageBg(global),
       hasUnreadReaction,
+      hasUnreadPollVote,
       isResizingContainer,
       scrollTargetPosition,
       isAccountFrozen,
+      noForwardsRequestExpirePeriod: global.appConfig.noForwardsRequestExpirePeriod,
     };
   },
 )(ActionMessage));

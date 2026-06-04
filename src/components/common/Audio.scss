@@ -3,6 +3,12 @@
   display: flex;
   align-items: flex-start;
 
+  &.has-menu-open {
+    border-radius: var(--border-radius-default);
+    background-color: var(--color-chat-hover);
+    box-shadow: 0 0 0 0.5rem var(--color-chat-hover);
+  }
+
   &.inline {
     margin-top: calc(0.5rem - 0.3125rem);
 
@@ -119,13 +125,20 @@
     .icon-view-once,
     .media-loading {
       --color-primary: var(--color-text-green);
-      --color-primary-shade: var(--color-green);
-      --color-primary-shade-darker: var(--color-green-darker);
+      --color-primary-shade: var(--color-active);
+      --color-primary-shade-darker: var(--color-active-darker);
       --color-white: var(--color-background-own);
 
       .theme-dark & {
         --color-primary-shade: #fff;
         --color-primary-shade-darker: #fff;
+      }
+    }
+
+    .Button {
+      &:hover, &:active, &:focus {
+        opacity: 0.8;
+        background-color: var(--color-primary) !important;
       }
     }
   }

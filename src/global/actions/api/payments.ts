@@ -1,5 +1,6 @@
 import type {
-  ApiInputInvoice, ApiInputInvoicePremiumGiftStars, ApiInputInvoiceStarGift, ApiInputInvoiceStarGiftResale,
+  ApiInputInvoice, ApiInputInvoicePremiumGiftStars, ApiInputInvoiceStarGift,
+  ApiInputInvoiceStarGiftAuctionBid, ApiInputInvoiceStarGiftResale,
   ApiRequestInputInvoice,
 } from '../../../api/types';
 import type { ApiCredentials } from '../../../components/payment/PaymentModal';
@@ -13,7 +14,6 @@ import { DEBUG_PAYMENT_SMART_GLOCAL, STARS_CURRENCY_CODE, TON_CURRENCY_CODE } fr
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
 import * as langProvider from '../../../util/oldLangProvider';
 import { getStripeError } from '../../../util/payments/stripe';
-import { buildQueryString } from '../../../util/requestQuery';
 import { getServerTime } from '../../../util/serverTime';
 import { extractCurrentThemeParams } from '../../../util/themeStyle';
 import { callApi } from '../../../api/gramjs';
@@ -54,6 +54,31 @@ import {
 } from '../../selectors';
 
 const LOCAL_BOOST_COOLDOWN = 86400; // 24 hours
+const SMART_GLOCAL_DOMAIN = 'smart-glocal.com';
+const SMART_GLOCAL_TOKENIZE_PATH = '/cds/v1/tokenize/card';
+
+function isValidSmartGlocalTokenizeUrl(tokenizeUrl: string) {
+  if (tokenizeUrl !== tokenizeUrl.trim()) {
+    return false;
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(tokenizeUrl);
+  } catch {
+    return false;
+  }
+
+  const { protocol, hostname, pathname, port, username, password } = parsedUrl;
+  const isSmartGlocalHost = hostname === SMART_GLOCAL_DOMAIN || hostname.endsWith(`.${SMART_GLOCAL_DOMAIN}`);
+
+  return protocol === 'https:'
+    && isSmartGlocalHost
+    && pathname === SMART_GLOCAL_TOKENIZE_PATH
+    && !port
+    && !username
+    && !password;
+}
 
 addActionHandler('validateRequestedInfo', (global, actions, payload): ActionReturnType => {
   const { requestInfo, saveInfo, tabId = getCurrentTabId() } = payload;
@@ -110,6 +135,7 @@ addActionHandler('openInvoice', async (global, actions, payload): Promise<void> 
       form,
       isPaymentModalOpen: true,
       isExtendedMedia: (payload as any).isExtendedMedia,
+      confirmPaymentUrl: undefined,
       status: undefined,
     }, tabId);
     global = setPaymentStep(global, PaymentStep.Checkout, tabId);
@@ -279,11 +305,24 @@ addActionHandler('sendPaymentForm', async (global, actions, payload): Promise<vo
     tipAmount,
   });
 
+  global = getGlobal();
+  if (selectTabState(global, tabId).payment.form?.formId !== formId) {
+    return;
+  }
+
   if (!result) {
     return;
   }
 
-  global = getGlobal();
+  if ('verificationUrl' in result) {
+    global = updatePayment(global, {
+      confirmPaymentUrl: result.verificationUrl,
+      step: PaymentStep.ConfirmPayment,
+    }, tabId);
+    setGlobal(global);
+    return;
+  }
+
   global = updatePayment(global, { status: 'paid' }, tabId);
   global = closeInvoice(global, tabId);
   setGlobal(global);
@@ -348,22 +387,24 @@ async function sendStripeCredentials<T extends GlobalState>(
   publishableKey: string,
   ...[tabId = getCurrentTabId()]: TabArgs<T>
 ) {
-  const query = buildQueryString({
+  const body = new URLSearchParams({
     'card[number]': data.cardNumber,
     'card[exp_month]': data.expiryMonth,
     'card[exp_year]': data.expiryYear,
     'card[cvc]': data.cvv,
+    'card[name]': data.cardholder,
     'card[address_zip]': data.zip,
     'card[address_country]': data.country,
   });
 
-  const response = await fetch(`https://api.stripe.com/v1/tokens${query}`, {
+  const response = await fetch('https://api.stripe.com/v1/tokens', {
     method: 'POST',
     credentials: 'same-origin',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
       Authorization: `Bearer ${publishableKey}`,
     },
+    body,
   });
   const result = await response.json();
   if (result.error) {
@@ -414,8 +455,7 @@ async function sendSmartGlocalCredentials<T extends GlobalState>(
     url = 'https://tgb.smart-glocal.com/cds/v1/tokenize/card';
   }
 
-  if (tokenizeUrl?.startsWith('https://')
-    && tokenizeUrl.endsWith('.smart-glocal.com/cds/v1/tokenize/card')) {
+  if (tokenizeUrl && isValidSmartGlocalTokenizeUrl(tokenizeUrl)) {
     url = tokenizeUrl;
   }
 
@@ -575,7 +615,7 @@ addActionHandler('checkCanSendGift', async (global, actions, payload): Promise<v
 
 addActionHandler('openGiftModal', async (global, actions, payload): Promise<void> => {
   const {
-    forUserId, selectedResaleGift, tabId = getCurrentTabId(),
+    forUserId, selectedGift, selectedResaleGift, tabId = getCurrentTabId(),
   } = payload;
 
   if (selectIsCurrentUserFrozen(global)) {
@@ -592,6 +632,7 @@ addActionHandler('openGiftModal', async (global, actions, payload): Promise<void
       forPeerId: forUserId,
       gifts,
       selectedResaleGift,
+      selectedGift,
     },
   }, tabId);
   setGlobal(global);
@@ -1140,6 +1181,24 @@ addActionHandler('upgradePrepaidGift', (global, actions, payload): ActionReturnT
   payInputStarInvoice(global, invoice, stars, tabId);
 });
 
+addActionHandler('sendStarGiftAuctionBid', (global, actions, payload): ActionReturnType => {
+  const {
+    giftId, bidAmount, peerId, message, shouldHideName, isUpdateBid, tabId = getCurrentTabId(),
+  } = payload;
+
+  const invoice: ApiInputInvoiceStarGiftAuctionBid = {
+    type: 'stargiftAuctionBid',
+    giftId,
+    bidAmount,
+    peerId,
+    message,
+    shouldHideName,
+    isUpdateBid,
+  };
+
+  payInputStarInvoice(global, invoice, bidAmount, tabId);
+});
+
 async function payInputStarInvoice<T extends GlobalState>(
   global: T, inputInvoice: ApiInputInvoice, price: number,
   ...[tabId = getCurrentTabId()]: TabArgs<T>
@@ -1214,9 +1273,30 @@ addActionHandler('openUniqueGiftBySlug', async (global, actions, payload): Promi
     slug, tabId = getCurrentTabId(),
   } = payload;
 
-  const gift = await callApi('fetchUniqueStarGift', { slug });
+  const result = await callApi('fetchUniqueStarGift', { slug });
 
-  if (!gift) {
+  if (!result || 'error' in result) {
+    const isBurned = result && 'error' in result && result.errorMessage === 'STARGIFT_ALREADY_BURNED';
+    actions.showNotification({
+      message: {
+        key: isBurned ? 'ActionStarGiftUniqueBurnedError' : 'GiftWasNotFound',
+      },
+      tabId,
+    });
+    return;
+  }
+
+  actions.openGiftInfoModal({ gift: result, tabId });
+});
+
+addActionHandler('openGiftAuctionBySlug', async (global, actions, payload): Promise<void> => {
+  const {
+    slug, tabId = getCurrentTabId(),
+  } = payload;
+
+  const auctionState = await callApi('fetchStarGiftAuctionState', { slug });
+
+  if (!auctionState) {
     actions.showNotification({
       message: {
         key: 'GiftWasNotFound',
@@ -1226,7 +1306,7 @@ addActionHandler('openUniqueGiftBySlug', async (global, actions, payload): Promi
     return;
   }
 
-  actions.openGiftInfoModal({ gift, tabId });
+  actions.openGiftAuctionModal({ gift: auctionState.gift, tabId });
 });
 
 addActionHandler('processStarGiftWithdrawal', async (global, actions, payload): Promise<void> => {
@@ -1288,5 +1368,5 @@ function handlePaymentFormError(error: string, tabId: number) {
     return;
   }
 
-  getActions().showDialog({ data: { message: error, hasErrorKey: true }, tabId });
+  getActions().showDialog({ data: { type: 'error', message: error, hasErrorKey: true }, tabId });
 }
