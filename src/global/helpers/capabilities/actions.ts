@@ -161,14 +161,20 @@ async function sendMessageWithTracking(
   };
 }
 
-function getCaseMessages(pipelineData: Record<string, any>): ApiMessage[] {
-  if (!Array.isArray(pipelineData.caseMessages)) {
+function getPipelineMessages(pipelineData: Record<string, any>, fieldName: string): ApiMessage[] {
+  const messages = pipelineData[fieldName];
+  if (!Array.isArray(messages)) {
     return [];
   }
 
-  return pipelineData.caseMessages.filter((item): item is ApiMessage => {
+  return messages.filter((item): item is ApiMessage => {
     return Boolean(item && typeof item === 'object' && 'content' in item && 'id' in item);
   });
+}
+
+function getCaseMessages(pipelineData: Record<string, any>): ApiMessage[] {
+  const contextMessages = getPipelineMessages(pipelineData, 'caseContextMessages');
+  return contextMessages.length ? contextMessages : getPipelineMessages(pipelineData, 'caseMessages');
 }
 
 function getMessageSuggestedMedia(message: ApiMessage | undefined): MediaContent | undefined {
@@ -559,9 +565,14 @@ export const actionResolveCaseCapability: Capability = {
       const caseId = typeof pipelineData.caseId === 'string' && pipelineData.caseId.trim()
         ? pipelineData.caseId.trim()
         : `message:${message.chatId}:${message.id}`;
-      const sourceText = typeof pipelineData.caseText === 'string' && pipelineData.caseText.trim()
+      const pipelineContextText = typeof pipelineData.caseContextText === 'string'
+        ? pipelineData.caseContextText.trim()
+        : '';
+      const pipelineCaseText = typeof pipelineData.caseText === 'string'
         ? pipelineData.caseText.trim()
-        : getMessageText(message)?.text || '';
+        : '';
+      const sourceText = pipelineContextText || pipelineCaseText || getMessageText(message)?.text || '';
+      const caseContextMessages = getCaseMessages(pipelineData);
       const finalReply = getRenderedConfigString(config.finalReplyTemplate, pipelineData)
         || (typeof pipelineData.finalReply === 'string' ? pipelineData.finalReply.trim() : '');
       const aiDraft = typeof pipelineData.aiDraft === 'string'
@@ -596,6 +607,16 @@ export const actionResolveCaseCapability: Capability = {
           fields: pipelineData.fields,
           missingFields: pipelineData.missingFields,
           confidence: pipelineData.confidence,
+          caseReplyText: typeof pipelineData.caseReplyText === 'string' && pipelineData.caseReplyText.trim()
+            ? pipelineData.caseReplyText.trim()
+            : undefined,
+          caseReplyMessageReferences: Array.isArray(pipelineData.caseReplyMessageReferences)
+            ? pipelineData.caseReplyMessageReferences
+            : undefined,
+          caseContextMessageIds: caseContextMessages.map((caseMessage) => ({
+            chatId: caseMessage.chatId,
+            messageId: caseMessage.id,
+          })),
           resolvedAt: Date.now(),
         },
       });

@@ -3,6 +3,7 @@ import 'dotenv/config';
 
 import Fastify from 'fastify';
 
+import { createCustomerServiceSuspendGateService } from './lib/customer-service-suspend-gates.mjs';
 import { sendJson } from './lib/http.mjs';
 import { createOncallService } from './lib/oncall-service.mjs';
 import baiduOcrRoute from './routes/baidu-ocr.mjs';
@@ -11,9 +12,13 @@ import customerServiceCloudConfigGetRoute from './routes/customer-service-cloud-
 import customerServiceCloudConfigPostRoute from './routes/customer-service-cloud-config-post.mjs';
 import customerServiceScenarioKnowledgeGetRoute from './routes/customer-service-scenario-knowledge-get.mjs';
 import customerServiceScenarioKnowledgePostRoute from './routes/customer-service-scenario-knowledge-post.mjs';
-import customerServiceSuccessCaseDeleteRoute from './routes/customer-service-success-case-delete.mjs';
 import customerServiceSuccessCaseRoute from './routes/customer-service-success-case.mjs';
+import customerServiceSuccessCaseDeleteRoute from './routes/customer-service-success-case-delete.mjs';
 import customerServiceSuccessCasesRoute from './routes/customer-service-success-cases.mjs';
+import {
+  customerServiceSuspendGateGetRoute,
+  customerServiceSuspendGatePostRoute,
+} from './routes/customer-service-suspend-gate.mjs';
 import oncallCaseStatusRoute from './routes/oncall-case-status.mjs';
 import oncallCasesRoute from './routes/oncall-cases.mjs';
 import oncallStaffReplyRoute from './routes/oncall-staff-reply.mjs';
@@ -27,6 +32,7 @@ const LOG_ENABLED = process.env.PROXY_LOG === '1' || process.env.OCR_LOG === '1'
 const HOST = process.env.PROXY_HOST || process.env.OCR_HOST || '0.0.0.0';
 
 const oncallService = await createOncallService(log);
+const suspendService = createCustomerServiceSuspendGateService(log);
 const routes = [
   baiduOcrRoute,
   customerServiceAiChatRoute,
@@ -34,6 +40,8 @@ const routes = [
   customerServiceCloudConfigPostRoute,
   customerServiceScenarioKnowledgeGetRoute,
   customerServiceScenarioKnowledgePostRoute,
+  customerServiceSuspendGatePostRoute,
+  customerServiceSuspendGateGetRoute,
   customerServiceSuccessCaseDeleteRoute,
   customerServiceSuccessCaseRoute,
   customerServiceSuccessCasesRoute,
@@ -111,6 +119,7 @@ for (const route of routes) {
           maxBodyBytes: MAX_BODY_BYTES,
           log,
           oncallService,
+          suspendService,
         });
       } catch (error) {
         log('Unhandled route error', {
@@ -166,6 +175,12 @@ async function shutdown(signal, exitCode = 0) {
 
   isShuttingDown = true;
   log('Shutting down API Proxy', { signal, exitCode });
+
+  try {
+    suspendService.close();
+  } catch (error) {
+    log('Failed to close customer service suspend service cleanly', { error: getErrorMessage(error) });
+  }
 
   try {
     await oncallService.close();

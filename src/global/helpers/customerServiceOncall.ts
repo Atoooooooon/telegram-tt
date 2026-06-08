@@ -67,6 +67,60 @@ type CustomerServiceSuccessCasesListResult = {
   error?: string;
 };
 
+export type CustomerServiceSuspendGateStatus = 'pending' | 'approved' | 'rejected' | 'expired';
+
+export type CustomerServiceSuspendGate = {
+  id: string;
+  idempotencyKey?: string;
+  status: CustomerServiceSuspendGateStatus;
+  title: string;
+  prompt: string;
+  sourceChatId?: string;
+  sourceMessageId?: number;
+  caseId?: string;
+  orderNumber?: string;
+  ruleId?: string;
+  ruleName?: string;
+  stepId?: string;
+  decisionContext?: Record<string, unknown>;
+  controlChatId?: string;
+  controlThreadId?: string;
+  controlMessageId?: number;
+  createdAt: number;
+  expiresAt: number;
+  approvedAt?: number;
+  approvedBy?: string;
+  approvalText?: string;
+  rejectedAt?: number;
+  rejectedBy?: string;
+  rejectionText?: string;
+  error?: string;
+};
+
+export type CustomerServiceSuspendGatePayload = {
+  idempotencyKey?: string;
+  title?: string;
+  prompt?: string;
+  timeoutMs?: number;
+  sourceChatId?: string;
+  sourceMessageId?: number;
+  caseId?: string;
+  orderNumber?: string;
+  ruleId?: string;
+  ruleName?: string;
+  stepId?: string;
+  decisionContext?: Record<string, unknown>;
+  controlChatId?: string;
+  controlThreadId?: string;
+  oncallConfig?: CustomerServiceOncallSettings;
+};
+
+type CustomerServiceSuspendGateResult = {
+  ok: boolean;
+  gate?: CustomerServiceSuspendGate;
+  error?: string;
+};
+
 function logOncallSyncDebug(message: string, extra?: unknown) {
   if (typeof console === 'undefined') {
     return;
@@ -201,6 +255,72 @@ export async function deleteCustomerServiceSuccessCase(
     return {
       ok: true,
       deleted: Boolean(data.deleted),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function createCustomerServiceSuspendGate(
+  payload: CustomerServiceSuspendGatePayload,
+): Promise<CustomerServiceSuspendGateResult> {
+  if (typeof fetch === 'undefined') {
+    return { ok: false, error: 'fetch is not available' };
+  }
+
+  try {
+    const response = await fetch('/api/customer-service/suspend-gate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+
+    if (!response.ok || !data?.ok) {
+      return {
+        ok: false,
+        error: data?.error || `HTTP ${response.status}`,
+      };
+    }
+
+    return {
+      ok: true,
+      gate: data.gate,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function getCustomerServiceSuspendGate(
+  id: string,
+): Promise<CustomerServiceSuspendGateResult> {
+  if (typeof fetch === 'undefined') {
+    return { ok: false, error: 'fetch is not available' };
+  }
+
+  try {
+    const response = await fetch(`/api/customer-service/suspend-gate?id=${encodeURIComponent(id)}`);
+    const data = await response.json();
+
+    if (!response.ok || !data?.ok) {
+      return {
+        ok: false,
+        error: data?.error || `HTTP ${response.status}`,
+      };
+    }
+
+    return {
+      ok: true,
+      gate: data.gate,
     };
   } catch (error) {
     return {

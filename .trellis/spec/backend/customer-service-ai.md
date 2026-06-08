@@ -177,6 +177,159 @@ Manual assertion points:
 }
 ```
 
+## Scenario: Workbench Case Reply Context
+
+### 1. Scope / Trigger
+
+Use this contract when a customer-service case playbook, AI recommendation, follow-up automation, or success-case record needs context from a Telegram message that the current case message replies to.
+
+Example: the customer sends a funds-flow video and replies to an older order message. The case must expose the older order message text so the playbook can extract the order number and the operator can understand the follow-up context.
+
+### 2. Signatures
+
+Renderer pipeline fields:
+
+```ts
+type CaseReplyMessageReference = {
+  sourceChatId: string;
+  sourceMessageId: number;
+  replyToChatId: string;
+  replyToMessageId: number;
+  text: string;
+};
+
+type CaseReplyContext = {
+  caseMessages: ApiMessage[];
+  caseReplyMessages: ApiMessage[];
+  caseContextMessages: ApiMessage[];
+  caseReplyText: string;
+  caseContextText: string;
+  caseReplyMessageReferences: CaseReplyMessageReference[];
+};
+```
+
+The rule engine initial `pipelineData` must include:
+
+```ts
+{
+  caseText: string;
+  caseReplyText: string;
+  caseContextText: string;
+  caseMessages: ApiMessage[];
+  caseReplyMessages: ApiMessage[];
+  caseContextMessages: ApiMessage[];
+  caseReplyMessageReferences: CaseReplyMessageReference[];
+}
+```
+
+### 3. Contracts
+
+`caseText` remains the selected workbench case's grouped messages only.
+
+`caseReplyText` is a readable summary of loaded reply-to source messages. It is best effort: only messages already available in the renderer global state are included.
+
+`caseContextText` is `caseText` plus `caseReplyText`. Order extraction, AI playbook recommendation, and new follow-up automation should prefer this field over `caseText`.
+
+`caseContextMessages` is a deduped array of `caseMessages` plus loaded `caseReplyMessages`. Media selection such as `case_first_media` and `case_last_media` should use `caseContextMessages` first, falling back to `caseMessages` for old contexts.
+
+Success-case records should keep the normal `messageIds` as the selected case message ids and store reply references under `metadata.caseReplyMessageReferences`. Do not store image or video binary data.
+
+### 4. Validation & Error Matrix
+
+| Input / Condition | Behavior |
+| --- | --- |
+| Case message has no reply-to | `caseReplyText` is empty; `caseContextText` equals `caseText` |
+| Reply-to source message is loaded | Add it to `caseReplyMessages`, `caseContextMessages`, and `caseReplyText` |
+| Reply-to source message is not loaded | Omit it; do not fabricate text or block playbook execution |
+| Multiple case messages reply to the same source | Deduplicate `caseReplyMessages` and `caseContextMessages`; keep structured reference rows |
+| Referenced source has media | Media selectors can use it through `caseContextMessages`; stored success cases keep references only |
+
+### 5. Good / Base / Bad Cases
+
+Good case:
+
+```json
+{
+  "caseText": "客户发送资金流水视频",
+  "caseReplyText": "引用上下文:\n[引用消息 1] case消息 -1001:102 引用 -1001:88 订单号 Payout123456 金额 100000",
+  "caseContextText": "客户发送资金流水视频\n引用上下文:\n[引用消息 1] case消息 -1001:102 引用 -1001:88 订单号 Payout123456 金额 100000",
+  "caseReplyMessageReferences": [
+    {
+      "sourceChatId": "-1001",
+      "sourceMessageId": 102,
+      "replyToChatId": "-1001",
+      "replyToMessageId": 88,
+      "text": "订单号 Payout123456 金额 100000"
+    }
+  ]
+}
+```
+
+Base case:
+
+```json
+{
+  "caseText": "客户直接发送订单号 Payout123456",
+  "caseReplyText": "",
+  "caseContextText": "客户直接发送订单号 Payout123456"
+}
+```
+
+Bad case:
+
+```json
+{
+  "caseText": "客户发送资金流水视频",
+  "caseReplyText": "",
+  "orderNumber": ""
+}
+```
+
+The bad case happens when the playbook keeps extracting from `caseText` even though the order number only exists in the replied-to source message.
+
+### 6. Tests Required
+
+Required verification for this contract:
+
+```bash
+npx tsc --noEmit --pretty false
+npx eslint --cache --cache-location .cache/.eslintcache --rule react-hooks-static-deps/exhaustive-deps:off src/components/customerService/v2/middle/CustomerServiceMessageList.tsx src/global/helpers/capabilities/actions.ts src/global/helpers/customerServiceV2Settings.ts src/global/types/customerServiceV2.ts
+git diff --check
+```
+
+Manual assertion points:
+
+1. A case message replying to a loaded historical order message exposes that order in `caseContextText`.
+2. The default VA and payout playbooks extract order numbers from `caseContextText`.
+3. `case_first_media` / `case_last_media` can resolve media from `caseContextMessages`.
+4. Saved success cases include `metadata.caseReplyMessageReferences` when reply-to context exists.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```json
+{
+  "capabilityId": "text_processor",
+  "config": {
+    "inputField": "caseText",
+    "outputField": "orderNumber"
+  }
+}
+```
+
+#### Correct
+
+```json
+{
+  "capabilityId": "text_processor",
+  "config": {
+    "inputField": "caseContextText",
+    "outputField": "orderNumber"
+  }
+}
+```
+
 ## Scenario: Scenario Knowledge Redis Seeding
 
 ### 1. Scope / Trigger
@@ -228,3 +381,212 @@ Only returning the fallback file forever leaves no Redis key for operators to ed
 #### Correct
 
 Seed the fallback markdown into Redis on the first Redis miss, then subsequent reads return `source: redis`.
+
+## Scenario: Customer Service Suspend Gates
+
+### 1. Scope / Trigger
+
+Use this contract when a customer-service playbook must pause for human verification that may happen from another device:
+
+```text
+POST /api/customer-service/suspend-gate
+GET /api/customer-service/suspend-gate?id=<gateId>
+```
+
+This is a cross-layer contract because the renderer creates the gate from a rule capability, the Node API proxy stores state in Redis, Telegram Bot API receives phone-side replies, and the renderer polls the backend to continue the pipeline.
+
+### 2. Signatures
+
+Renderer capability:
+
+```ts
+{
+  id: 'suspend_for_human',
+  type: 'checker',
+  config: {
+    titleTemplate?: string;
+    promptTemplate?: string;
+    timeout?: number; // seconds
+    pollInterval?: number; // seconds
+    controlChatId?: string;
+    controlThreadId?: string;
+  }
+}
+```
+
+Renderer helper payload:
+
+```ts
+type CustomerServiceSuspendGatePayload = {
+  idempotencyKey?: string;
+  title?: string;
+  prompt?: string;
+  timeoutMs?: number;
+  sourceChatId?: string;
+  sourceMessageId?: number;
+  caseId?: string;
+  orderNumber?: string;
+  ruleId?: string;
+  ruleName?: string;
+  stepId?: string;
+  decisionContext?: Record<string, unknown>;
+  controlChatId?: string;
+  controlThreadId?: string;
+  oncallConfig?: CustomerServiceOncallSettings;
+};
+```
+
+Redis storage key:
+
+```text
+telegram_web:customer-service:suspend-gates
+```
+
+### 3. Contracts
+
+The backend stores gates as JSON values in a Redis hash. Public gate responses must not expose the bot token.
+
+```ts
+type CustomerServiceSuspendGate = {
+  id: string;
+  idempotencyKey?: string;
+  status: 'pending' | 'approved' | 'rejected' | 'expired';
+  title: string;
+  prompt: string;
+  sourceChatId?: string;
+  sourceMessageId?: number;
+  caseId?: string;
+  orderNumber?: string;
+  ruleId?: string;
+  ruleName?: string;
+  stepId?: string;
+  decisionContext?: Record<string, unknown>;
+  controlChatId?: string;
+  controlThreadId?: string;
+  controlMessageId?: number;
+  createdAt: number;
+  expiresAt: number;
+  approvedAt?: number;
+  approvedBy?: string;
+  approvalText?: string;
+  rejectedAt?: number;
+  rejectedBy?: string;
+  rejectionText?: string;
+  error?: string;
+};
+```
+
+`ONCALL_TELEGRAM_BOT_TOKEN` provides the bot token. The control chat resolves in this order:
+
+1. Capability payload `controlChatId` / `controlThreadId`
+2. Saved automation setting `oncall.suspendConfirmChatId` / `oncall.suspendConfirmThreadId`
+3. Saved oncall alert groups: `newAlertChatId`, then processing/highest/holding alert chats
+
+Phone-side confirmation works by replying to the bot confirmation message.
+
+Approve text: `1`, `OK`, `okay`, `yes`, `approve`, `continue`, `确认`, `同意`, `继续`, `通过`, `可以`, `好了`.
+
+Any other non-empty text reply to the bot confirmation message rejects the gate.
+
+`decisionContext` is operator-facing context printed into the bot message. For payout no-funds it should include enough decision material to decide whether to continue, such as `/df` result, `/dolist` result, `ssn`, `supplierName`, `upstreamAlias`, `targetChatId`, and the planned `/fs` draft.
+
+Gates have a timeout. Timeout only expires the gate; it must never auto-send an upstream message. Terminal or expired gate records are retained temporarily and pruned by `CUSTOMER_SERVICE_SUSPEND_RETENTION_MS` (default 7 days) during normal service scans.
+
+### 4. Validation & Error Matrix
+
+| Input / Condition | Server Behavior |
+| --- | --- |
+| Redis not configured | HTTP 503 with `Redis is not configured` |
+| Missing `ONCALL_TELEGRAM_BOT_TOKEN` | HTTP 400 with token-required error |
+| No control alert chat configured | HTTP 400 with control-chat-required error |
+| Duplicate pending `idempotencyKey` | Return the existing pending gate; do not send another bot message |
+| Gate expires while pending | Persist `status: expired`; renderer treats the capability as failed |
+| Bot reply says approve | Persist `status: approved`; renderer deferred check continues the pipeline |
+| Bot reply is any other non-empty text | Persist `status: rejected`; renderer deferred check fails the step |
+| Web runtime is closed while gate is pending | Redis state remains until timeout/retention cleanup; no upstream message is sent automatically |
+| Unknown gate id on GET | HTTP 404 with `Suspend gate not found` |
+
+### 5. Good / Base / Bad Cases
+
+Good case:
+
+```json
+{
+  "title": "代付未到账视频确认: Payout123456",
+  "prompt": "请人工检查资金流水视频，确认无误后 reply 1 / OK。",
+  "timeoutMs": 7200000,
+  "sourceChatId": "-1001",
+  "sourceMessageId": 101,
+  "orderNumber": "Payout123456",
+  "ruleId": "case_payout_no_funds_demo",
+  "stepId": "suspend_for_video_check",
+  "decisionContext": {
+    "dfReplyText": "success, amount 100000",
+    "dolistReplyText": "ssn: ABC123456\n供应商: AgungSubsidiary-子账户4-APS-+DURIAN_PAY(160)",
+    "ssn": "ABC123456",
+    "supplierName": "AgungSubsidiary-子账户4-APS-+DURIAN_PAY(160)",
+    "upstreamAlias": "DURIAN_PAY_160",
+    "targetChatId": "-5230502865",
+    "plannedDraft": "/fs ABC123456 user report no funds received."
+  },
+  "oncallConfig": {
+    "suspendConfirmChatId": "-1002",
+    "suspendConfirmThreadId": "42"
+  }
+}
+```
+
+Base case:
+
+```json
+{
+  "title": "等待人工确认",
+  "prompt": "请确认后 reply 1 / OK 继续。",
+  "oncallConfig": {
+    "suspendConfirmChatId": "-1002"
+  }
+}
+```
+
+Bad case:
+
+```json
+{
+  "title": "等待人工确认",
+  "prompt": "请确认后 reply 1 / OK 继续。"
+}
+```
+
+The bad case fails when no oncall alert chat exists. Do not silently fall back to a hard-coded chat id.
+
+### 6. Tests Required
+
+Required verification for this contract:
+
+```bash
+node --check server/lib/customer-service-suspend-gates.mjs
+node --check server/routes/customer-service-suspend-gate.mjs
+node --check server/lib/telegram-bot.mjs
+node --check server/index.mjs
+npx tsc --noEmit --pretty false
+git diff --check
+```
+
+Manual assertion points:
+
+1. Creating a gate writes one Redis hash entry under `telegram_web:customer-service:suspend-gates`.
+2. A duplicate pending `idempotencyKey` returns the same gate id.
+3. Replying `OK` to the bot message changes the gate to `approved`.
+4. Replying `1` to the bot message changes the gate to `approved`.
+5. Replying any other non-empty text to the bot message changes the gate to `rejected`.
+6. The renderer never receives `telegramBotToken`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+Use `wait_for_reply` or an in-memory frontend confirmation map for a human check that may take minutes or happen from a phone.
+
+#### Correct
+
+Create a Redis-backed `suspend_for_human` gate, send a bot message to the control group, accept a reply to that bot message, and let the renderer poll the backend gate status before continuing.

@@ -19,6 +19,7 @@ import { aiGenerateReplyCapability } from './ai';
 import {
   checkHasReplyCapability,
   checkMessageCapability,
+  suspendForHumanCapability,
   switchRouteCapability,
   waitForReplyCapability,
 } from './checkers';
@@ -32,6 +33,7 @@ export function registerAllCapabilities(): void {
   registerCapability(checkMessageCapability);
   registerCapability(checkHasReplyCapability);
   registerCapability(waitForReplyCapability);
+  registerCapability(suspendForHumanCapability);
   registerCapability(switchRouteCapability);
 
   // Extractors
@@ -54,6 +56,7 @@ export {
   checkMessageCapability,
   checkHasReplyCapability,
   waitForReplyCapability,
+  suspendForHumanCapability,
   switchRouteCapability,
   // Extractors
   textProcessorCapability,

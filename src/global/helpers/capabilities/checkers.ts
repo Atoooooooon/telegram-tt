@@ -413,6 +413,248 @@ export const waitForReplyCapability: Capability = {
   },
 };
 
+function getPipelineString(pipelineData: Record<string, any>, key: string): string | undefined {
+  const value = pipelineData[key];
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed || undefined;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+
+  return undefined;
+}
+
+function buildSuspendDecisionContext(
+  pipelineData: Record<string, any>,
+  baseContext: Record<string, unknown>,
+): Record<string, unknown> {
+  const context: Record<string, unknown> = { ...baseContext };
+  const keys = [
+    'caseSummary',
+    'caseText',
+    'dfReplyText',
+    'botReplyText',
+    'ssn',
+    'supplierName',
+    'targetChatId',
+    'upstreamAlias',
+    'switchMatchedValue',
+    'switchGotoStep',
+  ];
+
+  for (const key of keys) {
+    const value = getPipelineString(pipelineData, key);
+    if (value) {
+      context[key] = value;
+    }
+  }
+
+  const ssn = getPipelineString(pipelineData, 'ssn');
+  const supplierName = getPipelineString(pipelineData, 'supplierName');
+  if (ssn || supplierName) {
+    const botReplyText = getPipelineString(pipelineData, 'botReplyText');
+    if (botReplyText) {
+      context.dolistReplyText = botReplyText;
+    }
+  }
+
+  if (ssn) {
+    context.plannedDraft = `/fs ${ssn} user report no funds received.`;
+  }
+
+  return context;
+}
+
+/**
+ * Suspend pipeline execution until a backend-controlled human gate is approved.
+ */
+export const suspendForHumanCapability: Capability = {
+  id: 'suspend_for_human',
+  name: '等待人工远程确认',
+  type: 'checker',
+  description: '创建后端持久化确认门,等待控制群 reply 1 / OK 后继续流程',
+
+  configSchema: {
+    titleTemplate: {
+      type: 'string',
+      label: '确认标题',
+      default: '等待人工确认',
+      placeholder: '支持 {{变量}} 语法',
+    },
+    promptTemplate: {
+      type: 'textarea',
+      label: '确认说明',
+      default: '请人工检查后 reply 1 / OK 继续。',
+      placeholder: '支持 {{变量}} 语法',
+    },
+    timeout: {
+      type: 'number',
+      label: '超时秒数',
+      default: 3600,
+    },
+    pollInterval: {
+      type: 'number',
+      label: '轮询间隔(秒)',
+      default: 5,
+    },
+    controlChatId: {
+      type: 'string',
+      label: '控制群ID',
+      placeholder: '留空使用自动化页远程确认群',
+    },
+    controlThreadId: {
+      type: 'string',
+      label: '控制群 Topic ID',
+      placeholder: '留空使用自动化页远程确认 Topic',
+    },
+  },
+
+  async execute({
+    message, config, pipelineData, global, step,
+  }) {
+    const {
+      titleTemplate = '等待人工确认',
+      promptTemplate = '请人工检查后 reply 1 / OK 继续。',
+      timeout = 3600,
+      pollInterval = 5,
+      controlChatId,
+      controlThreadId,
+    } = config;
+    const { renderTemplate } = await import('../templateRenderer');
+    const {
+      createCustomerServiceSuspendGate,
+      getCustomerServiceSuspendGate,
+    } = await import('../customerServiceOncall');
+
+    const title = renderTemplate(String(titleTemplate), pipelineData).trim() || '等待人工确认';
+    const prompt = renderTemplate(String(promptTemplate), pipelineData).trim() || '请人工检查后 reply 1 / OK 继续。';
+    const ruleId = typeof pipelineData.ruleId === 'string' ? pipelineData.ruleId : undefined;
+    const ruleName = typeof pipelineData.ruleName === 'string' ? pipelineData.ruleName : undefined;
+    const stepId = step?.id;
+    const orderNumber = typeof pipelineData.orderNumber === 'string' ? pipelineData.orderNumber : undefined;
+    const caseId = typeof pipelineData.caseId === 'string' ? pipelineData.caseId : undefined;
+    const decisionContext = buildSuspendDecisionContext(pipelineData, {
+      orderNumber,
+      caseId,
+      ruleName,
+      stepId,
+    });
+    const idempotencyKey = [
+      'suspend_for_human',
+      ruleId || 'rule',
+      stepId || 'step',
+      message.chatId,
+      message.id,
+      orderNumber || '',
+    ].join(':');
+
+    const renderedControlChatId = typeof controlChatId === 'string' && controlChatId.trim()
+      ? renderTemplate(controlChatId, pipelineData).trim()
+      : undefined;
+    const renderedControlThreadId = typeof controlThreadId === 'string' && controlThreadId.trim()
+      ? renderTemplate(controlThreadId, pipelineData).trim()
+      : undefined;
+    const createResult = await createCustomerServiceSuspendGate({
+      idempotencyKey,
+      title,
+      prompt,
+      timeoutMs: Math.max(60, Number(timeout) || 3600) * 1000,
+      sourceChatId: message.chatId,
+      sourceMessageId: message.id,
+      caseId,
+      orderNumber,
+      ruleId,
+      ruleName,
+      stepId,
+      decisionContext,
+      controlChatId: renderedControlChatId,
+      controlThreadId: renderedControlThreadId,
+      oncallConfig: global.customerServiceV2?.settings?.oncall,
+    });
+
+    if (!createResult.ok || !createResult.gate) {
+      return {
+        success: false,
+        error: createResult.error || 'Failed to create suspend gate',
+      };
+    }
+
+    const gateId = createResult.gate.id;
+    const startTime = Date.now();
+    const timeoutMs = Math.max(60, Number(timeout) || 3600) * 1000;
+
+    return {
+      success: true,
+      data: {
+        suspendGateId: gateId,
+        suspendGateStatus: createResult.gate.status,
+        suspendControlChatId: createResult.gate.controlChatId,
+        suspendControlMessageId: createResult.gate.controlMessageId,
+      },
+      deferred: {
+        delay: Math.max(1, Number(pollInterval) || 5) * 1000,
+        checkFn: async () => {
+          const { sleep } = await import('../../../util/delays');
+
+          while (Date.now() - startTime < timeoutMs) {
+            const gateResult = await getCustomerServiceSuspendGate(gateId);
+            const gate = gateResult.gate;
+
+            if (!gateResult.ok || !gate) {
+              return {
+                success: false,
+                data: {
+                  suspendGateId: gateId,
+                  suspendGateStatus: 'missing',
+                  suspendGateError: gateResult.error || 'Suspend gate not found',
+                },
+              };
+            }
+
+            if (gate.status === 'approved') {
+              return {
+                success: true,
+                data: {
+                  suspendGateId: gate.id,
+                  suspendGateStatus: gate.status,
+                  suspendApprovedAt: gate.approvedAt,
+                  suspendApprovedBy: gate.approvedBy,
+                  suspendApprovalText: gate.approvalText,
+                },
+              };
+            }
+
+            if (gate.status === 'rejected' || gate.status === 'expired') {
+              return {
+                success: false,
+                data: {
+                  suspendGateId: gate.id,
+                  suspendGateStatus: gate.status,
+                  suspendGateError: gate.error || gate.rejectionText || gate.status,
+                },
+              };
+            }
+
+            await sleep(Math.max(1, Number(pollInterval) || 5) * 1000);
+          }
+
+          return {
+            success: false,
+            data: {
+              suspendGateId: gateId,
+              suspendGateStatus: 'timeout',
+              suspendGateError: 'Suspend gate wait timed out',
+            },
+          };
+        },
+      },
+    };
+  },
+};
+
 /**
  * Route the pipeline to one of many steps based on a variable value.
  */

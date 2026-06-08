@@ -81,13 +81,15 @@ export function subscribePlaybookRunHistory(
 
 function isPlaybookRunWaitingForConfirmation(run: CasePlaybookRun) {
   return run.status === 'pending' && Boolean(
-    run.auditLog?.executionLog?.some((entry) => entry.includes('Waiting for human confirmation')),
+    run.auditLog?.executionLog?.some((entry) => entry.includes('Waiting for human confirmation'))
+    || run.auditLog?.steps?.some((step) => step.pending && step.capabilityId === 'suspend_for_human'),
   );
 }
 
 export function didRequestHumanConfirmation(result: CustomerServiceRuleExecutionResult) {
   return result.pending && Boolean(
-    result.auditLog?.executionLog?.some((entry) => entry.includes('Waiting for human confirmation')),
+    result.auditLog?.executionLog?.some((entry) => entry.includes('Waiting for human confirmation'))
+    || result.auditLog?.steps?.some((step) => step.pending && step.capabilityId === 'suspend_for_human'),
   );
 }
 
@@ -325,6 +327,8 @@ export function getExecutionStepFailureTitle(
   [
     'text',
     'caseText',
+    'caseReplyText',
+    'caseContextText',
     'botReplyText',
     'orderNumber',
     'vaNumber',

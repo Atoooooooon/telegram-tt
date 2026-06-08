@@ -2,12 +2,15 @@ import type React from '../../../../../lib/teact/teact';
 import type { FC } from '../../../../../lib/teact/teact';
 import { memo, useState } from '../../../../../lib/teact/teact';
 
+import type { ApiChat } from '../../../../../api/types';
 import type {
   ActionExecution,
   CustomerServiceCasePlaybook,
+  CustomerServiceOncallSettings,
   PipelineStep,
   UserRule,
 } from '../../../../../global/types/customerServiceV2';
+import type { TopicsInfo } from '../../../../../types';
 
 import { registerAllCapabilities } from '../../../../../global/helpers/capabilities';
 import {
@@ -28,6 +31,7 @@ import Modal from '../../../../ui/Modal';
 import Switcher from '../../../../ui/Switcher';
 import TextArea from '../../../../ui/TextArea';
 import RuleEngineDoc from '../RuleEngineDoc';
+import ChatTopicPicker from './ChatTopicPicker';
 
 import layoutStyles from '../CustomerServiceSettingsModal.module.scss';
 import styles from './RuleEngineTab.module.scss';
@@ -38,8 +42,13 @@ type AutomationItem = UserRule | CustomerServiceCasePlaybook;
 type Props = {
   rules?: UserRule[];
   casePlaybooks?: CustomerServiceCasePlaybook[];
+  oncall?: CustomerServiceOncallSettings;
+  chats: Record<string, ApiChat>;
+  topicsInfoByChatId: Record<string, TopicsInfo>;
+  onLoadTopics: (payload: { chatId: string; force?: boolean }) => void;
   onRulesChange: (rules: UserRule[]) => void;
   onCasePlaybooksChange: (playbooks: CustomerServiceCasePlaybook[]) => void;
+  onOncallChange: (nextOncall: CustomerServiceOncallSettings) => void;
 };
 
 function cloneAutomationItem<T extends AutomationItem>(item: T): T {
@@ -161,8 +170,13 @@ function validatePipelineCapabilities(pipeline: PipelineStep[] | undefined): str
 const RuleEngineTab: FC<Props> = ({
   rules,
   casePlaybooks,
+  oncall,
+  chats,
+  topicsInfoByChatId,
+  onLoadTopics,
   onRulesChange,
   onCasePlaybooksChange,
+  onOncallChange,
 }) => {
   const lang = useLang();
   const safeRules = rules ? rules.slice() : [];
@@ -232,6 +246,14 @@ const RuleEngineTab: FC<Props> = ({
       name: `Case Playbook ${safePlaybooks.length + 1}`,
     };
     onCasePlaybooksChange([newPlaybook, ...safePlaybooks]);
+  });
+
+  const handleSuspendConfirmTargetChange = useLastCallback((nextValue: { chatId?: string; threadId?: string }) => {
+    onOncallChange({
+      ...(oncall || {}),
+      suspendConfirmChatId: nextValue.chatId,
+      suspendConfirmThreadId: nextValue.threadId,
+    });
   });
 
   const openEditModal = useLastCallback((kind: AutomationKind, itemId: string) => {
@@ -445,6 +467,36 @@ const RuleEngineTab: FC<Props> = ({
           消息规则处理单条 Telegram 消息；Case Playbook 以工作台 case 为入口，供 AI 推荐和人工点击执行。
         </p>
       </div>
+
+      <section className={styles.automationConfigCard}>
+        <div className={styles.automationConfigHeader}>
+          <Icon name="lock" className={styles.automationConfigIcon} />
+          <div>
+            <h4 className={styles.automationConfigTitle}>远程确认群</h4>
+            <p className={styles.automationConfigDescription}>
+              <code className={styles.automationConfigCode}>suspend_for_human</code>
+              {' '}
+              会把确认消息发送到这里；手机 reply 1 / OK / 确认 / 继续 后，本机继续执行后续 Playbook。
+            </p>
+          </div>
+        </div>
+        <ChatTopicPicker
+          chats={chats}
+          topicsInfoByChatId={topicsInfoByChatId}
+          value={{
+            chatId: oncall?.suspendConfirmChatId,
+            threadId: oncall?.suspendConfirmThreadId,
+          }}
+          chatLabel="确认群"
+          topicLabel="确认话题"
+          disabledLabel="未设置确认群"
+          topicDisabledLabel="不指定话题"
+          clearDescription="清空后会回退到消息保障告警群"
+          searchPlaceholder="搜索确认群"
+          onLoadTopics={onLoadTopics}
+          onChange={handleSuspendConfirmTargetChange}
+        />
+      </section>
 
       {renderAutomationSection(
         'message_rule',

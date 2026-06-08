@@ -116,6 +116,8 @@ export function getDefaultOncallConfig() {
     processingAlertThreadId: '',
     resolvedAlertChatId: '',
     resolvedAlertThreadId: '',
+    suspendConfirmChatId: '',
+    suspendConfirmThreadId: '',
     holdingReplyPatternSources: [...DEFAULT_HOLDING_PATTERNS],
     resolveReplyPatternSources: [...DEFAULT_RESOLVE_PATTERNS],
     customerResolvePatternSources: toStringList(
@@ -192,6 +194,12 @@ export function normalizeOncallConfig(rawConfig, baseConfig = getDefaultOncallCo
       : '',
     resolvedAlertThreadId: typeof safeConfig.resolvedAlertThreadId === 'string'
       ? safeConfig.resolvedAlertThreadId.trim()
+      : '',
+    suspendConfirmChatId: typeof safeConfig.suspendConfirmChatId === 'string'
+      ? safeConfig.suspendConfirmChatId.trim()
+      : '',
+    suspendConfirmThreadId: typeof safeConfig.suspendConfirmThreadId === 'string'
+      ? safeConfig.suspendConfirmThreadId.trim()
       : '',
     holdingReplyPatternSources,
     resolveReplyPatternSources,

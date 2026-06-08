@@ -11,6 +11,10 @@ export class TelegramBotClient {
     return Boolean(config.telegramBotToken && config.telegramAlertChatId);
   }
 
+  hasToken(config) {
+    return Boolean(config.telegramBotToken);
+  }
+
   async request(config, method, payload) {
     const response = await fetch(buildApiUrl(config.telegramBotToken, method), {
       method: 'POST',
@@ -90,6 +94,28 @@ export class TelegramBotClient {
       }
       this.log('Telegram bot deleteMessage failed', error);
       return { ok: false };
+    }
+  }
+
+  async getUpdates(config, params = {}) {
+    if (!this.hasToken(config)) {
+      return { ok: false, skipped: true, updates: [] };
+    }
+
+    try {
+      const data = await this.request(config, 'getUpdates', {
+        timeout: 0,
+        allowed_updates: ['message'],
+        ...params,
+      });
+
+      return {
+        ok: true,
+        updates: Array.isArray(data.result) ? data.result : [],
+      };
+    } catch (error) {
+      this.log('Telegram bot getUpdates failed', error);
+      return { ok: false, updates: [] };
     }
   }
 }

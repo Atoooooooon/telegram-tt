@@ -84,6 +84,8 @@ export const CUSTOMER_SERVICE_CONFIG = {
     processingAlertThreadId: '',
     resolvedAlertChatId: '',
     resolvedAlertThreadId: '',
+    suspendConfirmChatId: '',
+    suspendConfirmThreadId: '',
     firstResponseTimeoutMs: 10 * 1000,
     highestEscalationTimeoutMs: 20 * 1000,
     holdingReplyGraceTimeoutMs: 30 * 1000,

@@ -254,6 +254,23 @@ const RuleEngineDoc: FC = () => {
               : 引擎执行日志数组
             </li>
           </ul>
+          <p>
+            case 消息如果 reply 了历史消息，规则引擎会尽量把已加载的原消息放入
+            {' '}
+            <code>caseReplyText</code>
+            {' '}
+            /
+            <code>caseContextText</code>
+            {' '}
+            和
+            {' '}
+            <code>caseContextMessages</code>
+            。
+            未加载到本地的历史消息不会被补写；查单、跟进自动化优先读取
+            {' '}
+            <code>caseContextText</code>
+            。
+          </p>
         </section>
 
         <section className={styles.docSection}>
@@ -1166,6 +1183,90 @@ const RuleEngineDoc: FC = () => {
               <code>botReplyMessageId</code>
             </p>
           </div>
+
+          <div className={styles.capabilityItem}>
+            <h6>
+              <code>suspend_for_human</code>
+              {' '}
+              - 远程人工确认 (异步)
+            </h6>
+            <p>
+              创建后端持久化确认门，将确认消息发送到“自动化”页配置的确认群。适合视频核对、上游反馈前确认等可能跨设备完成的人工步骤。
+              确认消息会自动附带常见决策字段，例如订单、/df 返回、/dolist 返回、SSN、供应商、上游群和准备草稿。
+            </p>
+            <ul>
+              <li>
+                <code>titleTemplate</code>
+                : 确认消息标题 (string，支持
+                {' '}
+                <code>{'{{变量}}'}</code>
+                )
+              </li>
+              <li>
+                <code>promptTemplate</code>
+                : 确认说明 (textarea，支持
+                {' '}
+                <code>{'{{变量}}'}</code>
+                )
+              </li>
+              <li>
+                <code>timeout</code>
+                : 超时秒数 (number，默认 3600)
+              </li>
+              <li>
+                <code>pollInterval</code>
+                : 查询确认状态间隔秒数 (number，默认 5)
+              </li>
+              <li>
+                <code>controlChatId</code>
+                {' '}
+                /
+                <code>controlThreadId</code>
+                : 可选覆盖确认群和话题。留空时使用自动化页的“远程确认群”。
+              </li>
+            </ul>
+            <p>
+              手机端 reply bot 确认消息：
+              <code>1</code>
+              、
+              <code>OK</code>
+              、
+              <code>确认</code>
+              、
+              <code>继续</code>
+              {' '}
+              会继续流程；
+              任意其他非空文本回复会停止流程。
+              超时只会让本次 gate 过期，不会自动发送上游消息。
+            </p>
+            <p>
+              <strong>输出数据:</strong>
+              {' '}
+              <code>suspendGateId</code>
+              ,
+              {' '}
+              <code>suspendGateStatus</code>
+              ,
+              {' '}
+              <code>suspendApprovedAt</code>
+              ,
+              {' '}
+              <code>suspendApprovalText</code>
+            </p>
+            <pre className={styles.codeExample}>
+              {`{
+  "id": "suspend_for_video_check",
+  "capabilityId": "suspend_for_human",
+  "config": {
+    "titleTemplate": "代付未到账视频确认: {{orderNumber}}",
+    "promptTemplate": "请检查客户资金流水视频。确认无误后 reply 1 或 OK 继续。",
+    "timeout": 7200,
+    "pollInterval": 5
+  },
+  "onFailure": { "stopPipeline": true }
+}`}
+            </pre>
+          </div>
         </section>
 
         <section className={styles.docSection}>
@@ -1337,7 +1438,7 @@ const RuleEngineDoc: FC = () => {
             <li>
               <strong>异步能力:</strong>
               {' '}
-              check_has_reply 等异步能力会在后台延迟执行,同步引擎到此暂停。
+              check_has_reply、wait_for_reply、suspend_for_human 等异步能力会在后台延迟执行,同步引擎到此暂停。
               时间到后异步执行器会根据 onSuccess/onFailure 继续执行后续步骤
             </li>
             <li>

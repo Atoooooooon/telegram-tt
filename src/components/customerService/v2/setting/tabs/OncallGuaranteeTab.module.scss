@@ -269,30 +269,30 @@
 
 .stageRouteList {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.5rem;
 
   @media (max-width: 1200px) {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   @media (max-width: 800px) {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   @media (max-width: 600px) {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
 .stageRouteCard {
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
+  gap: 0.5rem;
 
-  padding: 0.625rem;
+  padding: 0.5625rem;
   border: 1px solid rgba(var(--color-primary-rgb, 51, 144, 236), 0.1);
-  border-radius: 0.75rem;
+  border-radius: 0.625rem;
 
   background: rgba(var(--color-primary-rgb, 51, 144, 236), 0.03);
 
@@ -311,17 +311,17 @@
     margin-bottom: 0.5rem;
 
     label {
-      background-color: transparent;
-      padding: 0;
       left: 0.75rem;
+      padding: 0;
+      background-color: transparent;
     }
 
     &.touched label,
     &.error label,
     .form-control:focus + label {
       transform: scale(0.75) translate(-0.25rem, -1.75rem);
-      background-color: var(--color-background);
       padding: 0 0.25rem;
+      background-color: var(--color-background);
     }
   }
 
@@ -346,19 +346,12 @@
 }
 
 .stageRouteLabel {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: var(--font-weight-semibold);
   color: var(--color-text);
 }
 
 .stageRouteDescription {
-  font-size: 0.8125rem;
-  line-height: 1.3;
-  color: var(--color-text-secondary);
-}
-
-.stageRouteHint {
-  margin-top: -0.25rem;
   font-size: 0.75rem;
   line-height: 1.3;
   color: var(--color-text-secondary);

@@ -32,6 +32,7 @@ import {
   CUSTOMER_SERVICE_DEBUG_TECH_CHAT_ID,
 } from '../../../../global/helpers/customerServiceV2Settings';
 import { getMessageSummaryText } from '../../../../global/helpers/messageSummary';
+import { getMessageReplyInfo } from '../../../../global/helpers/replies';
 import { executeRule } from '../../../../global/helpers/ruleEngine';
 import {
   selectCustomerServiceV2ContextChatId,
@@ -41,6 +42,7 @@ import {
   selectCustomerServiceV2PendingCapabilityConfirmations,
   selectCustomerServiceV2Settings,
 } from '../../../../global/selectors/customerServiceV2';
+import { selectReplyMessage } from '../../../../global/selectors/messages';
 import buildClassName from '../../../../util/buildClassName';
 import buildStyle from '../../../../util/buildStyle';
 import { getCurrentTabId } from '../../../../util/establishMultitabRole';
@@ -112,6 +114,23 @@ type RecommendedPlaybook = {
   playbook: CustomerServiceCasePlaybook;
   reason: string;
   missingFields: string[];
+};
+
+type CaseReplyMessageReference = {
+  sourceChatId: string;
+  sourceMessageId: number;
+  replyToChatId: string;
+  replyToMessageId: number;
+  text: string;
+};
+
+type CaseReplyContext = {
+  caseMessages: ApiMessage[];
+  caseReplyMessages: ApiMessage[];
+  caseContextMessages: ApiMessage[];
+  caseReplyText: string;
+  caseContextText: string;
+  caseReplyMessageReferences: CaseReplyMessageReference[];
 };
 
 const REPLY_CONTEXT_DELAY_MS = 450;
@@ -206,6 +225,17 @@ function getStatusLabel(
 
 function canRenderMessageMediaPreview(message: ApiMessage) {
   return canRenderCompactMediaPreview(message.content);
+}
+
+function getMessageIdentity(message: ApiMessage) {
+  return `${message.chatId}:${message.id}`;
+}
+
+function getCaseReplyReferenceKey(reference: CaseReplyMessageReference) {
+  return [
+    `${reference.sourceChatId}:${reference.sourceMessageId}`,
+    `${reference.replyToChatId}:${reference.replyToMessageId}`,
+  ].join('->');
 }
 
 function buildSuccessCaseImageReferences(
@@ -421,8 +451,77 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
       .join('\n');
   }, [lang]);
 
+  const buildCaseReplyContext = useCallback((
+    group: CustomerServiceMessageGroup,
+    caseText = getGroupText(group, 12),
+  ): CaseReplyContext => {
+    const global = getGlobal();
+    const caseMessages = group.messages;
+    const replyMessages: ApiMessage[] = [];
+    const references: CaseReplyMessageReference[] = [];
+    const seenReplyKeys = new Set<string>();
+
+    caseMessages.forEach((message) => {
+      const replyInfo = getMessageReplyInfo(message);
+      if (!replyInfo?.replyToMsgId) {
+        return;
+      }
+
+      const replyMessage = selectReplyMessage(global, message);
+      if (!replyMessage) {
+        return;
+      }
+
+      const replyKey = getMessageIdentity(replyMessage);
+      if (!seenReplyKeys.has(replyKey)) {
+        seenReplyKeys.add(replyKey);
+        replyMessages.push(replyMessage);
+      }
+
+      references.push({
+        sourceChatId: message.chatId,
+        sourceMessageId: message.id,
+        replyToChatId: replyMessage.chatId,
+        replyToMessageId: replyMessage.id,
+        text: getMessageSummaryText(lang, replyMessage, undefined, true, 180),
+      });
+    });
+
+    const caseReplyText = references
+      .map((reference, index) => [
+        `[引用消息 ${index + 1}]`,
+        `case消息 ${reference.sourceChatId}:${reference.sourceMessageId}`,
+        `引用 ${reference.replyToChatId}:${reference.replyToMessageId}`,
+        reference.text,
+      ].filter(Boolean).join(' '))
+      .join('\n');
+    const seenContextKeys = new Set<string>();
+    const caseContextMessages = [...caseMessages, ...replyMessages].filter((message) => {
+      const key = getMessageIdentity(message);
+      if (seenContextKeys.has(key)) {
+        return false;
+      }
+
+      seenContextKeys.add(key);
+      return true;
+    });
+    const caseContextText = [
+      caseText,
+      caseReplyText ? `引用上下文:\n${caseReplyText}` : '',
+    ].filter(Boolean).join('\n');
+
+    return {
+      caseMessages,
+      caseReplyMessages: replyMessages,
+      caseContextMessages,
+      caseReplyText,
+      caseContextText,
+      caseReplyMessageReferences: references,
+    };
+  }, [getGroupText, lang]);
+
   const getAssistantInsight = useCallback((group: CustomerServiceMessageGroup): AssistantInsight => {
-    const text = getGroupText(group);
+    const text = buildCaseReplyContext(group).caseContextText;
     const latestMessage = getLatestMessage(group);
     const latestPreview = latestMessage
       ? getMessageSummaryText(lang, latestMessage, undefined, true, 120)
@@ -457,7 +556,7 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
       needsLookup: problemType === '支付订单查询' && Boolean(orderId),
       suggestedReply: buildSuggestedReply(problemType, orderId, missingFields),
     };
-  }, [getGroupText, getLatestMessage, lang]);
+  }, [buildCaseReplyContext, getLatestMessage, lang]);
 
   const selectedInsight = useMemo(() => {
     return selectedGroup ? getAssistantInsight(selectedGroup) : undefined;
@@ -476,14 +575,14 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
       return [];
     }
 
-    const caseText = getGroupText(selectedGroup, 12);
-    const normalizedText = caseText.toLowerCase();
+    const caseContext = buildCaseReplyContext(selectedGroup);
+    const normalizedText = caseContext.caseContextText.toLowerCase();
 
     return caseRunnablePlaybooks.map((playbook) => {
       const matcher = playbook.caseMatcher;
       const requiredFields = matcher?.requiresFields || [];
       const missingFields = requiredFields.filter((field) => (
-        !getPlaybookRequiredFieldValue(field, selectedInsight, caseText)
+        !getPlaybookRequiredFieldValue(field, selectedInsight, caseContext.caseContextText)
       ));
       const keywordMatched = !matcher?.keywords?.length
         || matcher.keywords.some((keyword) => normalizedText.includes(keyword.toLowerCase()));
@@ -506,7 +605,7 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
 
       return left.playbook.name.localeCompare(right.playbook.name);
     });
-  }, [caseRunnablePlaybooks, getGroupText, selectedGroup, selectedInsight]);
+  }, [buildCaseReplyContext, caseRunnablePlaybooks, selectedGroup, selectedInsight]);
 
   const aiPlaybookRecommendation = selectedGroup
     ? aiRecommendationByGroupId[selectedGroup.id]
@@ -526,11 +625,17 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
     }
 
     const caseText = getGroupText(group, 12);
-    const mediaSummary = getAiRecommendationMediaSummary(group);
+    const caseContext = buildCaseReplyContext(group, caseText);
+    const mediaContextGroup = {
+      ...group,
+      messages: caseContext.caseContextMessages,
+      messageCount: caseContext.caseContextMessages.length,
+    };
+    const mediaSummary = getAiRecommendationMediaSummary(mediaContextGroup);
     const profile = selectCustomerServiceAiProfile(settings, {
       businessKey: AI_PLAYBOOK_RECOMMENDER_BUSINESS_KEY,
     });
-    const imageSourceMessages = group.messages
+    const imageSourceMessages = caseContext.caseContextMessages
       .filter(hasAiSupportedImage)
       .slice(-MAX_AI_RECOMMENDATION_IMAGE_COUNT);
     const imageSourceKey = imageSourceMessages
@@ -546,7 +651,11 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
       imageSourceKey,
       latestMessage ? `${latestMessage.chatId}:${latestMessage.id}:${latestMessage.date}` : 'no-message',
       String(group.messages.length),
-      String(caseText.length),
+      String(caseContext.caseContextMessages.length),
+      String(caseContext.caseContextText.length),
+      caseContext.caseReplyMessageReferences
+        .map(getCaseReplyReferenceKey)
+        .join('|'),
     ].join('::');
 
     if (!force && aiRecommendationRequestKeyRef.current === requestKey) {
@@ -586,7 +695,7 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
       const userPrompt = buildAiPlaybookRecommendationPrompt({
         playbooks: caseRunnablePlaybooks,
         insight,
-        caseText,
+        caseText: caseContext.caseContextText,
         mediaSummary,
       });
       const result = await requestCustomerServiceAiChat(profile, [
@@ -665,11 +774,22 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
     }
 
     const latestMessage = selectedGroup.messages[selectedGroup.messages.length - 1];
-    const triggerInfo = getAiRecommendationTriggerInfo(selectedGroup);
+    const caseContext = buildCaseReplyContext(selectedGroup);
+    const triggerContextGroup = {
+      ...selectedGroup,
+      messages: caseContext.caseContextMessages,
+      messageCount: caseContext.caseContextMessages.length,
+    };
+    const triggerInfo = getAiRecommendationTriggerInfo(triggerContextGroup);
     const scheduleKey = [
       selectedGroup.id,
       latestMessage ? `${latestMessage.chatId}:${latestMessage.id}:${latestMessage.date}` : 'no-message',
       selectedGroup.messages.length,
+      caseContext.caseContextMessages.length,
+      caseContext.caseContextText.length,
+      caseContext.caseReplyMessageReferences
+        .map(getCaseReplyReferenceKey)
+        .join('|'),
       selectedInsight.problemType,
       selectedInsight.fields.map((field) => `${field.label}:${field.value}`).join('|'),
     ].join('::');
@@ -728,6 +848,7 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
       window.clearTimeout(timeoutId);
     };
   }, [
+    buildCaseReplyContext,
     requestAiPlaybookRecommendation,
     selectedGroup,
     selectedInsight,
@@ -962,7 +1083,15 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
     }
 
     const caseText = targetGroup ? getGroupText(targetGroup, 12) : playbook.description || playbook.name;
-    const orderNumber = getCaseFieldValue(targetInsight, 'orderNumber', caseText);
+    const caseContext: CaseReplyContext = targetGroup ? buildCaseReplyContext(targetGroup, caseText) : {
+      caseMessages: [],
+      caseReplyMessages: [],
+      caseContextMessages: [],
+      caseReplyText: '',
+      caseContextText: caseText,
+      caseReplyMessageReferences: [],
+    };
+    const orderNumber = getCaseFieldValue(targetInsight, 'orderNumber', caseContext.caseContextText);
     const runId = [
       playbook.id,
       runBucketId,
@@ -1021,8 +1150,13 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
           fields: targetInsight?.fields || [],
           missingFields: targetInsight?.missingFields || [],
           orderNumber,
-          text: caseText,
-          caseMessages: targetGroup?.messages || [],
+          text: caseContext.caseContextText,
+          caseMessages: caseContext.caseMessages,
+          caseReplyMessages: caseContext.caseReplyMessages,
+          caseContextMessages: caseContext.caseContextMessages,
+          caseReplyText: caseContext.caseReplyText,
+          caseContextText: caseContext.caseContextText,
+          caseReplyMessageReferences: caseContext.caseReplyMessageReferences,
           messageIds: targetGroup ? targetGroup.messages.map((message) => message.id).join(',') : '',
         },
         {
@@ -1159,7 +1293,7 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
       return;
     }
 
-    const contextText = getGroupText(selectedGroup, 12);
+    const contextText = buildCaseReplyContext(selectedGroup).caseContextText;
     const fieldsText = selectedInsight.fields.length
       ? selectedInsight.fields.map((field) => `${field.label}=${field.value}`).join(', ')
       : '无';
@@ -1230,14 +1364,16 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
     const finalReply = draftReply.trim();
     const aiDraftForCase = aiGeneratedDraftByGroupId[selectedGroup.id] || selectedInsight.suggestedReply;
     const playbookRuns = playbookRunsByGroupId[selectedGroup.id] || [];
-    const imageReferences = buildSuccessCaseImageReferences(selectedGroup.messages, lang);
+    const sourceText = getGroupText(selectedGroup, 16);
+    const caseContext = buildCaseReplyContext(selectedGroup, sourceText);
+    const imageReferences = buildSuccessCaseImageReferences(caseContext.caseContextMessages, lang);
     const result = await saveCustomerServiceSuccessCase({
       recordType: 'case_resolved',
       caseId: selectedGroup.id,
       chatId: selectedGroup.chatId,
       senderId: selectedGroup.senderId,
       messageIds: selectedGroup.messages.map((message) => message.id),
-      sourceText: getGroupText(selectedGroup, 16),
+      sourceText: caseContext.caseContextText,
       aiSummary: selectedInsight.summary,
       aiIntent: selectedInsight.problemType,
       aiDraft: aiDraftForCase,
@@ -1249,6 +1385,14 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
         fields: selectedInsight.fields,
         missingFields: selectedInsight.missingFields,
         confidence: selectedInsight.confidence,
+        caseReplyText: caseContext.caseReplyText || undefined,
+        caseReplyMessageReferences: caseContext.caseReplyMessageReferences.length
+          ? caseContext.caseReplyMessageReferences
+          : undefined,
+        caseContextMessageIds: caseContext.caseContextMessages.map((message) => ({
+          chatId: message.chatId,
+          messageId: message.id,
+        })),
         aiRecommendation: aiPlaybookRecommendation ? {
           intent: aiPlaybookRecommendation.intent,
           scenarioId: aiPlaybookRecommendation.scenarioId,

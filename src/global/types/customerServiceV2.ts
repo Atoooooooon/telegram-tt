@@ -45,6 +45,8 @@ export type CustomerServiceOncallSettings = {
   processingAlertThreadId?: string;
   resolvedAlertChatId?: string;
   resolvedAlertThreadId?: string;
+  suspendConfirmChatId?: string;
+  suspendConfirmThreadId?: string;
   firstResponseTimeoutMs?: number;
   highestEscalationTimeoutMs?: number;
   holdingReplyGraceTimeoutMs?: number;
@@ -458,6 +460,41 @@ export const CUSTOMER_SERVICE_PIPELINE_VARIABLES = [
     description: 'Combined recent message text from the selected workbench case.',
     source: 'runtime',
     example: '用户发送凭证和单号 idn6603150418xap',
+  },
+  {
+    key: 'caseReplyText',
+    label: 'Workbench reply-to context text',
+    description: 'Readable summaries of loaded messages that selected case messages reply to.',
+    source: 'runtime',
+    example: '引用上下文: [引用消息 1] case消息 -1001:102 引用 -1001:88 订单号 Payout123456',
+  },
+  {
+    key: 'caseContextText',
+    label: 'Workbench case context text',
+    description: 'caseText plus caseReplyText. Prefer this for order extraction and follow-up automation.',
+    source: 'runtime',
+    example: '客户发送资金流水视频\n引用上下文: [引用消息 1] ... 订单号 Payout123456',
+  },
+  {
+    key: 'caseReplyMessages',
+    label: 'Workbench reply-to messages',
+    description: 'Loaded ApiMessage objects referenced by selected case messages. Missing history is omitted.',
+    source: 'runtime',
+    example: '[ApiMessage]',
+  },
+  {
+    key: 'caseContextMessages',
+    label: 'Workbench case context messages',
+    description: 'Deduped caseMessages plus caseReplyMessages for media selection and follow-up automation.',
+    source: 'runtime',
+    example: '[ApiMessage]',
+  },
+  {
+    key: 'caseReplyMessageReferences',
+    label: 'Workbench reply-to references',
+    description: 'Structured links from each case message to its loaded reply-to source message.',
+    source: 'runtime',
+    example: '[{ sourceMessageId: 102, replyToMessageId: 88 }]',
   },
   {
     key: 'caseSummary',

@@ -1,7 +1,7 @@
 import type { FC } from '../../../../../lib/teact/teact';
 import type React from '../../../../../lib/teact/teact';
 import {
-  memo, useEffect, useMemo, useState,
+  memo, useMemo, useState,
 } from '../../../../../lib/teact/teact';
 
 import type { ApiChat, ApiUser } from '../../../../../api/types';
@@ -13,9 +13,9 @@ import useLastCallback from '../../../../../hooks/useLastCallback';
 
 import Icon from '../../../../common/icons/Icon';
 import InputText from '../../../../ui/InputText';
-import Select from '../../../../ui/Select';
 import Switcher from '../../../../ui/Switcher';
 import TextArea from '../../../../ui/TextArea';
+import ChatTopicPicker from './ChatTopicPicker';
 
 import layoutStyles from '../CustomerServiceSettingsModal.module.scss';
 import styles from './OncallGuaranteeTab.module.scss';
@@ -127,50 +127,6 @@ const OncallGuaranteeTab: FC<Props> = ({
   const [staffSearchQuery, setStaffSearchQuery] = useState('');
   const [isStaffSearchOpen, setIsStaffSearchOpen] = useState(false);
   const selectedStaffIds = useMemo(() => config.staffIds || [], [config.staffIds]);
-  const configuredAlertChatIds = useMemo(() => (
-    [
-      config.newAlertChatId,
-      config.processingAlertChatId,
-      config.holdingAlertChatId,
-      config.highestAlertChatId,
-      config.resolvedAlertChatId,
-    ].filter((id): id is string => Boolean(id))
-  ), [
-    config.highestAlertChatId,
-    config.holdingAlertChatId,
-    config.newAlertChatId,
-    config.processingAlertChatId,
-    config.resolvedAlertChatId,
-  ]);
-
-  // On mount, auto-load topics for any forum chats that are already configured
-  // (onLoadTopics is normally only called when the user picks a chat, so it's
-  // never triggered when the modal opens with pre-existing settings).
-  useEffect(() => {
-    const seen = new Set<string>();
-    for (const chatId of configuredAlertChatIds) {
-      if (seen.has(chatId)) continue;
-      seen.add(chatId);
-      const chat = chats[chatId];
-      if (chat?.isForum && !topicsInfoByChatId[chatId]) {
-        onLoadTopics({ chatId });
-      }
-    }
-  }, [chats, configuredAlertChatIds, onLoadTopics, topicsInfoByChatId]);
-
-  const chatOptions = Object.values(chats)
-    .filter((chat) => (
-      chat
-      && !chat.isForbidden
-      && !chat.isRestricted
-      && (
-        chat.type === 'chatTypeBasicGroup'
-        || chat.type === 'chatTypeSuperGroup'
-        || chat.type === 'chatTypeChannel'
-      )
-    ))
-    .sort((left, right) => left.title.localeCompare(right.title, 'zh-CN'));
-
   const staffSearchResults = useMemo(() => {
     return searchUsers(users, selectedStaffIds, staffSearchQuery);
   }, [staffSearchQuery, users, selectedStaffIds]);
@@ -243,28 +199,15 @@ const OncallGuaranteeTab: FC<Props> = ({
     updateField(key, Number.isFinite(parsed) && parsed >= 0 ? parsed : 0);
   });
 
-  const handleChatTargetChange = useLastCallback((
+  const handleRouteTargetChange = useLastCallback((
     chatKey: keyof CustomerServiceOncallSettings,
     threadKey: keyof CustomerServiceOncallSettings,
-  ) => (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const nextChatId = e.currentTarget.value || undefined;
-    const nextChat = nextChatId ? chats[nextChatId] : undefined;
-
-    if (nextChatId && nextChat?.isForum && !topicsInfoByChatId[nextChatId]) {
-      onLoadTopics({ chatId: nextChatId, force: true });
-    }
-
+  ) => (nextValue: { chatId?: string; threadId?: string }) => {
     onChange({
       ...config,
-      [chatKey]: nextChatId,
-      [threadKey]: undefined,
+      [chatKey]: nextValue.chatId,
+      [threadKey]: nextValue.threadId,
     });
-  });
-
-  const handleThreadTargetChange = useLastCallback((
-    threadKey: keyof CustomerServiceOncallSettings,
-  ) => (e: React.ChangeEvent<HTMLSelectElement>) => {
-    updateField(threadKey, e.currentTarget.value || undefined);
   });
 
   const handleStaffSearchChange = useLastCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -464,12 +407,6 @@ const OncallGuaranteeTab: FC<Props> = ({
           {stageOptions.map(({ stage, chatKey, threadKey, label, description }) => {
             const selectedChatId = config[chatKey] as string | undefined;
             const selectedThreadId = config[threadKey] as string | undefined;
-            const selectedChat = selectedChatId ? chats[selectedChatId] : undefined;
-            const topicsById = selectedChatId ? topicsInfoByChatId[selectedChatId]?.topicsById : undefined;
-            const topicOptions = topicsById
-              ? Object.values(topicsById).sort((left, right) => left.title.localeCompare(right.title, 'zh-CN'))
-              : [];
-            const isTopicSelectable = Boolean(selectedChat?.isForum && topicOptions.length);
 
             return (
               <div key={stage} className={styles.stageRouteCard}>
@@ -477,51 +414,22 @@ const OncallGuaranteeTab: FC<Props> = ({
                   <div className={styles.stageRouteLabel}>{label}</div>
                   <div className={styles.stageRouteDescription}>{description}</div>
                 </div>
-                <div className={styles.formGrid}>
-                  <Select
-                    id={`oncall-stage-chat-${stage}`}
-                    value={selectedChatId || ''}
-                    label={lang('CustomerServiceOncallAlertGroup')}
-                    hasArrow
-                    onChange={handleChatTargetChange(chatKey, threadKey)}
-                  >
-                    <option value="">{lang('CustomerServiceOncallTargetDisabled')}</option>
-                    {chatOptions.map((chat) => (
-                      <option key={chat.id} value={chat.id}>
-                        {chat.isForum ? `[Forum] ${chat.title}` : chat.title}
-                      </option>
-                    ))}
-                  </Select>
-                  <Select
-                    id={`oncall-stage-thread-${stage}`}
-                    value={selectedThreadId || ''}
-                    label={lang('CustomerServiceOncallAlertTopic')}
-                    hasArrow
-                    onChange={handleThreadTargetChange(threadKey)}
-                  >
-                    <option value="">{lang('CustomerServiceOncallTopicDisabled')}</option>
-                    {isTopicSelectable && topicOptions.map((topic) => (
-                      <option key={topic.id} value={String(topic.id)}>
-                        {topic.title}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                {selectedChat && !selectedChat.isForum && (
-                  <div className={styles.stageRouteHint}>
-                    {lang('CustomerServiceOncallTopicUnavailableHint')}
-                  </div>
-                )}
-                {selectedChat?.isForum && !topicOptions.length && (
-                  <div className={styles.stageRouteHint}>
-                    {lang('CustomerServiceOncallTopicLoadHint')}
-                  </div>
-                )}
-                {selectedChat?.isForum && topicOptions.length > 0 && !selectedThreadId && (
-                  <div className={styles.stageRouteHint}>
-                    {lang('CustomerServiceOncallTopicRequiredHint')}
-                  </div>
-                )}
+                <ChatTopicPicker
+                  compact
+                  chats={chats}
+                  topicsInfoByChatId={topicsInfoByChatId}
+                  value={{
+                    chatId: selectedChatId,
+                    threadId: selectedThreadId,
+                  }}
+                  chatLabel={lang('CustomerServiceOncallAlertGroup')}
+                  topicLabel={lang('CustomerServiceOncallAlertTopic')}
+                  disabledLabel={lang('CustomerServiceOncallTargetDisabled')}
+                  topicDisabledLabel={lang('CustomerServiceOncallTopicDisabled')}
+                  clearDescription="清空该阶段告警目标"
+                  onLoadTopics={onLoadTopics}
+                  onChange={handleRouteTargetChange(chatKey, threadKey)}
+                />
               </div>
             );
           })}

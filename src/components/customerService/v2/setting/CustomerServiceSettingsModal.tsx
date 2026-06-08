@@ -412,8 +412,13 @@ const CustomerServiceSettingsModal = ({
               <RuleEngineTab
                 rules={settings.rules}
                 casePlaybooks={settings.casePlaybooks}
+                oncall={settings.oncall}
+                chats={chats}
+                topicsInfoByChatId={topicsInfoByChatId}
+                onLoadTopics={loadTopics}
                 onRulesChange={handleRulesChange}
                 onCasePlaybooksChange={handleCasePlaybooksChange}
+                onOncallChange={handleOncallChange}
               />
             )}
             {activeTab === 6 && (

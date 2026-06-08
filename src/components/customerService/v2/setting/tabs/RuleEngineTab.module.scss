@@ -13,6 +13,57 @@
   margin-top: 1rem;
 }
 
+.automationConfigCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--color-borders);
+  border-radius: 0.75rem;
+
+  background: var(--color-background-secondary);
+}
+
+.automationConfigHeader {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.automationConfigIcon {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+  color: var(--color-primary);
+}
+
+.automationConfigTitle {
+  margin: 0;
+
+  font-size: 0.9375rem;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.3;
+  color: var(--color-text);
+}
+
+.automationConfigDescription {
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+}
+
+.automationConfigCode {
+  padding: 0.0625rem 0.25rem;
+  border-radius: 0.25rem;
+
+  font-family: var(--font-monospace);
+  color: var(--color-primary);
+
+  background: rgba(var(--color-primary-rgb), 0.08);
+}
+
 .ruleList {
   scrollbar-gutter: stable;
 

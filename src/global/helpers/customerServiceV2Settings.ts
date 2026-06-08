@@ -179,7 +179,7 @@ export function getDefaultCustomerServiceCasePlaybooks(): CustomerServiceCasePla
           id: 'extract_order_number',
           capabilityId: 'text_processor',
           config: {
-            inputField: 'caseText',
+            inputField: 'caseContextText',
             outputField: 'orderNumber',
             cleanEnabled: true,
             cleanPrefixes: '/ds,/df,/d,/订单,/单号,订单号,单号,order',
@@ -240,9 +240,9 @@ export function getDefaultCustomerServiceCasePlaybooks(): CustomerServiceCasePla
           id: 'resolve_ds_success',
           capabilityId: 'action_resolve_case',
           config: {
-            reason: 'VA 订单状态成功，无需继续处理',
-            summaryTemplate: 'VA 订单 {{orderNumber}} 查询结果为成功',
-            intentTemplate: 'VA 查单',
+            reason: '代收订单状态成功，无需继续处理',
+            summaryTemplate: '代收订单 {{orderNumber}} 查询结果为成功',
+            intentTemplate: '代收查单',
           },
           onSuccess: {
             stopPipeline: true,
@@ -400,13 +400,13 @@ export function getDefaultCustomerServiceCasePlaybooks(): CustomerServiceCasePla
     },
     {
       id: 'case_payout_no_funds_demo',
-      name: '代付未到账 Demo: /df + /dolist',
+      name: '代付未到账 Demo: /df + 人工视频确认 + /dolist',
       enabled: true,
       kind: 'case_playbook',
       exposable: true,
       manualRunnable: true,
       scope: 'case',
-      description: '从当前 case 提取代付单号，在客户群回复 /df；若状态成功，到技术群执行 /dolist msn 获取上游信息。',
+      description: '从当前 case 提取代付单号，在客户群回复 /df；若状态成功，要求客户提供资金流水视频，同时用 /dolist msn 定位上游，人工确认后准备上游草稿。',
       trigger: {
         eventType: 'case_manual',
       },
@@ -420,7 +420,7 @@ export function getDefaultCustomerServiceCasePlaybooks(): CustomerServiceCasePla
           id: 'extract_payout_order_number',
           capabilityId: 'text_processor',
           config: {
-            inputField: 'caseText',
+            inputField: 'caseContextText',
             outputField: 'orderNumber',
             cleanEnabled: true,
             cleanPrefixes: '/df,/d,/订单,/单号,订单号,单号,payout,withdraw',
@@ -457,6 +457,11 @@ export function getDefaultCustomerServiceCasePlaybooks(): CustomerServiceCasePla
             timeout: 60,
             pollInterval: 5,
           },
+          onSuccess: {
+            set: {
+              dfReplyText: '{{botReplyText}}',
+            },
+          },
           onFailure: {
             stopPipeline: true,
           },
@@ -468,6 +473,18 @@ export function getDefaultCustomerServiceCasePlaybooks(): CustomerServiceCasePla
             variableKey: 'botReplyText',
             variableOperator: 'regex',
             variableExpectedValue: '(success|successful|成功)',
+          },
+          onFailure: {
+            stopPipeline: true,
+          },
+        },
+        {
+          id: 'ask_customer_funds_flow_video',
+          capabilityId: 'action_auto_reply',
+          config: {
+            template: '请提供一下从创建订单到目前的资金流水，我们反馈核查。',
+            replyToOriginal: true,
+            typingDelayMs: 900,
           },
           onFailure: {
             stopPipeline: true,
@@ -492,6 +509,115 @@ export function getDefaultCustomerServiceCasePlaybooks(): CustomerServiceCasePla
             messageIdField: 'sentMessageId',
             timeout: 90,
             pollInterval: 5,
+          },
+          onFailure: {
+            stopPipeline: true,
+          },
+        },
+        {
+          id: 'extract_payout_ssn',
+          capabilityId: 'text_processor',
+          config: {
+            inputField: 'botReplyText',
+            outputField: 'ssn',
+            cleanEnabled: true,
+            cleanTrim: true,
+            extractEnabled: true,
+            extractPattern: '(?:ssn|SSN|上游订单号|上游单号)[:：\\s]*([A-Za-z0-9_-]{6,96})',
+            extractGroupIndex: 1,
+            validateEnabled: true,
+            validateMinLength: 6,
+            validateMaxLength: 96,
+            validateNumeric: false,
+          },
+          onFailure: {
+            stopPipeline: true,
+          },
+        },
+        {
+          id: 'extract_payout_supplier_name',
+          capabilityId: 'text_processor',
+          config: {
+            inputField: 'botReplyText',
+            outputField: 'supplierName',
+            cleanEnabled: true,
+            cleanTrim: true,
+            extractEnabled: true,
+            extractPattern: '(?:供应商|上游|账户|账号)[:：\\s]*([^\\n\\r]+)',
+            extractGroupIndex: 1,
+            validateEnabled: true,
+            validateMinLength: 2,
+            validateMaxLength: 120,
+            validateNumeric: false,
+          },
+          onFailure: {
+            stopPipeline: true,
+          },
+        },
+        {
+          id: 'route_payout_supplier_upstream_group',
+          capabilityId: 'switch_route',
+          config: {
+            inputField: 'supplierName',
+            defaultMode: 'regex',
+            mergeData: true,
+            casesJson: JSON.stringify([
+              {
+                match: 'AgungSubsidiary-子账户4-APS-+DURIAN_PAY\\(160\\)',
+                gotoStep: 'suspend_for_video_check',
+                mode: 'regex',
+                data: {
+                  targetChatId: '-5230502865',
+                  upstreamAlias: 'DURIAN_PAY_160',
+                },
+              },
+              {
+                match: 'PakaiLinkKILAUSAFIR-PAKAILINK\\(153\\)',
+                gotoStep: 'suspend_for_video_check',
+                mode: 'regex',
+                data: {
+                  targetChatId: '-5213573223',
+                  upstreamAlias: 'PakaiLinkKILAUSAFIR',
+                },
+              },
+            ]),
+          },
+          onSuccess: {
+            gotoStep: '{{switchGotoStep}}',
+          },
+          onFailure: {
+            stopPipeline: true,
+          },
+        },
+        {
+          id: 'suspend_for_video_check',
+          capabilityId: 'suspend_for_human',
+          config: {
+            titleTemplate: '代付未到账上游反馈确认: {{orderNumber}}',
+            promptTemplate: [
+              '客户反馈代付订单 {{orderNumber}} 未到账，/df 已显示成功。',
+              '已查询 /dolist 并识别到 SSN: {{ssn}}，供应商: {{supplierName}}。',
+              '将反馈到上游 {{upstreamAlias}} / 群 {{targetChatId}}，草稿: /fs {{ssn}} user report no funds received.',
+              '请人工检查客户资金流水视频是否覆盖从创建订单到当前、账号/App 是否匹配、流水内是否确实未收到款。',
+              '确认需要反馈上游时 reply 1 / OK / 确认 / 继续；任意其他文本会停止本次 playbook。',
+            ].join('\n'),
+            timeout: 7200,
+            pollInterval: 5,
+          },
+          onFailure: {
+            stopPipeline: true,
+          },
+        },
+        {
+          id: 'prepare_payout_upstream_draft',
+          capabilityId: 'action_send_to',
+          config: {
+            toChatId: '{{targetChatId}}',
+            template: '/fs {{ssn}} user report no funds received.',
+            deliveryMode: 'draft',
+            mediaSource: 'case_last_media',
+            requireMedia: false,
+            openChatOnDraft: true,
           },
           onSuccess: {
             stopPipeline: true,
@@ -693,6 +819,8 @@ export function normalizeCustomerServiceOncallSettings(raw: unknown): CustomerSe
     processingAlertThreadId: toNumericString(source.processingAlertThreadId),
     resolvedAlertChatId: toTrimmedString(source.resolvedAlertChatId),
     resolvedAlertThreadId: toNumericString(source.resolvedAlertThreadId),
+    suspendConfirmChatId: toTrimmedString(source.suspendConfirmChatId),
+    suspendConfirmThreadId: toNumericString(source.suspendConfirmThreadId),
     firstResponseTimeoutMs: toNonNegativeNumber(
       source.firstResponseTimeoutMs,
       defaults.firstResponseTimeoutMs,
