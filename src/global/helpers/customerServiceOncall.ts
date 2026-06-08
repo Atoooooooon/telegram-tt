@@ -24,6 +24,13 @@ type CustomerServiceStaffReplyPayload = {
   oncallConfig?: CustomerServiceOncallSettings;
 };
 
+export type CustomerServiceSuccessCaseImageReference = {
+  chatId?: string;
+  messageId?: number;
+  description?: string;
+  source?: 'vision_model' | 'operator' | 'message_context';
+};
+
 type CustomerServiceSuccessCasePayload = {
   recordType: 'ai_draft_sent' | 'ai_action_approved' | 'case_resolved';
   caseId?: string;
@@ -36,12 +43,15 @@ type CustomerServiceSuccessCasePayload = {
   aiDraft?: string;
   finalReply?: string;
   wasEdited?: boolean;
+  imageSummary?: string;
+  imageReferences?: CustomerServiceSuccessCaseImageReference[];
   metadata?: Record<string, unknown>;
 };
 
 export type CustomerServiceSuccessCaseRecord = CustomerServiceSuccessCasePayload & {
   id: string;
   createdAt: number;
+  markdown?: string;
 };
 
 type CustomerServiceSuccessCaseMutationResult = {

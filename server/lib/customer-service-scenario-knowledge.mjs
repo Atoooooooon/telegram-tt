@@ -56,6 +56,43 @@ async function readFallbackKnowledge(redisError) {
   }
 }
 
+async function seedFallbackKnowledge(redis, log) {
+  const fallback = await readFallbackKnowledge();
+  const content = fallback.record?.content;
+
+  if (!content) {
+    return fallback;
+  }
+
+  try {
+    const updatedAt = Date.now();
+    await redis.set(REDIS_KEYS.CUSTOMER_SERVICE_SCENARIO_KNOWLEDGE, content);
+
+    return {
+      record: {
+        ...fallback.record,
+        updatedAt,
+      },
+      source: 'redis-seeded',
+      unavailable: false,
+    };
+  } catch (error) {
+    const message = getErrorMessage(error);
+    if (typeof log === 'function') {
+      log('Customer service scenario knowledge seed failed', {
+        error: message,
+        key: REDIS_KEYS.CUSTOMER_SERVICE_SCENARIO_KNOWLEDGE,
+      });
+    }
+
+    return {
+      ...fallback,
+      unavailable: true,
+      error: message,
+    };
+  }
+}
+
 export async function fetchCustomerServiceScenarioKnowledge(log) {
   let redis;
 
@@ -84,7 +121,7 @@ export async function fetchCustomerServiceScenarioKnowledge(log) {
       };
     }
 
-    return readFallbackKnowledge();
+    return seedFallbackKnowledge(redis, log);
   } catch (error) {
     return readFallbackKnowledge(getErrorMessage(error));
   }

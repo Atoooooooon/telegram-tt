@@ -582,15 +582,22 @@
 }
 
 .resolvedDetailText,
+.resolvedDetailMarkdown,
 .resolvedDetailMeta {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
-.resolvedDetailText {
+.resolvedDetailText,
+.resolvedDetailMarkdown {
   font-size: 0.875rem;
   line-height: 1.5;
   color: var(--color-text);
+}
+
+.resolvedDetailMarkdown {
+  margin: 0;
+  font-family: var(--font-family);
 }
 
 .resolvedDetailMeta {

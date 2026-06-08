@@ -24,6 +24,7 @@
 | [logging.md](./logging.md)                         | Logging and native module packaging               | Debugging, packaging               |
 | [pagination.md](./pagination.md)                   | Cursor vs offset pagination guidelines            | Implementing list APIs             |
 | [quality.md](./quality.md)                         | Import paths, Vite config, code quality           | Before committing                  |
+| [customer-service-ai.md](./customer-service-ai.md) | Customer-service AI Redis/API contracts           | AI knowledge and success cases     |
 | [macos-permissions.md](./macos-permissions.md)     | macOS system permissions (mic, accessibility)     | Features requiring permissions     |
 | [text-input.md](./text-input.md)                   | Text insertion without clipboard pollution        | Voice-to-text, paste features      |
 

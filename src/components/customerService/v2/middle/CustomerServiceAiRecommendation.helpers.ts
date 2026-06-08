@@ -28,6 +28,7 @@ export type AiPlaybookRecommendation = {
   reason: string;
   confidence?: number;
   mediaPolicy?: string;
+  imageSummary?: string;
   knowledgeAvailable?: boolean;
   knowledgeSource?: string;
   knowledgeError?: string;
@@ -83,7 +84,8 @@ const AI_PLAYBOOK_RECOMMENDATION_SYSTEM_PROMPT = [
     '"playbookId":"候选playbook id或null",',
     '"reason":"一句中文理由",',
     '"confidence":0-100,',
-    '"mediaPolicy":"images_allowed|text_only|do_not_upload_video"}',
+    '"mediaPolicy":"images_allowed|text_only|do_not_upload_video",',
+    '"imageSummary":"如果看到了图片，用一句话说明图片内容；没有图片则为空字符串"}',
   ].join(''),
 ].join('\n');
 
@@ -289,6 +291,9 @@ export function parseAiPlaybookRecommendation(
     const mediaPolicy = typeof record.mediaPolicy === 'string' && record.mediaPolicy.trim()
       ? record.mediaPolicy.trim()
       : undefined;
+    const imageSummary = typeof record.imageSummary === 'string' && record.imageSummary.trim()
+      ? record.imageSummary.trim()
+      : undefined;
 
     return {
       requestKey,
@@ -301,6 +306,7 @@ export function parseAiPlaybookRecommendation(
         : hasRunnablePlaybook ? 'AI 推荐该 playbook。' : 'AI 识别到意图，但当前没有可执行 playbook。',
       confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(100, confidence)) : undefined,
       mediaPolicy,
+      imageSummary,
       knowledgeAvailable: knowledge?.available,
       knowledgeSource: knowledge?.source,
       knowledgeError: knowledge?.error,

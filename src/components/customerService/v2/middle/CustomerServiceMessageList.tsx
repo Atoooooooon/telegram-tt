@@ -22,6 +22,7 @@ import {
   selectCustomerServiceAiProfile,
 } from '../../../../global/helpers/customerServiceAi';
 import {
+  type CustomerServiceSuccessCaseImageReference,
   type CustomerServiceSuccessCaseRecord,
   deleteCustomerServiceSuccessCase,
   listCustomerServiceSuccessCases,
@@ -205,6 +206,25 @@ function getStatusLabel(
 
 function canRenderMessageMediaPreview(message: ApiMessage) {
   return canRenderCompactMediaPreview(message.content);
+}
+
+function buildSuccessCaseImageReferences(
+  messages: ApiMessage[],
+  lang: ReturnType<typeof useLang>,
+) {
+  return messages
+    .filter(canRenderMessageMediaPreview)
+    .slice(-MAX_MEDIA_PREVIEW_COUNT)
+    .reduce<CustomerServiceSuccessCaseImageReference[]>((result, message) => {
+      result.push({
+        chatId: message.chatId,
+        messageId: message.id,
+        description: getMessageSummaryText(lang, message, undefined, true, 160),
+        source: 'message_context',
+      });
+
+      return result;
+    }, []);
 }
 
 function clampQueuePaneWidth(width: number, containerWidth?: number) {
@@ -1210,6 +1230,7 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
     const finalReply = draftReply.trim();
     const aiDraftForCase = aiGeneratedDraftByGroupId[selectedGroup.id] || selectedInsight.suggestedReply;
     const playbookRuns = playbookRunsByGroupId[selectedGroup.id] || [];
+    const imageReferences = buildSuccessCaseImageReferences(selectedGroup.messages, lang);
     const result = await saveCustomerServiceSuccessCase({
       recordType: 'case_resolved',
       caseId: selectedGroup.id,
@@ -1222,10 +1243,20 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
       aiDraft: aiDraftForCase,
       finalReply,
       wasEdited: Boolean(finalReply && finalReply !== aiDraftForCase.trim()),
+      imageSummary: aiPlaybookRecommendation?.imageSummary,
+      imageReferences,
       metadata: {
         fields: selectedInsight.fields,
         missingFields: selectedInsight.missingFields,
         confidence: selectedInsight.confidence,
+        aiRecommendation: aiPlaybookRecommendation ? {
+          intent: aiPlaybookRecommendation.intent,
+          scenarioId: aiPlaybookRecommendation.scenarioId,
+          reason: aiPlaybookRecommendation.reason,
+          confidence: aiPlaybookRecommendation.confidence,
+          mediaPolicy: aiPlaybookRecommendation.mediaPolicy,
+          imageSummary: aiPlaybookRecommendation.imageSummary,
+        } : undefined,
         playbookRuns: playbookRuns.map((run) => ({
           playbookId: run.playbookId,
           playbookName: run.playbookName,
@@ -1849,6 +1880,16 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
                     <strong className={styles.insightValue}>{selectedResolvedCase.wasEdited ? '是' : '否'}</strong>
                   </div>
                 </section>
+
+                {selectedResolvedCase.markdown && (
+                  <section className={styles.assistantCard}>
+                    <div className={styles.cardHeader}>
+                      <Icon name="document" />
+                      <h4 className={styles.cardTitle}>案例素材 Markdown</h4>
+                    </div>
+                    <pre className={styles.resolvedDetailMarkdown}>{selectedResolvedCase.markdown}</pre>
+                  </section>
+                )}
 
                 {selectedResolvedCase.aiSummary && (
                   <section className={styles.assistantCard}>
