@@ -3,14 +3,21 @@ import { getActions, withGlobal } from '../../../../global';
 
 import type { ApiChat, ApiChatFullInfo, ApiUser } from '../../../../api/types';
 import type {
+  CustomerServiceCapabilityExecutionPolicies,
+  CustomerServiceCasePlaybook,
+  CustomerServiceExternalSettings,
   CustomerServiceOncallSettings,
   CustomerServiceQuickReply,
+  CustomerServiceSettings,
   UserRule,
 } from '../../../../global/types/customerServiceV2';
 import type { TopicsInfo } from '../../../../types';
 
 import { CUSTOMER_SERVICE_CONFIG } from '../../../../config/customerService';
 import {
+  normalizeCapabilityExecutionPolicies,
+  normalizeCustomerServiceCasePlaybooks,
+  normalizeCustomerServiceExternalSettings,
   normalizeCustomerServiceOncallSettings,
   normalizeCustomerServiceQuickReplies,
 } from '../../../../global/helpers/customerServiceV2Settings';
@@ -27,6 +34,7 @@ import Checkbox from '../../../ui/Checkbox';
 import Modal from '../../../ui/Modal';
 import TabList from '../../../ui/TabList';
 import CustomerServiceCloudSyncModal from './CustomerServiceCloudSyncModal';
+import ExternalServicesTab from './tabs/ExternalServicesTab';
 import GroupFiltersTab from './tabs/GroupFiltersTab';
 import MessageFiltersTab from './tabs/MessageFiltersTab';
 import OncallGuaranteeTab from './tabs/OncallGuaranteeTab';
@@ -45,20 +53,7 @@ type StateProps = {
   users: Record<string, ApiUser>;
   chatFolders: Record<number, any>;
   orderedFolderIds?: number[];
-  savedSettings?: {
-    monitoredChatIds: string[];
-    filteredUserIds: string[];
-    regexFilters: Array<{
-      source: string;
-      flags: string;
-    }>;
-    mode?: 'oncall' | 'assist';
-    autoRead?: boolean;
-    quickReplies?: CustomerServiceQuickReply[];
-    quickReplyPanelGlobal?: boolean;
-    rules?: UserRule[];
-    oncall?: CustomerServiceOncallSettings;
-  };
+  savedSettings?: CustomerServiceSettings;
 };
 
 type FilterSettings = {
@@ -70,7 +65,10 @@ type FilterSettings = {
   quickReplies: CustomerServiceQuickReply[];
   quickReplyPanelGlobal: boolean;
   rules: UserRule[];
+  casePlaybooks: CustomerServiceCasePlaybook[];
+  capabilityExecutionPolicies: CustomerServiceCapabilityExecutionPolicies;
   oncall: CustomerServiceOncallSettings;
+  external: CustomerServiceExternalSettings;
 };
 
 type SavedSettings = StateProps['savedSettings'];
@@ -83,7 +81,10 @@ type NormalizedSettings = {
   quickReplies: CustomerServiceQuickReply[];
   quickReplyPanelGlobal: boolean;
   rules: UserRule[];
+  casePlaybooks: CustomerServiceCasePlaybook[];
+  capabilityExecutionPolicies: CustomerServiceCapabilityExecutionPolicies;
   oncall: CustomerServiceOncallSettings;
+  external: CustomerServiceExternalSettings;
 };
 
 function ensureCurrentUserInStaffIds(staffIds: string[] | undefined, currentUserId?: string) {
@@ -125,10 +126,14 @@ const buildFilterSettings = (saved?: SavedSettings, currentUserId?: string): Fil
   rules: (saved?.rules && saved.rules.length
     ? saved.rules.map((rule) => JSON.parse(JSON.stringify(rule)))
     : []) as UserRule[],
+  casePlaybooks: normalizeCustomerServiceCasePlaybooks(saved?.casePlaybooks)
+    .map((playbook) => JSON.parse(JSON.stringify(playbook))) as CustomerServiceCasePlaybook[],
+  capabilityExecutionPolicies: normalizeCapabilityExecutionPolicies(saved?.capabilityExecutionPolicies),
   oncall: ensureOncallStaffIncludesCurrentUser(
     normalizeCustomerServiceOncallSettings(saved?.oncall),
     currentUserId,
   ),
+  external: normalizeCustomerServiceExternalSettings(saved?.external),
 });
 
 const buildNormalizedSettings = (settings: FilterSettings, currentUserId?: string): NormalizedSettings => ({
@@ -143,10 +148,14 @@ const buildNormalizedSettings = (settings: FilterSettings, currentUserId?: strin
   quickReplies: normalizeCustomerServiceQuickReplies(settings.quickReplies),
   quickReplyPanelGlobal: Boolean(settings.quickReplyPanelGlobal),
   rules: settings.rules?.length ? JSON.parse(JSON.stringify(settings.rules)) : [],
+  casePlaybooks: normalizeCustomerServiceCasePlaybooks(settings.casePlaybooks)
+    .map((playbook) => JSON.parse(JSON.stringify(playbook))) as CustomerServiceCasePlaybook[],
+  capabilityExecutionPolicies: normalizeCapabilityExecutionPolicies(settings.capabilityExecutionPolicies),
   oncall: ensureOncallStaffIncludesCurrentUser(
     normalizeCustomerServiceOncallSettings(settings.oncall),
     currentUserId,
   ),
+  external: normalizeCustomerServiceExternalSettings(settings.external),
 });
 
 const CustomerServiceSettingsModal = ({
@@ -258,6 +267,13 @@ const CustomerServiceSettingsModal = ({
     }));
   });
 
+  const handleCasePlaybooksChange = useLastCallback((nextPlaybooks: CustomerServiceCasePlaybook[]) => {
+    updateSettings((prev) => ({
+      ...prev,
+      casePlaybooks: normalizeCustomerServiceCasePlaybooks(nextPlaybooks),
+    }));
+  });
+
   const handleOncallChange = useLastCallback((nextOncall: CustomerServiceOncallSettings) => {
     updateSettings((prev) => ({
       ...prev,
@@ -265,6 +281,13 @@ const CustomerServiceSettingsModal = ({
         normalizeCustomerServiceOncallSettings(nextOncall),
         currentUserId,
       ),
+    }));
+  });
+
+  const handleExternalChange = useLastCallback((nextExternal: CustomerServiceExternalSettings) => {
+    updateSettings((prev) => ({
+      ...prev,
+      external: normalizeCustomerServiceExternalSettings(nextExternal),
     }));
   });
 
@@ -317,7 +340,8 @@ const CustomerServiceSettingsModal = ({
     { title: lang('CustomerServiceUserFilters') },
     { title: lang('CustomerServiceMessageFilters') },
     { title: lang('CustomerServiceQuickReplies') },
-    { title: lang('CustomerServiceRuleEngine') },
+    { title: '外部配置' },
+    { title: '自动化' },
     { title: lang('CustomerServiceOncallGuarantee') },
   ]), [lang]);
 
@@ -379,12 +403,20 @@ const CustomerServiceSettingsModal = ({
               />
             )}
             {activeTab === 4 && (
-              <RuleEngineTab
-                rules={settings.rules}
-                onRulesChange={handleRulesChange}
+              <ExternalServicesTab
+                external={settings.external}
+                onChange={handleExternalChange}
               />
             )}
             {activeTab === 5 && (
+              <RuleEngineTab
+                rules={settings.rules}
+                casePlaybooks={settings.casePlaybooks}
+                onRulesChange={handleRulesChange}
+                onCasePlaybooksChange={handleCasePlaybooksChange}
+              />
+            )}
+            {activeTab === 6 && (
               <OncallGuaranteeTab
                 oncall={settings.oncall}
                 currentUserId={currentUserId}

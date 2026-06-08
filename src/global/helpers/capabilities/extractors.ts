@@ -231,7 +231,7 @@ export const textProcessorCapability: Capability = {
         [outputField]: value,
         matchedText: value,
         extractedText: value,
-        orderNumber: value,
+        orderNumber: pipelineData.orderNumber || value,
         validated: validateEnabled,
       },
     });

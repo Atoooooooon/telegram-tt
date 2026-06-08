@@ -5,6 +5,7 @@ import { CUSTOMER_SERVICE_CONFIG } from '../../config/customerService';
 import { selectCustomerServiceV2Settings } from '../selectors/customerServiceV2';
 import {
   loadCustomerServiceV2SettingsFromStorage,
+  normalizeCustomerServiceExternalSettings,
   normalizeCustomerServiceQuickReplies,
 } from './customerServiceV2Settings';
 
@@ -34,6 +35,7 @@ export function getEffectiveCustomerServiceSettings(
     ...v2Settings,
     quickReplies,
     quickReplyPanelGlobal: Boolean(v2Settings.quickReplyPanelGlobal),
+    external: normalizeCustomerServiceExternalSettings(v2Settings.external),
   };
 }
 

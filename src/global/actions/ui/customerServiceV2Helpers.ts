@@ -8,6 +8,8 @@ import { MAIN_THREAD_ID } from '../../../api/types';
 
 import { CUSTOMER_SERVICE_CONFIG } from '../../../config/customerService';
 import {
+  normalizeCustomerServiceCasePlaybooks,
+  normalizeCustomerServiceExternalSettings,
   normalizeCustomerServiceOncallSettings,
   normalizeCustomerServiceQuickReplies,
 } from '../../helpers/customerServiceV2Settings';
@@ -109,7 +111,10 @@ export function mapCustomerServiceConfigToSettings(
     quickReplies: normalizeCustomerServiceQuickReplies(config.QUICK_REPLIES),
     quickReplyPanelGlobal: false,
     rules: undefined,
+    casePlaybooks: normalizeCustomerServiceCasePlaybooks(undefined),
+    capabilityExecutionPolicies: {},
     oncall: normalizeCustomerServiceOncallSettings(config.ONCALL_DEFAULTS),
+    external: normalizeCustomerServiceExternalSettings(undefined),
   };
 }
 
@@ -130,7 +135,10 @@ export function normalizeSettingsForSave(settings: CustomerServiceSettings): Cus
     quickReplies: normalizeCustomerServiceQuickReplies(settings.quickReplies || []),
     quickReplyPanelGlobal: Boolean(settings.quickReplyPanelGlobal),
     rules: settings.rules,
+    casePlaybooks: normalizeCustomerServiceCasePlaybooks(settings.casePlaybooks),
+    capabilityExecutionPolicies: settings.capabilityExecutionPolicies || {},
     oncall: normalizeCustomerServiceOncallSettings(settings.oncall),
+    external: normalizeCustomerServiceExternalSettings(settings.external),
   };
 }
 

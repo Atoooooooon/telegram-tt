@@ -115,7 +115,11 @@ import type {
 } from '../../types';
 import type { WebApp, WebAppModalStateType, WebAppOutboundEvent } from '../../types/webapp';
 import type { DownloadableMedia } from '../helpers';
-import type { CustomerServiceQuickReply, CustomerServiceSettings } from './customerServiceV2';
+import type {
+  CustomerServiceCapabilityExecutionConfirmation,
+  CustomerServiceQuickReply,
+  CustomerServiceSettings,
+} from './customerServiceV2';
 import type { SharedState } from './sharedState';
 import type { TabState } from './tabState';
 
@@ -3314,6 +3318,14 @@ export interface ActionPayloads {
 
   resumeCustomerServiceV2Chat: {
     chatId: string;
+  } & WithTabId;
+
+  approveCustomerServiceCapabilityExecution: {
+    confirmationId: CustomerServiceCapabilityExecutionConfirmation['id'];
+  } & WithTabId;
+
+  rejectCustomerServiceCapabilityExecution: {
+    confirmationId: CustomerServiceCapabilityExecutionConfirmation['id'];
   } & WithTabId;
 
   initCustomerServiceV2: WithTabId | undefined;

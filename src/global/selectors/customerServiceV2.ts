@@ -1,6 +1,10 @@
 import type { ApiMessage } from '../../api/types';
 import type { GlobalState } from '../types';
-import type { CustomerServiceRuleAuditLog, CustomerServiceV2State } from '../types/customerServiceV2';
+import type {
+  CustomerServiceCapabilityExecutionConfirmation,
+  CustomerServiceRuleAuditLog,
+  CustomerServiceV2State,
+} from '../types/customerServiceV2';
 import { CUSTOMER_SERVICE_VIRTUAL_CHAT_ID } from '../types/customerServiceV2';
 
 import { selectTabState } from './tabs';
@@ -33,6 +37,12 @@ export function selectCustomerServiceV2RuleAuditLogs(
   global: GlobalState,
 ): CustomerServiceRuleAuditLog[] {
   return global.customerServiceV2?.auditLogs || [];
+}
+
+export function selectCustomerServiceV2PendingCapabilityConfirmations(
+  global: GlobalState,
+): CustomerServiceCapabilityExecutionConfirmation[] {
+  return global.customerServiceV2?.pendingCapabilityConfirmations || [];
 }
 
 export function selectIsCustomerServiceV2Open(

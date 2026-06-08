@@ -9,7 +9,6 @@ import { useResize } from '../../../../hooks/useResize';
 
 import CustomerServiceSettingsModal from '../setting/CustomerServiceSettingsModal';
 import CustomerServiceMessageList from './CustomerServiceMessageList';
-import CustomerServiceMiddleHeader from './CustomerServiceMiddleHeader';
 
 import styles from './CustomerServiceMiddleColumn.module.scss';
 
@@ -54,7 +53,6 @@ const CustomerServiceMiddleColumn: FC<OwnProps> = ({
           onDoubleClick={resetResize}
         />
       )}
-      <CustomerServiceMiddleHeader />
       <CustomerServiceMessageList />
       <CustomerServiceSettingsModal />
     </div>

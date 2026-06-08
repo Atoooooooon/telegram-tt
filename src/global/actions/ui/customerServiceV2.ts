@@ -28,11 +28,16 @@ import { CUSTOMER_SERVICE_CONFIG } from '../../../config/customerService';
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
 import { getTranslationFn } from '../../../util/localization';
 import { loadCustomerServiceCloudSyncPreference } from '../../helpers/customerServiceCloudSyncPreference';
+import { reportCustomerServiceSuccessCase } from '../../helpers/customerServiceOncall';
 import {
   loadCustomerServiceV2SettingsFromStorage,
   normalizeCustomerServiceQuickReplies,
   saveCustomerServiceV2SettingsToStorage,
 } from '../../helpers/customerServiceV2Settings';
+import {
+  approveCustomerServiceCapabilityConfirmation,
+  rejectCustomerServiceCapabilityConfirmation,
+} from '../../helpers/ruleEngine';
 import { addActionHandler } from '../../index';
 import { updateTabState } from '../../reducers/tabs';
 import { selectChat, selectCurrentMessageList } from '../../selectors';
@@ -121,6 +126,59 @@ addActionHandler('resumeCustomerServiceV2Chat', (global, actions, payload): Acti
   delete pausedChats[chatId];
 
   return updateCustomerServiceV2State(global, { ...cs, pausedChats });
+});
+
+addActionHandler('approveCustomerServiceCapabilityExecution', async (global, actions, payload): Promise<void> => {
+  const { confirmationId, tabId = getCurrentTabId() } = payload;
+  const confirmation = global.customerServiceV2?.pendingCapabilityConfirmations?.find(
+    (item) => item.id === confirmationId,
+  );
+
+  const didApprove = await approveCustomerServiceCapabilityConfirmation(confirmationId);
+  if (!didApprove) {
+    actions.showNotification({
+      message: '能力确认已失效，请重新触发规则',
+      tabId,
+    });
+    return;
+  }
+
+  if (confirmation) {
+    reportCustomerServiceSuccessCase({
+      recordType: 'ai_action_approved',
+      caseId: confirmation.id,
+      chatId: confirmation.chatId,
+      messageIds: [confirmation.messageId],
+      aiIntent: confirmation.capabilityName || confirmation.capabilityId,
+      metadata: {
+        capabilityId: confirmation.capabilityId,
+        capabilityName: confirmation.capabilityName,
+        capabilityType: confirmation.capabilityType,
+        executionSource: confirmation.executionSource,
+        ruleId: confirmation.ruleId,
+        ruleName: confirmation.ruleName,
+        stepId: confirmation.stepId,
+        summary: confirmation.summary,
+      },
+    });
+  }
+
+  actions.showNotification({
+    message: '已允许 AI 执行该能力',
+    tabId,
+  });
+});
+
+addActionHandler('rejectCustomerServiceCapabilityExecution', (global, actions, payload): ActionReturnType => {
+  const { confirmationId, tabId = getCurrentTabId() } = payload;
+
+  rejectCustomerServiceCapabilityConfirmation(confirmationId);
+  actions.showNotification({
+    message: '已拒绝 AI 执行该能力',
+    tabId,
+  });
+
+  return global;
 });
 
 /**
@@ -273,7 +331,10 @@ addActionHandler('toggleCustomerServiceV2Mode', (global, actions, payload): Acti
     ),
     quickReplyPanelGlobal: Boolean(existingSettings.quickReplyPanelGlobal),
     rules: existingSettings.rules,
+    casePlaybooks: existingSettings.casePlaybooks,
+    capabilityExecutionPolicies: existingSettings.capabilityExecutionPolicies,
     oncall: existingSettings.oncall,
+    external: existingSettings.external,
   });
   saveCustomerServiceV2SettingsToStorage(normalized);
 

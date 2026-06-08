@@ -10,6 +10,7 @@ import type {
   Capability,
   CapabilityInput,
   CapabilityOutput,
+  CustomerServiceCapabilityExecutionConfirmation,
   CustomerServiceRuleAuditLog,
   CustomerServiceRuleAuditStep,
   CustomerServiceRuleEventType,
@@ -27,6 +28,15 @@ import { renderTemplate } from './templateRenderer';
 // Delay configuration for simulating human behavior
 const ACTION_DELAY_MIN_MS = 2000;
 const ACTION_DELAY_MAX_MS = 8000;
+const MAX_PENDING_CAPABILITY_CONFIRMATIONS = 20;
+const APPROVED_CONFIRMATION_KEYS = '__approvedCapabilityConfirmationKeys';
+
+type PendingCapabilityConfirmationHandler = {
+  approve: () => Promise<void>;
+  reject: () => void;
+};
+
+const pendingCapabilityConfirmationHandlers = new Map<string, PendingCapabilityConfirmationHandler>();
 
 function getRandomStepDelayMs(isAction = false): number {
   if (!isAction) {
@@ -36,14 +46,211 @@ function getRandomStepDelayMs(isAction = false): number {
   return randomDelayMs(ACTION_DELAY_MIN_MS, ACTION_DELAY_MAX_MS);
 }
 
-function getFirstNonEmptyString(...values: Array<string | undefined | null>) {
-  return values.find((value) => typeof value === 'string' && value.trim() !== '');
+function getFirstNonEmptyString(...values: Array<string | undefined | null>): string | undefined {
+  return values.find((value): value is string => typeof value === 'string' && value.trim() !== '');
 }
 
 type RuleExecutionContext = {
   eventType: CustomerServiceRuleEventType;
   rulePhase?: UserRule['executionPhase'];
+  allowVirtualMessage?: boolean;
+  onDeferredComplete?: (result: CustomerServiceRuleExecutionResult) => void;
 };
+
+type PipelineExecutionContext = {
+  auditId: string;
+  rule: UserRule;
+  eventType: CustomerServiceRuleEventType;
+  startedAt: number;
+  onDeferredComplete?: (result: CustomerServiceRuleExecutionResult) => void;
+};
+
+function createCapabilityConfirmationId(
+  message: ApiMessage,
+  capabilityId: string,
+  executionSource: CustomerServiceCapabilityExecutionConfirmation['executionSource'],
+  stepId?: string,
+): string {
+  return [
+    'capability',
+    executionSource,
+    capabilityId,
+    stepId || 'action',
+    message.chatId,
+    message.id,
+    Date.now(),
+    Math.random().toString(36).slice(2, 8),
+  ].join(':');
+}
+
+function createCapabilityExecutionKey(
+  message: ApiMessage,
+  capabilityId: string,
+  executionSource: CustomerServiceCapabilityExecutionConfirmation['executionSource'],
+  stepId?: string,
+): string {
+  return [
+    executionSource,
+    capabilityId,
+    stepId || 'action',
+    message.chatId,
+    message.id,
+  ].join(':');
+}
+
+function getApprovedConfirmationKeys(pipelineData: Record<string, any>): Record<string, true> {
+  const approvedKeys = pipelineData[APPROVED_CONFIRMATION_KEYS];
+
+  if (!approvedKeys || typeof approvedKeys !== 'object' || Array.isArray(approvedKeys)) {
+    return {};
+  }
+
+  return approvedKeys as Record<string, true>;
+}
+
+function isCapabilityExecutionApproved(pipelineData: Record<string, any>, executionKey: string): boolean {
+  return Boolean(getApprovedConfirmationKeys(pipelineData)[executionKey]);
+}
+
+function markCapabilityExecutionApproved(pipelineData: Record<string, any>, executionKey: string): void {
+  pipelineData[APPROVED_CONFIRMATION_KEYS] = {
+    ...getApprovedConfirmationKeys(pipelineData),
+    [executionKey]: true,
+  };
+}
+
+function shouldConfirmExecution(executionPolicy?: 'auto' | 'confirm'): boolean {
+  return executionPolicy === 'confirm';
+}
+
+function resolveExecutionPolicy(
+  global: GlobalState,
+  executionPolicy?: 'auto' | 'confirm',
+  executionPolicyByMode?: Partial<Record<'oncall' | 'assist', 'auto' | 'confirm'>>,
+): 'auto' | 'confirm' | undefined {
+  const mode = global.customerServiceV2?.settings?.mode;
+  return mode ? executionPolicyByMode?.[mode] || executionPolicy : executionPolicy;
+}
+
+function getActionExecutionPolicy(
+  actionExecution: ActionExecution,
+  global: GlobalState,
+): 'auto' | 'confirm' | undefined {
+  return typeof actionExecution === 'object'
+    ? resolveExecutionPolicy(global, actionExecution.executionPolicy, actionExecution.executionPolicyByMode)
+    : undefined;
+}
+
+async function upsertPendingCapabilityConfirmation(
+  confirmation: CustomerServiceCapabilityExecutionConfirmation,
+): Promise<void> {
+  const { getGlobal, setGlobal } = await import('../index');
+  let global = getGlobal();
+  const currentCs = global.customerServiceV2 || {
+    messages: [],
+    messagesByChatId: {},
+    lastSyncTimestamp: Date.now(),
+    messageCount: 0,
+  };
+  const confirmations = currentCs.pendingCapabilityConfirmations || [];
+  const nextConfirmations = [
+    confirmation,
+    ...confirmations.filter((item) => item.id !== confirmation.id),
+  ].slice(0, MAX_PENDING_CAPABILITY_CONFIRMATIONS);
+
+  global = {
+    ...global,
+    customerServiceV2: {
+      ...currentCs,
+      pendingCapabilityConfirmations: nextConfirmations,
+      lastSyncTimestamp: Date.now(),
+    },
+  };
+  setGlobal(global);
+}
+
+async function removePendingCapabilityConfirmation(confirmationId: string): Promise<void> {
+  const { getGlobal, setGlobal } = await import('../index');
+  let global = getGlobal();
+  const currentCs = global.customerServiceV2;
+
+  if (!currentCs?.pendingCapabilityConfirmations?.length) {
+    return;
+  }
+
+  const nextConfirmations = currentCs.pendingCapabilityConfirmations.filter((item) => item.id !== confirmationId);
+
+  global = {
+    ...global,
+    customerServiceV2: {
+      ...currentCs,
+      pendingCapabilityConfirmations: nextConfirmations.length ? nextConfirmations : undefined,
+      lastSyncTimestamp: Date.now(),
+    },
+  };
+  setGlobal(global);
+}
+
+function registerCapabilityConfirmation(
+  confirmation: CustomerServiceCapabilityExecutionConfirmation,
+  handler: PendingCapabilityConfirmationHandler,
+): void {
+  pendingCapabilityConfirmationHandlers.set(confirmation.id, handler);
+  void upsertPendingCapabilityConfirmation(confirmation);
+}
+
+export async function approveCustomerServiceCapabilityConfirmation(confirmationId: string): Promise<boolean> {
+  const handler = pendingCapabilityConfirmationHandlers.get(confirmationId);
+  pendingCapabilityConfirmationHandlers.delete(confirmationId);
+  await removePendingCapabilityConfirmation(confirmationId);
+
+  if (!handler) {
+    return false;
+  }
+
+  await handler.approve();
+  return true;
+}
+
+export function rejectCustomerServiceCapabilityConfirmation(confirmationId: string): void {
+  const handler = pendingCapabilityConfirmationHandlers.get(confirmationId);
+  pendingCapabilityConfirmationHandlers.delete(confirmationId);
+  handler?.reject();
+  void removePendingCapabilityConfirmation(confirmationId);
+}
+
+function buildCapabilityConfirmation(params: {
+  capability: Capability;
+  executionSource: CustomerServiceCapabilityExecutionConfirmation['executionSource'];
+  message: ApiMessage;
+  pipelineData: Record<string, any>;
+  ruleId?: string;
+  ruleName?: string;
+  stepId?: string;
+}): CustomerServiceCapabilityExecutionConfirmation {
+  return {
+    id: createCapabilityConfirmationId(
+      params.message,
+      params.capability.id,
+      params.executionSource,
+      params.stepId,
+    ),
+    createdAt: Date.now(),
+    chatId: params.message.chatId,
+    messageId: params.message.id,
+    capabilityId: params.capability.id,
+    capabilityName: params.capability.name,
+    capabilityType: params.capability.type,
+    executionSource: params.executionSource,
+    ruleId: params.ruleId,
+    ruleName: params.ruleName,
+    stepId: params.stepId,
+    summary: getFirstNonEmptyString(
+      typeof params.pipelineData.text === 'string' ? params.pipelineData.text : undefined,
+      typeof params.pipelineData.previewText === 'string' ? params.pipelineData.previewText : undefined,
+    ),
+  };
+}
 
 function createAuditId(rule: UserRule, message: ApiMessage): string {
   return [
@@ -119,6 +326,7 @@ async function buildInitialPipelineData(
 
   return {
     ...initialPipelineData,
+    __allowVirtualMessage: Boolean(executionContext?.allowVirtualMessage || initialPipelineData?.__allowVirtualMessage),
     message,
     chatId: message.chatId,
     chatTitle,
@@ -153,7 +361,76 @@ type DeferredTask = {
   message: ApiMessage;
   actions: any;
   pipelineData: Record<string, any>;
+  ruleMatched: boolean;
+  ruleHandled: boolean;
+  executionContext?: PipelineExecutionContext;
 };
+
+function updateDeferredAuditStep(
+  pipelineData: Record<string, any>,
+  stepId: string,
+  success: boolean,
+  resultData?: Record<string, any>,
+): void {
+  if (!Array.isArray(pipelineData.auditSteps)) {
+    return;
+  }
+
+  for (let index = pipelineData.auditSteps.length - 1; index >= 0; index--) {
+    const step = pipelineData.auditSteps[index] as CustomerServiceRuleAuditStep | undefined;
+    if (!step || step.stepId !== stepId || !step.pending) {
+      continue;
+    }
+
+    pipelineData.auditSteps[index] = {
+      ...step,
+      finishedAt: Date.now(),
+      success,
+      pending: false,
+      outputKeys: resultData ? Object.keys(resultData).sort() : step.outputKeys,
+    };
+    return;
+  }
+}
+
+function buildDeferredRuleExecutionResult(params: {
+  task: DeferredTask;
+  success: boolean;
+  pending: boolean;
+  terminatedByFailure: boolean;
+}): CustomerServiceRuleExecutionResult | undefined {
+  const { executionContext } = params.task;
+
+  if (!executionContext) {
+    return undefined;
+  }
+
+  const handled = params.task.ruleHandled && !params.terminatedByFailure;
+  const skipPostProcessing = handled && Boolean(executionContext.rule.skipPostProcessing);
+  const matched = params.success && !params.terminatedByFailure;
+
+  return {
+    matched,
+    handled,
+    pending: params.pending,
+    terminatedByFailure: params.terminatedByFailure,
+    skipPostProcessing,
+    pipelineData: params.task.pipelineData,
+    auditLog: buildRuleAuditLog({
+      auditId: executionContext.auditId,
+      rule: executionContext.rule,
+      message: params.task.message,
+      eventType: executionContext.eventType,
+      startedAt: executionContext.startedAt,
+      pipelineData: params.task.pipelineData,
+      matched,
+      handled,
+      pending: params.pending,
+      terminatedByFailure: params.terminatedByFailure,
+      skipPostProcessing,
+    }),
+  };
+}
 
 /**
  * Register a deferred task for async execution
@@ -168,6 +445,8 @@ function registerDeferredTask(task: DeferredTask): void {
       const checkResult = await task.checkFn();
       const success = typeof checkResult === 'boolean' ? checkResult : checkResult.success;
       const resultData = typeof checkResult === 'boolean' ? undefined : checkResult.data;
+      const currentStep = task.pipeline[task.stepIndex];
+      const stepId = currentStep.id || String(task.stepIndex + 1);
 
       logExecution(task.pipelineData, `[Async] Check result: ${success ? 'success' : 'failure'}`);
 
@@ -178,9 +457,11 @@ function registerDeferredTask(task: DeferredTask): void {
       // Update pipeline data with result data if available
       if (resultData) {
         Object.assign(task.pipelineData, resultData);
+        logExecution(task.pipelineData, `[Async] Step Output: ${JSON.stringify(resultData)}`, stepId);
       }
 
-      const currentStep = task.pipeline[task.stepIndex];
+      updateDeferredAuditStep(task.pipelineData, stepId, success, resultData);
+
       const { nextStepIndex, shouldContinue } = await handleRouting(
         success,
         currentStep,
@@ -192,18 +473,62 @@ function registerDeferredTask(task: DeferredTask): void {
         task.pipelineData,
       );
 
+      const terminatedByFailure = !success && Boolean(currentStep.onFailure?.stopPipeline);
+
       // Continue pipeline execution if needed
       if (shouldContinue && nextStepIndex !== undefined && nextStepIndex < task.pipeline.length) {
         logExecution(task.pipelineData, `[Async] Continuing pipeline from step ${nextStepIndex + 1}`);
 
-        await executePipelineInternal(
+        const continuationResult = await executePipelineInternal(
           task.pipeline,
           nextStepIndex,
           task.message,
           freshGlobal,
           task.actions,
           task.pipelineData,
+          task.executionContext,
         );
+
+        if (continuationResult.pending) {
+          const progressResult = buildDeferredRuleExecutionResult({
+            task: {
+              ...task,
+              ruleMatched: task.ruleMatched || continuationResult.ruleMatched,
+              ruleHandled: task.ruleHandled || continuationResult.ruleHandled,
+            },
+            success: success || continuationResult.ruleMatched,
+            pending: true,
+            terminatedByFailure: terminatedByFailure || continuationResult.terminatedByFailure,
+          });
+          if (progressResult) {
+            task.executionContext?.onDeferredComplete?.(progressResult);
+          }
+        } else {
+          const deferredResult = buildDeferredRuleExecutionResult({
+            task: {
+              ...task,
+              ruleMatched: task.ruleMatched || continuationResult.ruleMatched,
+              ruleHandled: task.ruleHandled || continuationResult.ruleHandled,
+            },
+            success: success || continuationResult.ruleMatched,
+            pending: false,
+            terminatedByFailure: terminatedByFailure || continuationResult.terminatedByFailure,
+          });
+          if (deferredResult) {
+            task.executionContext?.onDeferredComplete?.(deferredResult);
+          }
+        }
+        return;
+      }
+
+      const deferredResult = buildDeferredRuleExecutionResult({
+        task,
+        success,
+        pending: false,
+        terminatedByFailure,
+      });
+      if (deferredResult) {
+        task.executionContext?.onDeferredComplete?.(deferredResult);
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -397,6 +722,44 @@ function buildRuleAuditLog(params: {
   };
 }
 
+function buildPipelineRuleExecutionResult(params: {
+  executionContext: PipelineExecutionContext;
+  message: ApiMessage;
+  pipelineData: Record<string, any>;
+  ruleMatched: boolean;
+  ruleHandled: boolean;
+  pending: boolean;
+  terminatedByFailure: boolean;
+  error?: string;
+}): CustomerServiceRuleExecutionResult {
+  const handled = params.ruleHandled && !params.terminatedByFailure;
+  const skipPostProcessing = handled && Boolean(params.executionContext.rule.skipPostProcessing);
+  const matched = params.ruleMatched && !params.terminatedByFailure;
+
+  return {
+    matched,
+    handled,
+    pending: params.pending,
+    terminatedByFailure: params.terminatedByFailure,
+    skipPostProcessing,
+    pipelineData: params.pipelineData,
+    auditLog: buildRuleAuditLog({
+      auditId: params.executionContext.auditId,
+      rule: params.executionContext.rule,
+      message: params.message,
+      eventType: params.executionContext.eventType,
+      startedAt: params.executionContext.startedAt,
+      pipelineData: params.pipelineData,
+      matched,
+      handled,
+      pending: params.pending,
+      terminatedByFailure: params.terminatedByFailure,
+      skipPostProcessing,
+      error: params.error,
+    }),
+  };
+}
+
 /**
  * Handle routing logic after a step execution
  */
@@ -409,11 +772,12 @@ async function handleRouting(
   global: GlobalState,
   actions: any,
   pipelineData: Record<string, any>,
-): Promise<{ nextStepIndex?: number; shouldContinue: boolean; actionHandled: boolean }> {
+): Promise<{ nextStepIndex?: number; shouldContinue: boolean; actionHandled: boolean; actionPending: boolean }> {
   const routing = success ? step.onSuccess : step.onFailure;
   let nextStepIndex = currentIndex + 1;
   let shouldContinue = true;
   let actionHandled = false;
+  let actionPending = false;
 
   const stepSetKeys = applyPipelineSet(pipelineData, step.set);
   if (stepSetKeys.length > 0) {
@@ -436,6 +800,10 @@ async function handleRouting(
 
   if (routing?.executeAction) {
     const actionResult = await executeAction(routing.executeAction, input);
+    if (actionResult?.data?.__capabilityConfirmationPending) {
+      actionPending = true;
+      shouldContinue = false;
+    }
     actionHandled = Boolean(actionResult?.success && (actionResult.handled ?? true));
   }
 
@@ -454,7 +822,12 @@ async function handleRouting(
     shouldContinue = false;
   }
 
-  return { nextStepIndex, shouldContinue, actionHandled };
+  return {
+    nextStepIndex,
+    shouldContinue,
+    actionHandled,
+    actionPending,
+  };
 }
 
 /**
@@ -467,6 +840,7 @@ async function executePipelineInternal(
   global: GlobalState,
   actions: any,
   pipelineData: Record<string, any>,
+  executionContext?: PipelineExecutionContext,
 ): Promise<{ ruleMatched: boolean; ruleHandled: boolean; pending: boolean; terminatedByFailure: boolean }> {
   let currentStepIndex = startIndex;
   let ruleMatched = false;
@@ -494,6 +868,97 @@ async function executePipelineInternal(
     };
 
     try {
+      const capabilityExecutionKey = createCapabilityExecutionKey(
+        message,
+        capability.id,
+        'pipeline_step',
+        stepId,
+      );
+
+      if (
+        executionContext
+        &&
+        shouldConfirmExecution(resolveExecutionPolicy(global, step.executionPolicy, step.executionPolicyByMode))
+        && !isCapabilityExecutionApproved(pipelineData, capabilityExecutionKey)
+      ) {
+        const confirmation = buildCapabilityConfirmation({
+          capability,
+          executionSource: 'pipeline_step',
+          message,
+          pipelineData,
+          ruleId: typeof pipelineData.ruleId === 'string' ? pipelineData.ruleId : undefined,
+          ruleName: typeof pipelineData.ruleName === 'string' ? pipelineData.ruleName : undefined,
+          stepId,
+        });
+
+        logExecution(pipelineData, `Waiting for human confirmation before ${capability.name}`, stepId);
+        auditStep.finishedAt = Date.now();
+        auditStep.success = true;
+        auditStep.handled = false;
+        auditStep.pending = true;
+        appendAuditStep(pipelineData, auditStep);
+
+        registerCapabilityConfirmation(confirmation, {
+          approve: async () => {
+            const { getGlobal } = await import('../index');
+            const freshGlobal = getGlobal();
+            const resumePipelineData = { ...pipelineData };
+            markCapabilityExecutionApproved(resumePipelineData, capabilityExecutionKey);
+            logExecution(resumePipelineData, `Human approved capability: ${capability.name}`, stepId);
+            const continuationResult = await executePipelineInternal(
+              pipeline,
+              currentStepIndex,
+              message,
+              freshGlobal,
+              actions,
+              resumePipelineData,
+              executionContext,
+            );
+            if (continuationResult.pending) {
+              executionContext.onDeferredComplete?.(buildPipelineRuleExecutionResult({
+                executionContext,
+                message,
+                pipelineData: resumePipelineData,
+                ruleMatched: ruleMatched || continuationResult.ruleMatched,
+                ruleHandled: ruleHandled || continuationResult.ruleHandled,
+                pending: true,
+                terminatedByFailure: continuationResult.terminatedByFailure,
+              }));
+            } else {
+              executionContext.onDeferredComplete?.(buildPipelineRuleExecutionResult({
+                executionContext,
+                message,
+                pipelineData: resumePipelineData,
+                ruleMatched: ruleMatched || continuationResult.ruleMatched,
+                ruleHandled: ruleHandled || continuationResult.ruleHandled,
+                pending: false,
+                terminatedByFailure: continuationResult.terminatedByFailure,
+              }));
+            }
+          },
+          reject: () => {
+            logExecution(pipelineData, `Human rejected capability: ${capability.name}`, stepId);
+            executionContext.onDeferredComplete?.(buildPipelineRuleExecutionResult({
+              executionContext,
+              message,
+              pipelineData,
+              ruleMatched,
+              ruleHandled,
+              pending: false,
+              terminatedByFailure: true,
+              error: `Human rejected capability: ${capability.name}`,
+            }));
+          },
+        });
+
+        return {
+          ruleMatched: true,
+          ruleHandled,
+          pending: true,
+          terminatedByFailure,
+        };
+      }
+
       // Human-like delay only for action steps that may call Telegram APIs
       const delayMs = getRandomStepDelayMs(capability.type === 'action');
       if (delayMs > 0) {
@@ -505,7 +970,10 @@ async function executePipelineInternal(
       const { getGlobal } = await import('../index');
       const { selectChatMessage } = await import('../selectors');
       const freshGlobal = getGlobal();
-      const currentMessage = selectChatMessage(freshGlobal, message.chatId, message.id);
+      const allowVirtualMessage = pipelineData.__allowVirtualMessage === true;
+      const currentMessage = allowVirtualMessage
+        ? message
+        : selectChatMessage(freshGlobal, message.chatId, message.id);
 
       if (!currentMessage) {
         logExecution(pipelineData, 'Abort: Message was deleted by user during processing.', stepId);
@@ -578,6 +1046,9 @@ async function executePipelineInternal(
           message,
           actions,
           pipelineData: { ...pipelineData }, // Ensure current step data is included
+          ruleMatched,
+          ruleHandled,
+          executionContext,
         });
         ruleMatched = true;
         pending = true;
@@ -585,7 +1056,12 @@ async function executePipelineInternal(
       }
 
       // Routing
-      const { nextStepIndex, shouldContinue, actionHandled } = await handleRouting(
+      const {
+        nextStepIndex,
+        shouldContinue,
+        actionHandled,
+        actionPending,
+      } = await handleRouting(
         result.success,
         step,
         pipeline,
@@ -597,6 +1073,10 @@ async function executePipelineInternal(
       );
       if (actionHandled) {
         ruleHandled = true;
+      }
+      if (actionPending) {
+        pending = true;
+        break;
       }
 
       if (nextStepIndex !== undefined && nextStepIndex !== currentStepIndex + 1) {
@@ -657,8 +1137,18 @@ export async function executeRule(
   const startedAt = Date.now();
   const eventType = executionContext?.eventType || 'any_message';
   const pipelineData = await buildInitialPipelineData(message, global, initialPipelineData, executionContext);
+  pipelineData.ruleId = rule.id;
+  pipelineData.ruleName = rule.name;
 
   logExecution(pipelineData, `Starting rule: ${rule.name} (${rule.id})`);
+
+  const pipelineExecutionContext: PipelineExecutionContext = {
+    auditId,
+    rule,
+    eventType,
+    startedAt,
+    onDeferredComplete: executionContext?.onDeferredComplete,
+  };
 
   const {
     ruleMatched,
@@ -672,6 +1162,7 @@ export async function executeRule(
     global,
     actions,
     pipelineData,
+    pipelineExecutionContext,
   );
 
   const handled = ruleHandled && !terminatedByFailure;
@@ -689,6 +1180,7 @@ export async function executeRule(
     pending,
     terminatedByFailure,
     skipPostProcessing,
+    pipelineData,
     auditLog: buildRuleAuditLog({
       auditId,
       rule,
@@ -723,6 +1215,56 @@ export async function executeAction(
   if (!capability || capability.type !== 'action') {
     logExecution(input.pipelineData, `Action error: Not found or not an action: ${actionId}`);
     return undefined;
+  }
+
+  const actionExecutionKey = createCapabilityExecutionKey(
+    input.message,
+    capability.id,
+    'route_action',
+    input.step?.id,
+  );
+
+  if (
+    shouldConfirmExecution(getActionExecutionPolicy(actionExecution, input.global))
+    && !isCapabilityExecutionApproved(input.pipelineData, actionExecutionKey)
+  ) {
+    const confirmation = buildCapabilityConfirmation({
+      capability,
+      executionSource: 'route_action',
+      message: input.message,
+      pipelineData: input.pipelineData,
+      ruleId: typeof input.pipelineData.ruleId === 'string' ? input.pipelineData.ruleId : undefined,
+      ruleName: typeof input.pipelineData.ruleName === 'string' ? input.pipelineData.ruleName : undefined,
+      stepId: input.step?.id,
+    });
+
+    logExecution(input.pipelineData, `Waiting for human confirmation before action ${capability.name}`);
+    registerCapabilityConfirmation(confirmation, {
+      approve: async () => {
+        const { getGlobal } = await import('../index');
+        const freshGlobal = getGlobal();
+        const resumePipelineData = { ...input.pipelineData };
+        markCapabilityExecutionApproved(resumePipelineData, actionExecutionKey);
+        logExecution(resumePipelineData, `Human approved action: ${capability.name}`);
+        await executeAction(actionExecution, {
+          ...input,
+          global: freshGlobal,
+          pipelineData: resumePipelineData,
+        });
+      },
+      reject: () => {
+        logExecution(input.pipelineData, `Human rejected action: ${capability.name}`);
+      },
+    });
+
+    return {
+      success: true,
+      handled: false,
+      data: {
+        __capabilityConfirmationPending: true,
+        confirmationId: confirmation.id,
+      },
+    };
   }
 
   try {

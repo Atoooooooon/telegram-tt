@@ -65,6 +65,55 @@ const RuleEngineDoc: FC = () => {
         </section>
 
         <section className={styles.docSection}>
+          <h5>Case Playbook 额外字段</h5>
+          <ul>
+            <li>
+              <code>kind</code>
+              :
+              {' '}
+              <code>case_playbook</code>
+              ，表示这是工作台 case 级流程。
+            </li>
+            <li>
+              <code>trigger.eventType</code>
+              :
+              {' '}
+              <code>case_manual</code>
+              ，表示由工作台建议操作或人工点击触发，不参与普通消息规则匹配。
+            </li>
+            <li>
+              <code>caseMatcher</code>
+              : 可选推荐条件，如
+              {' '}
+              <code>intent</code>
+              、
+              {' '}
+              <code>keywords</code>
+              、
+              {' '}
+              <code>requiresFields</code>
+              。当前工作台会用这些信息决定是否优先展示。
+            </li>
+            <li>
+              <code>scope</code>
+              : 可选，
+              <code>case</code>
+              {' '}
+              表示只在 case 详情中执行，
+              <code>standalone</code>
+              {' '}
+              表示无消息时也能主动执行，
+              <code>both</code>
+              {' '}
+              表示两边都可执行。缺省为
+              {' '}
+              <code>case</code>
+              。
+            </li>
+          </ul>
+        </section>
+
+        <section className={styles.docSection}>
           <h5>触发条件 (trigger)</h5>
           <ul>
             <li>
@@ -116,6 +165,28 @@ const RuleEngineDoc: FC = () => {
               : 配置对象 (object, 根据能力不同而不同)
             </li>
             <li>
+              <code>executionPolicy</code>
+              : 执行策略 (可选,
+              {' '}
+              <code>auto</code>
+              {' '}
+              或
+              {' '}
+              <code>confirm</code>
+              )。设置为
+              {' '}
+              <code>confirm</code>
+              {' '}
+              时,执行到该步骤会先回到工作台确认。
+            </li>
+            <li>
+              <code>executionPolicyByMode</code>
+              : 按工作台模式覆盖执行策略 (可选, 例如
+              {' '}
+              <code>{'{"oncall":"confirm","assist":"auto"}'}</code>
+              )。
+            </li>
+            <li>
               <code>onSuccess</code>
               : 成功时行为 (可选)
               <ul>
@@ -134,7 +205,7 @@ const RuleEngineDoc: FC = () => {
                   {' '}
                   或
                   {' '}
-                  <code>{'{ capabilityId, config }'}</code>
+                  <code>{'{ capabilityId, config, executionPolicy }'}</code>
                   )
                 </li>
               </ul>
@@ -158,7 +229,7 @@ const RuleEngineDoc: FC = () => {
                   {' '}
                   或
                   {' '}
-                  <code>{'{ capabilityId, config }'}</code>
+                  <code>{'{ capabilityId, config, executionPolicy }'}</code>
                   )
                 </li>
               </ul>
@@ -537,6 +608,76 @@ const RuleEngineDoc: FC = () => {
 
           <div className={styles.capabilityItem}>
             <h6>
+              <code>ai_generate_reply</code>
+              {' '}
+              - AI 生成回复
+            </h6>
+            <p>
+              调用“外部配置”里的 AI Profile，根据当前 case 上下文生成回复草稿。规则里只写
+              {' '}
+              <code>profileId</code>
+              {' '}
+              或
+              {' '}
+              <code>businessKey</code>
+              ，不要写 API Key、Base URL、模型密钥。
+            </p>
+            <ul>
+              <li>
+                <code>profileId</code>
+                : 外部配置中的 AI Profile ID。留空时使用默认启用的通用机器人。
+              </li>
+              <li>
+                <code>businessKey</code>
+                : 业务机器人 Key，例如 order/recharge/risk。
+              </li>
+              <li>
+                <code>outputField</code>
+                : 回复输出字段，默认
+                {' '}
+                <code>aiReply</code>
+              </li>
+              <li>
+                <code>prompt</code>
+                : 用户提示词模板，支持
+                {' '}
+                <code>{'{{text}}'}</code>
+                、
+                <code>{'{{chatTitle}}'}</code>
+                、
+                <code>{'{{orderNumber}}'}</code>
+                等 pipelineData 变量。
+              </li>
+              <li>
+                <code>systemPrompt</code>
+                : 附加系统提示词，会叠加到 Profile 的系统提示词后。
+              </li>
+            </ul>
+            <pre className={styles.codeExample}>
+              {`{
+  "id": "ai_reply",
+  "capabilityId": "ai_generate_reply",
+  "config": {
+    "profileId": "deepseek-general",
+    "outputField": "aiReply",
+    "prompt": "客户消息: {{text}}\\n订单号: {{orderNumber}}\\n只输出回复正文。"
+  },
+  "onSuccess": {
+    "executeAction": {
+      "capabilityId": "auto_reply",
+      "config": {
+        "text": "{{aiReply}}"
+      },
+      "executionPolicy": "confirm"
+    },
+    "stopPipeline": true
+  }
+}`}
+            </pre>
+          </div>
+
+          <div className={styles.capabilityItem}>
+            <h6>
               <code>ocr_image</code>
               {' '}
               - 图片文字识别
@@ -795,6 +936,50 @@ const RuleEngineDoc: FC = () => {
 
           <div className={styles.capabilityItem}>
             <h6>
+              <code>action_resolve_case</code>
+              {' '}
+              - 标记 Case 已解决
+            </h6>
+            <p>将当前工作台 case 保存为已解决样本，并让工作台把该 case 放入已解决状态。</p>
+            <ul>
+              <li>
+                <code>reason</code>
+                : 解决原因 (string, 选填)，支持
+                {' '}
+                <code>{'{{变量}}'}</code>
+              </li>
+              <li>
+                <code>finalReplyTemplate</code>
+                : 最终回复模板 (textarea, 选填)，留空表示无需回复
+              </li>
+              <li>
+                <code>summaryTemplate</code>
+                : Case 摘要模板 (textarea, 选填)，默认使用
+                {' '}
+                <code>caseSummary</code>
+              </li>
+              <li>
+                <code>intentTemplate</code>
+                : 意图模板 (string, 选填)，默认使用
+                {' '}
+                <code>problemType</code>
+              </li>
+            </ul>
+            <p>
+              <strong>输出数据:</strong>
+              {' '}
+              <code>caseResolved</code>
+              ,
+              {' '}
+              <code>resolvedCaseId</code>
+              ,
+              {' '}
+              <code>resolvedRecord</code>
+            </p>
+          </div>
+
+          <div className={styles.capabilityItem}>
+            <h6>
               <code>action_forward</code>
               {' '}
               - 转发消息
@@ -882,7 +1067,7 @@ const RuleEngineDoc: FC = () => {
               - 发送消息到窗口
             </h6>
             <p>
-              发送新消息到指定聊天窗口, 支持
+              发送新消息到指定聊天窗口, 支持写入草稿、按辅助模式写草稿、附带 case 媒体作为 caption。支持
               {' '}
               <code>{'{{变量}}'}</code>
               {' '}
@@ -896,6 +1081,37 @@ const RuleEngineDoc: FC = () => {
               <li>
                 <code>template</code>
                 : 消息模板 (string, 必填)
+              </li>
+              <li>
+                <code>deliveryMode</code>
+                :
+                {' '}
+                <code>send</code>
+                ,
+                {' '}
+                <code>draft</code>
+                ,
+                {' '}
+                <code>draft_in_assist</code>
+              </li>
+              <li>
+                <code>mediaSource</code>
+                :
+                {' '}
+                <code>none</code>
+                ,
+                {' '}
+                <code>current_message</code>
+                ,
+                {' '}
+                <code>case_first_media</code>
+                ,
+                {' '}
+                <code>case_last_media</code>
+              </li>
+              <li>
+                <code>requireMedia</code>
+                : 发送时要求带媒体 (boolean, 默认 false)
               </li>
             </ul>
             <p>
@@ -1072,7 +1288,17 @@ const RuleEngineDoc: FC = () => {
             <li>
               <strong>executeAction 参数:</strong>
               {' '}
-              executeAction 可以是字符串(能力ID)或对象(包含 capabilityId 和 config)。对象形式可以传递参数给动作能力
+              executeAction 可以是字符串(能力ID)或对象(包含 capabilityId、config 和 executionPolicy)。
+              对象形式可以传递参数给动作能力,也可以按业务场景设置 confirm。
+            </li>
+            <li>
+              <strong>执行确认:</strong>
+              {' '}
+              默认自动执行。需要人工确认时,在具体 step 或 executeAction 对象上设置
+              {' '}
+              <code>"executionPolicy": "confirm"</code>
+              {' '}
+              ,不要按全局 capability 配置。
             </li>
             <li>
               <strong>执行阶段:</strong>

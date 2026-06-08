@@ -423,7 +423,7 @@ export function sendApiMessage(
   const messagePromise = (async () => {
     let media: GramJs.TypeInputMedia | undefined;
 
-    if (suggestedPostInfo && suggestedMedia && !attachment) {
+    if (suggestedMedia && !attachment) {
       if (suggestedMedia.photo) {
         const inputPhoto = buildInputPhoto(suggestedMedia.photo);
         if (inputPhoto) {

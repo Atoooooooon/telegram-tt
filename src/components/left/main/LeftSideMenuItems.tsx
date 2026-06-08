@@ -46,6 +46,7 @@ type OwnProps = {
   onSelectSettings: NoneToVoidFunction;
   onSelectContacts: NoneToVoidFunction;
   onSelectArchived: NoneToVoidFunction;
+  onSelectToolbox: NoneToVoidFunction;
   onBotMenuOpened: NoneToVoidFunction;
   onBotMenuClosed: NoneToVoidFunction;
   footer?: string;
@@ -72,6 +73,7 @@ const LeftSideMenuItems = ({
   onSelectArchived,
   onSelectContacts,
   onSelectSettings,
+  onSelectToolbox,
   onBotMenuOpened,
   onBotMenuClosed,
   footer,
@@ -199,6 +201,12 @@ const LeftSideMenuItems = ({
         onClick={onSelectSettings}
       >
         {lang('MenuSettings')}
+      </MenuItem>
+      <MenuItem
+        icon="tools"
+        onClick={onSelectToolbox}
+      >
+        工具箱
       </MenuItem>
       <NestedMenuItem
         icon="more"

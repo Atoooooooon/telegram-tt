@@ -21,7 +21,7 @@
     grid-template-rows: 100%;
 
     &.customer-service-half {
-      grid-template-columns: auto var(--customer-service-column-width, clamp(16rem, 32vw, 50rem)) minmax(24rem, 1fr);
+      grid-template-columns: auto var(--customer-service-column-width, clamp(18rem, 32vw, 42rem)) minmax(18rem, 1fr);
     }
   }
 }

@@ -24,6 +24,39 @@ type CustomerServiceStaffReplyPayload = {
   oncallConfig?: CustomerServiceOncallSettings;
 };
 
+type CustomerServiceSuccessCasePayload = {
+  recordType: 'ai_draft_sent' | 'ai_action_approved' | 'case_resolved';
+  caseId?: string;
+  chatId: string;
+  senderId?: string;
+  messageIds?: number[];
+  sourceText?: string;
+  aiSummary?: string;
+  aiIntent?: string;
+  aiDraft?: string;
+  finalReply?: string;
+  wasEdited?: boolean;
+  metadata?: Record<string, unknown>;
+};
+
+export type CustomerServiceSuccessCaseRecord = CustomerServiceSuccessCasePayload & {
+  id: string;
+  createdAt: number;
+};
+
+type CustomerServiceSuccessCaseMutationResult = {
+  ok: boolean;
+  record?: CustomerServiceSuccessCaseRecord;
+  deleted?: boolean;
+  error?: string;
+};
+
+type CustomerServiceSuccessCasesListResult = {
+  ok: boolean;
+  records?: CustomerServiceSuccessCaseRecord[];
+  error?: string;
+};
+
 function logOncallSyncDebug(message: string, extra?: unknown) {
   if (typeof console === 'undefined') {
     return;
@@ -64,6 +97,109 @@ async function postJson(path: string, payload: Record<string, unknown>) {
   }
 }
 
+async function postJsonWithResult(
+  path: string,
+  payload: Record<string, unknown>,
+): Promise<CustomerServiceSuccessCaseMutationResult> {
+  if (typeof fetch === 'undefined') {
+    return { ok: false, error: 'fetch is not available' };
+  }
+
+  try {
+    const response = await fetch(path, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+
+    if (!response.ok || !data?.ok) {
+      return {
+        ok: false,
+        error: data?.error || `HTTP ${response.status}`,
+      };
+    }
+
+    return {
+      ok: true,
+      record: data.record,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function saveCustomerServiceSuccessCase(
+  payload: CustomerServiceSuccessCasePayload,
+): Promise<CustomerServiceSuccessCaseMutationResult> {
+  return postJsonWithResult('/api/customer-service/success-case', payload);
+}
+
+export async function listCustomerServiceSuccessCases(limit = 50): Promise<CustomerServiceSuccessCasesListResult> {
+  if (typeof fetch === 'undefined') {
+    return { ok: false, error: 'fetch is not available' };
+  }
+
+  try {
+    const response = await fetch(`/api/customer-service/success-cases?limit=${encodeURIComponent(String(limit))}`);
+    const data = await response.json();
+
+    if (!response.ok || !data?.ok) {
+      return {
+        ok: false,
+        error: data?.error || `HTTP ${response.status}`,
+      };
+    }
+
+    return {
+      ok: true,
+      records: Array.isArray(data.records) ? data.records : [],
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function deleteCustomerServiceSuccessCase(
+  id: string,
+): Promise<CustomerServiceSuccessCaseMutationResult> {
+  if (typeof fetch === 'undefined') {
+    return { ok: false, error: 'fetch is not available' };
+  }
+
+  try {
+    const response = await fetch(`/api/customer-service/success-case?id=${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    const data = await response.json();
+
+    if (!response.ok || !data?.ok) {
+      return {
+        ok: false,
+        error: data?.error || `HTTP ${response.status}`,
+      };
+    }
+
+    return {
+      ok: true,
+      deleted: Boolean(data.deleted),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export function reportCustomerServiceUsefulMessage(payload: CustomerServiceUsefulMessagePayload) {
   void postJson('/api/oncall/useful-message', payload);
 }
@@ -77,4 +213,8 @@ export function reportCustomerServiceStaffReply(payload: CustomerServiceStaffRep
     text: payload.text,
   });
   void postJson('/api/oncall/staff-reply', payload);
+}
+
+export function reportCustomerServiceSuccessCase(payload: CustomerServiceSuccessCasePayload) {
+  void postJson('/api/customer-service/success-case', payload);
 }

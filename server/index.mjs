@@ -6,8 +6,14 @@ import Fastify from 'fastify';
 import { sendJson } from './lib/http.mjs';
 import { createOncallService } from './lib/oncall-service.mjs';
 import baiduOcrRoute from './routes/baidu-ocr.mjs';
+import customerServiceAiChatRoute from './routes/customer-service-ai-chat.mjs';
 import customerServiceCloudConfigGetRoute from './routes/customer-service-cloud-config-get.mjs';
 import customerServiceCloudConfigPostRoute from './routes/customer-service-cloud-config-post.mjs';
+import customerServiceScenarioKnowledgeGetRoute from './routes/customer-service-scenario-knowledge-get.mjs';
+import customerServiceScenarioKnowledgePostRoute from './routes/customer-service-scenario-knowledge-post.mjs';
+import customerServiceSuccessCaseDeleteRoute from './routes/customer-service-success-case-delete.mjs';
+import customerServiceSuccessCaseRoute from './routes/customer-service-success-case.mjs';
+import customerServiceSuccessCasesRoute from './routes/customer-service-success-cases.mjs';
 import oncallCaseStatusRoute from './routes/oncall-case-status.mjs';
 import oncallCasesRoute from './routes/oncall-cases.mjs';
 import oncallStaffReplyRoute from './routes/oncall-staff-reply.mjs';
@@ -16,15 +22,21 @@ import oncallUsefulMessageRoute from './routes/oncall-useful-message.mjs';
 const PORT = Number(process.env.PROXY_PORT || process.env.OCR_PROXY_PORT || 8787);
 const ALLOW_ORIGIN = process.env.PROXY_ALLOW_ORIGIN || process.env.OCR_ALLOW_ORIGIN || '*';
 const ALLOW_HEADERS = process.env.PROXY_ALLOW_HEADERS || process.env.OCR_ALLOW_HEADERS || 'content-type';
-const MAX_BODY_BYTES = Number(process.env.PROXY_MAX_BODY_BYTES || process.env.OCR_MAX_BODY_BYTES || 6_000_000);
+const MAX_BODY_BYTES = Number(process.env.PROXY_MAX_BODY_BYTES || process.env.OCR_MAX_BODY_BYTES || 12_000_000);
 const LOG_ENABLED = process.env.PROXY_LOG === '1' || process.env.OCR_LOG === '1';
 const HOST = process.env.PROXY_HOST || process.env.OCR_HOST || '0.0.0.0';
 
 const oncallService = await createOncallService(log);
 const routes = [
   baiduOcrRoute,
+  customerServiceAiChatRoute,
   customerServiceCloudConfigGetRoute,
   customerServiceCloudConfigPostRoute,
+  customerServiceScenarioKnowledgeGetRoute,
+  customerServiceScenarioKnowledgePostRoute,
+  customerServiceSuccessCaseDeleteRoute,
+  customerServiceSuccessCaseRoute,
+  customerServiceSuccessCasesRoute,
   oncallUsefulMessageRoute,
   oncallStaffReplyRoute,
   oncallCaseStatusRoute,
@@ -47,7 +59,7 @@ function getErrorMessage(error) {
 
 function applyCorsHeaders(reply) {
   reply.header('Access-Control-Allow-Origin', ALLOW_ORIGIN);
-  reply.header('Access-Control-Allow-Methods', 'POST,OPTIONS,GET');
+  reply.header('Access-Control-Allow-Methods', 'POST,OPTIONS,GET,DELETE');
   reply.header('Access-Control-Allow-Headers', ALLOW_HEADERS);
 }
 
@@ -68,12 +80,15 @@ app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string
 app.addContentTypeParser('text/plain', { parseAs: 'string' }, stringBodyParser);
 app.addContentTypeParser('*', { parseAs: 'string' }, stringBodyParser);
 
-app.addHook('onRequest', (request, reply) => {
+app.addHook('onRequest', (request, reply, done) => {
   applyCorsHeaders(reply);
 
   if (request.method === 'OPTIONS') {
-    return reply.code(204).send();
+    reply.code(204).send();
+    return;
   }
+
+  done();
 });
 
 app.get('/healthz', (_request, reply) => {

@@ -84,7 +84,7 @@ export default function createConfig(
       hot: false,
       proxy: [
         {
-          context: ['/api/ocr', '/api/oncall', '/api/customer-service-cloud'],
+          context: ['/api/ocr', '/api/oncall', '/api/customer-service', '/api/customer-service-cloud'],
           target: `http://127.0.0.1:${PROXY_PORT}`,
           changeOrigin: true,
         },

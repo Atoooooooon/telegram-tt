@@ -9,6 +9,7 @@ import {
   IS_BETA,
 } from '../../config';
 import buildClassName from '../../util/buildClassName';
+import { getCurrentTabId } from '../../util/establishMultitabRole';
 
 import useFlag from '../../hooks/useFlag';
 import useLang from '../../hooks/useLang';
@@ -29,7 +30,12 @@ const LeftSideMenuDropdown = ({
   shouldHideSearch,
   className,
 }: OwnProps) => {
-  const { openLeftColumnContent, closeForumPanel, openSettingsScreen } = getActions();
+  const {
+    openLeftColumnContent,
+    closeForumPanel,
+    openSettingsScreen,
+    openToolbox,
+  } = getActions();
   const [isBotMenuOpen, markBotMenuOpen, unmarkBotMenuOpen] = useFlag();
   const lang = useLang();
 
@@ -54,6 +60,10 @@ const LeftSideMenuDropdown = ({
     closeForumPanel();
   });
 
+  const handleSelectToolbox = useLastCallback(() => {
+    openToolbox({ tabId: getCurrentTabId() });
+  });
+
   return (
     <DropdownMenu
       trigger={trigger}
@@ -75,6 +85,7 @@ const LeftSideMenuDropdown = ({
         onSelectArchived={handleSelectArchived}
         onSelectContacts={handleSelectContacts}
         onSelectSettings={handleSelectSettings}
+        onSelectToolbox={handleSelectToolbox}
         onBotMenuOpened={markBotMenuOpen}
         onBotMenuClosed={unmarkBotMenuOpen}
         footer={`${APP_NAME} ${versionString}`}

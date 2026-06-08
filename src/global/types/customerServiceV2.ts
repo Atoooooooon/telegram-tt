@@ -9,6 +9,29 @@ export type CustomerServiceQuickReply = {
   englishText?: string;
 };
 
+export type CustomerServiceCapabilityExecutionMode = 'auto' | 'confirm';
+export type CustomerServiceCapabilityExecutionPolicies = Record<string, CustomerServiceCapabilityExecutionMode>;
+export type CustomerServiceRuleExecutionPolicy = 'auto' | 'confirm';
+export type CustomerServiceRuleExecutionPolicyByMode = Partial<Record<
+  'oncall' | 'assist',
+  CustomerServiceRuleExecutionPolicy
+>>;
+
+export type CustomerServiceCapabilityExecutionConfirmation = {
+  id: string;
+  createdAt: number;
+  chatId: string;
+  messageId: number;
+  capabilityId: string;
+  capabilityName?: string;
+  capabilityType: CapabilityType;
+  executionSource: 'pipeline_step' | 'route_action';
+  ruleId?: string;
+  ruleName?: string;
+  stepId?: string;
+  summary?: string;
+};
+
 export type CustomerServiceOncallSettings = {
   enabled?: boolean;
   staffIds?: string[];
@@ -29,6 +52,47 @@ export type CustomerServiceOncallSettings = {
   holdingReplyPatterns?: string[];
   resolveReplyPatterns?: string[];
   customerResolvePatterns?: string[];
+};
+
+export type CustomerServiceExternalAiProvider = 'deepseek' | 'openai-compatible' | 'gemini';
+export type CustomerServiceExternalAiProfileRole = 'general' | 'business';
+
+export type CustomerServiceExternalAiProfile = {
+  id: string;
+  name: string;
+  provider: CustomerServiceExternalAiProvider;
+  enabled?: boolean;
+  role?: CustomerServiceExternalAiProfileRole;
+  businessKey?: string;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  systemPrompt?: string;
+  temperature?: number;
+  maxTokens?: number;
+};
+
+export type CustomerServiceExternalSettings = {
+  defaultAiProfileId?: string;
+  aiProfiles?: CustomerServiceExternalAiProfile[];
+};
+
+export type CustomerServiceAiChatTextPart = {
+  type: 'text';
+  text: string;
+};
+
+export type CustomerServiceAiChatImagePart = {
+  type: 'image';
+  data: string;
+  mimeType: string;
+};
+
+export type CustomerServiceAiChatContentPart = CustomerServiceAiChatTextPart | CustomerServiceAiChatImagePart;
+
+export type CustomerServiceAiChatMessage = {
+  role: 'system' | 'user' | 'assistant';
+  content: string | CustomerServiceAiChatContentPart[];
 };
 
 /**
@@ -62,9 +126,16 @@ export type CustomerServiceSettings = {
 
   /** Rule engine: User-configured rules */
   rules?: UserRule[];
+  /** Case-level playbooks exposed in the workbench action suggestions */
+  casePlaybooks?: CustomerServiceCasePlaybook[];
+  /** Rule engine: Per-capability execution policy. Missing capability IDs default to auto. */
+  capabilityExecutionPolicies?: CustomerServiceCapabilityExecutionPolicies;
 
   /** Personal oncall guarantee settings */
   oncall?: CustomerServiceOncallSettings;
+
+  /** External API/service profiles used by AI, OCR, and future capabilities */
+  external?: CustomerServiceExternalSettings;
 };
 
 /**
@@ -88,6 +159,7 @@ export type CustomerServiceV2State = {
   settings?: CustomerServiceSettings;
   pausedChats?: Record<string, PausedChat>;
   auditLogs?: CustomerServiceRuleAuditLog[];
+  pendingCapabilityConfirmations?: CustomerServiceCapabilityExecutionConfirmation[];
   lastSyncTimestamp: number;
   messageCount: number;
 };
@@ -204,6 +276,8 @@ export type Capability = {
 export type ActionExecution = string | {
   capabilityId: string;
   config?: Record<string, any>;
+  executionPolicy?: CustomerServiceRuleExecutionPolicy;
+  executionPolicyByMode?: CustomerServiceRuleExecutionPolicyByMode;
 };
 
 export type PipelineSetConfig = Record<string, unknown>;
@@ -222,6 +296,8 @@ export type PipelineStep = {
   id: string;
   capabilityId: string;
   config: Record<string, any>;
+  executionPolicy?: CustomerServiceRuleExecutionPolicy;
+  executionPolicyByMode?: CustomerServiceRuleExecutionPolicyByMode;
   set?: PipelineSetConfig;
   onSuccess?: PipelineRoute;
   onFailure?: PipelineRoute;
@@ -240,14 +316,27 @@ export type UserRule = {
   /** Skip all post-processing (filtering and post-filter rules) when true */
   skipPostProcessing?: boolean;
   trigger: {
-    eventType: 'customer_message' | 'bot_reply' | 'any_message';
+    eventType: CustomerServiceRuleEventType;
     chatIds?: string[];
     senderIds?: string[];
   };
   pipeline: PipelineStep[];
 };
 
-export type CustomerServiceRuleEventType = 'customer_message' | 'bot_reply' | 'any_message';
+export type CustomerServiceRuleEventType = 'customer_message' | 'bot_reply' | 'any_message' | 'case_manual';
+
+export type CustomerServiceCasePlaybook = UserRule & {
+  kind?: 'case_playbook';
+  description?: string;
+  exposable?: boolean;
+  manualRunnable?: boolean;
+  scope?: 'case' | 'standalone' | 'both';
+  caseMatcher?: {
+    intent?: string;
+    keywords?: string[];
+    requiresFields?: string[];
+  };
+};
 
 export type CustomerServicePipelineVariableDefinition = {
   key: string;
@@ -356,6 +445,34 @@ export const CUSTOMER_SERVICE_PIPELINE_VARIABLES = [
     source: 'runtime',
     example: 'post-filter',
   },
+  {
+    key: 'caseId',
+    label: 'Workbench case ID',
+    description: 'Case identifier when a Case Playbook is manually executed from the workbench.',
+    source: 'runtime',
+    example: 'case:-100123:777000:1712678400',
+  },
+  {
+    key: 'caseText',
+    label: 'Workbench case text',
+    description: 'Combined recent message text from the selected workbench case.',
+    source: 'runtime',
+    example: '用户发送凭证和单号 idn6603150418xap',
+  },
+  {
+    key: 'caseSummary',
+    label: 'Workbench case summary',
+    description: 'AI/local summary shown in the workbench for the selected case.',
+    source: 'runtime',
+    example: '客户请求查询支付订单状态。',
+  },
+  {
+    key: 'orderNumber',
+    label: 'Detected order number',
+    description: 'Order number inferred from case messages, or overwritten by text_processor.',
+    source: 'runtime',
+    example: 'idn6603150418xap',
+  },
 ] satisfies CustomerServicePipelineVariableDefinition[];
 
 export type CustomerServicePipelineVariableKey =
@@ -402,6 +519,7 @@ export type CustomerServiceRuleExecutionResult = {
   terminatedByFailure: boolean;
   skipPostProcessing: boolean;
   auditLog?: CustomerServiceRuleAuditLog;
+  pipelineData?: Record<string, any>;
 };
 
 export type CustomerServiceRulesProcessResult = {

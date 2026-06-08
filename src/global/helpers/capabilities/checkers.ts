@@ -6,6 +6,7 @@
 import type { ApiMessage } from '../../../api/types';
 import type { Capability } from '../../types/customerServiceV2';
 
+import { isLocalMessageId } from '../../../util/keys/messageKey';
 import { getMessageText } from '../messages';
 
 type SwitchRouteCase = {
@@ -15,6 +16,38 @@ type SwitchRouteCase = {
   flags?: string;
   data?: Record<string, unknown>;
 };
+
+function coerceMessageId(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const numericValue = Number(value.trim());
+    return Number.isFinite(numericValue) ? numericValue : undefined;
+  }
+
+  return undefined;
+}
+
+function resolveCurrentTargetMessageId(
+  chatMessages: Record<string, ApiMessage> | Record<number, ApiMessage>,
+  targetMessageId: number,
+): number | undefined {
+  const messages = Object.values(chatMessages);
+  const directMessage = messages.find((candidate) => candidate.id === targetMessageId);
+
+  if (directMessage && !isLocalMessageId(directMessage.id)) {
+    return directMessage.id;
+  }
+
+  const sentMessage = messages.find((candidate) => candidate.previousLocalId === targetMessageId);
+  if (sentMessage) {
+    return sentMessage.id;
+  }
+
+  return isLocalMessageId(targetMessageId) ? undefined : targetMessageId;
+}
 
 function parseSwitchCases(rawCases: unknown): SwitchRouteCase[] {
   if (Array.isArray(rawCases)) {
@@ -289,8 +322,9 @@ export const waitForReplyCapability: Capability = {
       pollInterval = 5,
     } = config;
 
-    const targetMessageId = pipelineData[messageIdField];
-    if (!targetMessageId) {
+    const targetMessageId = coerceMessageId(pipelineData[messageIdField]);
+    const targetChatId = String(chatId || message.chatId);
+    if (targetMessageId === undefined) {
       return {
         success: false,
         error: `Target message ID not found in pipelineData.${messageIdField}`,
@@ -300,7 +334,7 @@ export const waitForReplyCapability: Capability = {
     const startTime = Date.now();
 
     // eslint-disable-next-line no-console
-    console.log(`[wait_for_reply] Waiting for reply to ${targetMessageId} in ${chatId}`);
+    console.log(`[wait_for_reply] Waiting for reply to ${targetMessageId} in ${targetChatId}`);
 
     return {
       success: true,
@@ -314,11 +348,21 @@ export const waitForReplyCapability: Capability = {
 
           while (Date.now() - startTime < timeout * 1000) {
             const freshGlobal = getGlobal();
-            const chatMessages = selectChatMessages(freshGlobal, chatId);
+            const chatMessages = selectChatMessages(freshGlobal, targetChatId);
 
             if (chatMessages) {
+              const resolvedTargetMessageId = resolveCurrentTargetMessageId(chatMessages, targetMessageId);
+              if (resolvedTargetMessageId === undefined) {
+                await sleep(pollInterval * 1000);
+                continue;
+              }
+
               const replies = Object.values(chatMessages).filter((m: ApiMessage) => {
-                return m.replyInfo?.type === 'message' && m.replyInfo.replyToMsgId === targetMessageId;
+                return m.replyInfo?.type === 'message'
+                  && (
+                    m.replyInfo.replyToMsgId === resolvedTargetMessageId
+                    || m.replyInfo.replyToMsgId === targetMessageId
+                  );
               });
 
               if (replies.length > 0) {
@@ -331,7 +375,7 @@ export const waitForReplyCapability: Capability = {
                 try {
                   const { callApi } = await import('../../../api/gramjs');
                   const { selectChat } = await import('../../selectors');
-                  const chat = selectChat(freshGlobal, chatId);
+                  const chat = selectChat(freshGlobal, targetChatId);
                   if (chat) {
                     const threadId = (lastReply as { threadId?: number }).threadId || 0;
                     await callApi('markMessageListRead', {
@@ -350,6 +394,7 @@ export const waitForReplyCapability: Capability = {
                   data: {
                     botReplyText: replyText,
                     botReplyMessageId: lastReply.id,
+                    waitTargetMessageId: resolvedTargetMessageId,
                   },
                 };
               }
@@ -405,6 +450,11 @@ export const switchRouteCapability: Capability = {
       label: '数据输出字段',
       default: 'switchData',
     },
+    mergeData: {
+      type: 'boolean',
+      label: '合并分支数据到变量',
+      default: false,
+    },
     defaultMode: {
       type: 'select',
       label: '默认匹配模式',
@@ -420,6 +470,7 @@ export const switchRouteCapability: Capability = {
       defaultGotoStep,
       outputField = 'switchGotoStep',
       dataOutputField = 'switchData',
+      mergeData = false,
       defaultMode = 'contains',
     } = config;
 
@@ -454,6 +505,7 @@ export const switchRouteCapability: Capability = {
     return Promise.resolve({
       success: true,
       data: {
+        ...(mergeData ? switchData : {}),
         [outputField]: gotoStep,
         [dataOutputField]: switchData,
         switchGotoStep: gotoStep,

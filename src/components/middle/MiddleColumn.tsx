@@ -174,8 +174,8 @@ function isVideo(item: DataTransferItem) {
 }
 
 const LAYER_ANIMATION_DURATION_MS = 450 + ANIMATION_END_DELAY;
-const MIN_CUSTOMER_SERVICE_WIDTH = 30 * 16; // 16rem
-const MAX_CUSTOMER_SERVICE_WIDTH = 75 * 16; // 34rem
+const MIN_CUSTOMER_SERVICE_WIDTH = 20 * 16; // 20rem
+const MAX_CUSTOMER_SERVICE_WIDTH = 75 * 16; // 75rem
 
 function MiddleColumn({
   leftColumnRef,

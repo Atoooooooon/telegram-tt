@@ -10,8 +10,11 @@ import {
   actionAutoReplyCapability,
   actionForwardCapability,
   actionMarkReadCapability,
+  actionResolveCaseCapability,
   actionSendToCapability,
 } from './actions';
+// Import AI
+import { aiGenerateReplyCapability } from './ai';
 // Import checkers
 import {
   checkHasReplyCapability,
@@ -34,11 +37,13 @@ export function registerAllCapabilities(): void {
   // Extractors
   registerCapability(textProcessorCapability);
   registerCapability(ocrImageCapability);
+  registerCapability(aiGenerateReplyCapability);
 
   // Actions
   registerCapability(actionMarkReadCapability);
   registerCapability(actionAutoReplyCapability);
   registerCapability(actionAddQueueCapability);
+  registerCapability(actionResolveCaseCapability);
   registerCapability(actionForwardCapability);
   registerCapability(actionSendToCapability);
 }
@@ -53,10 +58,12 @@ export {
   // Extractors
   textProcessorCapability,
   ocrImageCapability,
+  aiGenerateReplyCapability,
   // Actions
   actionMarkReadCapability,
   actionAutoReplyCapability,
   actionAddQueueCapability,
+  actionResolveCaseCapability,
   actionForwardCapability,
   actionSendToCapability,
 };

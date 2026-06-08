@@ -1,7 +1,7 @@
 .ruleEngineActions {
   display: flex;
-  gap: 0.5rem;
   flex-wrap: nowrap;
+  gap: 0.5rem;
 
   :global(.Button) {
     min-width: auto;
@@ -9,29 +9,38 @@
   }
 }
 
+.automationSection {
+  margin-top: 1rem;
+}
+
 .ruleList {
+  scrollbar-gutter: stable;
+
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+
+  max-height: min(22rem, 34vh);
   margin-bottom: 1rem;
-  max-height: 25rem;
-  min-height: 10rem;
-  overflow-y: auto;
   padding-right: 0.25rem;
 }
 
 .ruleGroupHeader {
   display: flex;
-  align-items: center;
   gap: 0.5rem;
-  padding: 0.75rem 1rem;
+  align-items: center;
+
   margin-top: 0.5rem;
-  font-size: 0.9rem;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--color-primary);
+  border-radius: 0.5rem;
+
+  font-size: 0.875rem;
   font-weight: var(--font-weight-medium);
   color: var(--color-text);
+
   background: var(--color-background-secondary);
-  border-radius: 0.5rem;
-  border-left: 3px solid var(--color-primary);
 
   &:first-child {
     margin-top: 0;
@@ -44,19 +53,24 @@
 
 .ruleGroupHint {
   margin-left: auto;
-  font-size: 0.8rem;
+
+  font-size: 0.8125rem;
   font-weight: var(--font-weight-regular);
   color: var(--color-text-secondary);
+
   opacity: 0.7;
 }
 
 .ruleCard {
-  border: 1px solid var(--color-borders);
-  border-radius: 1rem;
+  position: relative;
+
   padding: 1rem;
+  border: 1px solid var(--color-borders);
+  border-radius: 0.5rem;
+
   background: var(--color-background-secondary);
-  cursor: grab;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .ruleCard:hover {
@@ -64,28 +78,27 @@
   box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.08);
 }
 
-.ruleCard:active {
-  cursor: grabbing;
-  transform: scale(0.98);
-}
-
 .ruleRow {
   display: flex;
-  align-items: center;
   gap: 0.75rem;
+  align-items: center;
 }
 
 .ruleCardDragHandle {
+  cursor: grab;
+
   display: inline-flex;
   align-items: center;
   justify-content: center;
+
   width: 2rem;
   height: 2rem;
-  border-radius: 0.5rem;
   border: none;
-  background: var(--color-background);
+  border-radius: 0.5rem;
+
   color: var(--color-text-secondary);
-  cursor: grab;
+
+  background: var(--color-background);
 }
 
 .ruleCardDragHandle:hover {
@@ -97,81 +110,161 @@
 }
 
 .ruleCardDragHandle:disabled {
-  opacity: 0.3;
   cursor: not-allowed;
+  opacity: 0.3;
 }
 
 .ruleCardText {
-  flex: 1;
   display: flex;
+  flex: 1;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.3125rem;
+
   min-width: 0;
 }
 
 .ruleCardTitle {
   display: flex;
-  align-items: center;
   gap: 0.5rem;
+  align-items: center;
+}
+
+.ruleOrderControl {
+  display: grid;
+  grid-template-rows: 1rem 1.25rem 1rem;
+  flex: 0 0 2rem;
+  align-items: center;
+  justify-items: center;
+
+  min-width: 2rem;
+}
+
+.ruleOrderMoveButton {
+  cursor: pointer;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 1.5rem;
+  height: 1rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0.25rem;
+
+  color: var(--color-text-secondary);
+
+  background: transparent;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--color-primary);
+    background-color: var(--color-background);
+    outline: none;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.25;
+  }
+
+  :global(.icon) {
+    font-size: 0.875rem;
+  }
+}
+
+.ruleOrderMoveIconUp {
+  transform: rotate(180deg);
 }
 
 .ruleOrderIndex {
+  display: block;
+
+  font-size: 0.875rem;
   font-weight: var(--font-weight-semibold);
   color: var(--color-primary);
-  font-size: 0.9rem;
-  min-width: 2rem;
   text-align: center;
 }
 
 .ruleCardName {
-  font-size: 1.05rem;
+  font-size: 1.0625rem;
   font-weight: var(--font-weight-semibold);
-  color: var(--color-text);
   line-height: 1.3;
+  color: var(--color-text);
 }
 
 .ruleCardMeta {
-  font-size: 0.85rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+
+  font-size: 0.875rem;
   color: var(--color-text-secondary);
   word-break: break-all;
 
   code {
     font-family: var(--font-monospace);
-    font-size: 0.85rem;
+    font-size: 0.875rem;
     color: var(--color-text);
   }
 }
 
+.ruleCardMetaDivider {
+  color: var(--color-text-secondary);
+  opacity: 0.45;
+}
+
+.ruleCardDescription {
+  margin: 0.625rem 0 0;
+  padding-left: 2.5rem;
+
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+}
+
 .ruleRowActions {
   display: flex;
+  gap: 0.375rem;
   align-items: center;
-  gap: 0.4rem;
 }
 
 .ruleActionButton {
-  width: 2rem;
-  height: 2rem;
-  border-radius: 50%;
-  border: none;
-  background: transparent;
+  cursor: pointer;
+
   display: inline-flex;
   align-items: center;
   justify-content: center;
+
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 50%;
+
   color: var(--color-text-secondary);
-  cursor: pointer;
+
+  background: transparent;
 }
 
 .ruleActionButton:hover {
   color: var(--color-primary);
 }
 
+.ruleActionButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
 .ruleEmpty {
   padding: 1rem;
-  border-radius: 0.75rem;
-  background: var(--color-background-secondary);
   border: 1px dashed var(--color-borders);
+  border-radius: 0.75rem;
+
   color: var(--color-text-secondary);
   text-align: center;
+
+  background: var(--color-background-secondary);
 }
 
 .ruleEngineJsonEditor {
@@ -191,60 +284,68 @@
 
 .ruleEngineJsonActions {
   display: flex;
-  gap: 0.5rem;
   flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .ruleEngineError {
   display: flex;
+  gap: 0.375rem;
   align-items: center;
-  gap: 0.4rem;
+
+  font-size: 0.875rem;
   color: var(--color-danger, #e04a4a);
-  font-size: 0.9rem;
 }
 
 .ruleEditModal {
   :global(.modal-dialog) {
+    display: flex;
+    flex-direction: column;
+
     width: min(75rem, 95vw);
     max-width: 75rem;
     height: 90vh;
-    display: flex;
-    flex-direction: column;
   }
 
   :global(.modal-content) {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
     overflow: hidden;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+
+    min-height: 0;
   }
 }
 
 .ruleEditSplit {
-  display: flex;
-  gap: 1rem;
-  padding: 1rem;
-  flex: 1;
-  min-height: 0;
   overflow: hidden;
+  display: flex;
+  flex: 1;
+  gap: 1rem;
+
+  min-height: 0;
+  padding: 1rem;
 }
 
 .ruleEditDocs {
-  flex: 0 0 35%;
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid var(--color-borders);
-  padding-right: 1rem;
-  overflow: hidden;
   user-select: text !important;
+
+  overflow: hidden;
+  display: flex;
+  flex: 0 0 35%;
+  flex-direction: column;
+
+  padding-right: 1rem;
+  border-right: 1px solid var(--color-borders);
 }
 
 .ruleEditDocsTitle {
   display: flex;
-  align-items: center;
   gap: 0.5rem;
+  align-items: center;
+
   margin: 0 0 1rem 0;
+
   font-size: 1rem;
   font-weight: var(--font-weight-medium);
   color: var(--color-text);
@@ -255,18 +356,22 @@
 }
 
 .ruleEditDocsContent {
-  flex: 1;
-  overflow-y: auto;
-  padding-right: 0.5rem;
-  user-select: text !important;
   cursor: text;
+  user-select: text !important;
+
+  overflow-y: auto;
+  flex: 1;
+
+  padding-right: 0.5rem;
 
   h5 {
+    user-select: text !important;
+
     margin: 1.5rem 0 0.75rem 0;
-    font-size: 0.95rem;
+
+    font-size: 0.9375rem;
     font-weight: var(--font-weight-medium);
     color: var(--color-text);
-    user-select: text !important;
 
     &:first-child {
       margin-top: 0;
@@ -274,34 +379,41 @@
   }
 
   p {
-    margin: 0.5rem 0;
-    color: var(--color-text-secondary);
-    font-size: 0.85rem;
-    line-height: 1.5;
     user-select: text !important;
+
+    margin: 0.5rem 0;
+
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--color-text-secondary);
   }
 
   ul {
+    user-select: text !important;
     margin: 0.5rem 0;
     padding-left: 1.25rem;
     list-style: disc;
-    user-select: text !important;
 
     li {
-      margin: 0.4rem 0;
-      color: var(--color-text-secondary);
-      font-size: 0.85rem;
-      line-height: 1.5;
       user-select: text !important;
 
+      margin: 0.375rem 0;
+
+      font-size: 0.875rem;
+      line-height: 1.5;
+      color: var(--color-text-secondary);
+
       code {
-        font-family: var(--font-monospace);
-        font-size: 0.85rem;
-        color: var(--color-primary);
-        background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-        padding: 0.1rem 0.35rem;
-        border-radius: 0.25rem;
         user-select: text !important;
+
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+
+        font-family: var(--font-monospace);
+        font-size: 0.875rem;
+        color: var(--color-primary);
+
+        background: color-mix(in srgb, var(--color-primary) 10%, transparent);
       }
 
       ul {
@@ -312,37 +424,41 @@
       }
 
       strong {
-        color: var(--color-text);
-        font-weight: var(--font-weight-medium);
         user-select: text !important;
+        font-weight: var(--font-weight-medium);
+        color: var(--color-text);
       }
     }
   }
 
   h6 {
-    margin: 0.75rem 0 0.4rem 0;
-    font-size: 0.9rem;
-    font-weight: var(--font-weight-medium);
-    color: var(--color-text);
-    line-height: 1.4;
     user-select: text !important;
 
+    margin: 0.75rem 0 0.375rem 0;
+
+    font-size: 0.875rem;
+    font-weight: var(--font-weight-medium);
+    line-height: 1.4;
+    color: var(--color-text);
+
     code {
-      font-family: var(--font-monospace);
-      font-size: 0.88rem;
-      color: var(--color-primary);
-      background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-      padding: 0.15rem 0.4rem;
-      border-radius: 0.25rem;
       user-select: text !important;
+
+      padding: 0.125rem 0.375rem;
+      border-radius: 0.25rem;
+
+      font-family: var(--font-monospace);
+      font-size: 0.875rem;
+      color: var(--color-primary);
+
+      background: color-mix(in srgb, var(--color-primary) 10%, transparent);
     }
   }
 }
 
-
 .docSection {
-  margin-bottom: 1.5rem;
   user-select: text !important;
+  margin-bottom: 1.5rem;
 
   &:last-child {
     margin-bottom: 0;
@@ -350,19 +466,21 @@
 }
 
 .capabilityItem {
+  user-select: text !important;
+
   margin: 1rem 0;
   padding: 0.75rem;
   border-left: 3px solid var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 5%, transparent);
   border-radius: 0.25rem;
-  user-select: text !important;
+
+  background: color-mix(in srgb, var(--color-primary) 5%, transparent);
 
   h6 {
     margin-top: 0;
   }
 
   p {
-    margin: 0.4rem 0;
+    margin: 0.375rem 0;
 
     &:first-of-type {
       margin-top: 0.25rem;
@@ -370,48 +488,55 @@
   }
 
   ul {
-    margin: 0.4rem 0;
+    margin: 0.375rem 0;
   }
 }
 
 .codeExample {
+  cursor: text;
+  user-select: text !important;
+
+  overflow-x: auto;
+
   margin: 0.75rem 0 0 0;
   padding: 1rem;
-  background: var(--color-background-secondary);
   border: 1px solid var(--color-borders);
   border-radius: 0.5rem;
+
   font-family: var(--font-monospace);
-  font-size: 0.8rem;
+  font-size: 0.8125rem;
   line-height: 1.5;
   color: var(--color-text);
-  overflow-x: auto;
   white-space: pre;
-  user-select: text !important;
-  cursor: text;
+
+  background: var(--color-background-secondary);
 }
 
 .ruleEditEditor {
-  flex: 1;
+  overflow: hidden;
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 0.75rem;
+
   min-height: 0;
-  overflow: hidden;
 }
 
 .ruleEditEditorHeader {
   display: flex;
+  flex-shrink: 0;
+  gap: 0.5rem;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
-  flex-shrink: 0;
 }
 
 .ruleEditEditorTitle {
   display: flex;
-  align-items: center;
   gap: 0.5rem;
+  align-items: center;
+
   margin: 0;
+
   font-size: 1rem;
   font-weight: var(--font-weight-medium);
   color: var(--color-text);
@@ -422,13 +547,16 @@
 }
 
 .ruleEditTextArea {
-  flex: 1;
-  min-height: 0;
-  font-family: var(--font-monospace);
-  font-size: 0.85rem;
-  line-height: 1.6;
   resize: none;
+
   overflow: hidden;
+  flex: 1;
+
+  min-height: 0;
+
+  font-family: var(--font-monospace);
+  font-size: 0.875rem;
+  line-height: 1.6;
 
   :global(.input-group) {
     height: 100%;
@@ -436,35 +564,38 @@
   }
 
   :global(textarea) {
-    font-family: var(--font-monospace);
-    font-size: 0.85rem;
-    line-height: 1.6;
-    height: 100%;
     resize: none;
+
     overflow: auto;
+
+    height: 100%;
+
+    font-family: var(--font-monospace);
+    font-size: 0.875rem;
+    line-height: 1.6;
   }
 }
 
 .ruleEditFooter {
-  flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   gap: 0.75rem;
 }
 
 .ruleEditActionButtons,
 .ruleEditActions {
   display: flex;
-  justify-content: flex-end;
   gap: 0.5rem;
+  justify-content: flex-end;
 }
 
 @media (max-width: 520px) {
   .ruleEngineActions {
-    width: 100%;
     flex-wrap: wrap;
+    gap: 0.375rem;
     justify-content: flex-start;
-    gap: 0.35rem;
+    width: 100%;
   }
 
   .ruleEngineActions :global(.Button) {
@@ -473,12 +604,13 @@
   }
 
   .ruleList {
-    max-height: none;
-    min-height: 0;
+    height: auto;
+    min-height: 10rem;
+    max-height: 20rem;
   }
 
   .ruleCard {
-    padding: 0.85rem;
+    padding: 0.875rem;
   }
 
   .ruleRow {
@@ -491,18 +623,18 @@
   }
 
   .ruleRowActions {
-    width: 100%;
+    gap: 0.3125rem;
     justify-content: flex-end;
-    gap: 0.3rem;
+    width: 100%;
   }
 
-  .ruleCardDragHandle {
+  .ruleOrderControl {
     order: -1;
   }
 
   .ruleEditActionButtons {
-    width: 100%;
     flex-wrap: wrap;
     justify-content: flex-end;
+    width: 100%;
   }
 }

@@ -1,6 +1,6 @@
 export function setCorsHeaders(res, allowOrigin, allowHeaders) {
   res.setHeader('Access-Control-Allow-Origin', allowOrigin);
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS,GET');
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS,GET,DELETE');
   res.setHeader('Access-Control-Allow-Headers', allowHeaders);
 }
 

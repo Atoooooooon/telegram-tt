@@ -3,6 +3,13 @@
  * Capabilities that perform actions (mark read, auto reply, etc.)
  */
 
+import type {
+  ApiChat,
+  ApiInputReplyInfo,
+  ApiMessage,
+  MediaContent,
+} from '../../../api/types';
+import type { SendMessageParams } from '../../../types';
 import type { Capability } from '../../types/customerServiceV2';
 import { MAIN_THREAD_ID } from '../../../api/types';
 
@@ -30,27 +37,155 @@ function resolveTypingDelayMs(configuredDelay?: number): number {
     + Math.floor(Math.random() * (MAX_TYPING_DELAY_MS - MIN_TYPING_DELAY_MS));
 }
 
+type SendTrackedMessageParams = Pick<SendMessageParams, 'chat' | 'text' | 'replyInfo' | 'suggestedMedia'> & {
+  chat: ApiChat;
+  text: string;
+  replyInfo?: ApiInputReplyInfo;
+  suggestedMedia?: MediaContent;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object');
+}
+
+function asMessageId(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 function extractSentMessageId(result: unknown): number | undefined {
   if (!result || typeof result !== 'object') {
     return undefined;
   }
 
-  if ('id' in result && typeof result.id === 'number') {
-    return result.id;
+  const resultRecord = result as Record<string, unknown>;
+  const directId = asMessageId(resultRecord.id)
+    ?? asMessageId(resultRecord.messageId)
+    ?? asMessageId(resultRecord.localId);
+
+  if (directId !== undefined) {
+    return directId;
   }
 
-  if ('updates' in result && Array.isArray(result.updates)) {
-    const idUpdate = result.updates.find(
-      (update): update is { id: number } => ('id' in update && typeof update.id === 'number'),
-    );
+  if (isRecord(resultRecord.message)) {
+    const messageId = asMessageId(resultRecord.message.id)
+      ?? asMessageId(resultRecord.message.messageId);
 
-    if (idUpdate) {
-      return idUpdate.id;
+    if (messageId !== undefined) {
+      return messageId;
     }
   }
 
-  if ('messageId' in result && typeof result.messageId === 'number') {
-    return result.messageId;
+  if (Array.isArray(resultRecord.updates)) {
+    for (const update of resultRecord.updates) {
+      if (!isRecord(update)) {
+        continue;
+      }
+
+      const updateId = asMessageId(update.id)
+        ?? asMessageId(update.messageId);
+
+      if (updateId !== undefined) {
+        return updateId;
+      }
+
+      if (isRecord(update.message)) {
+        const updateMessageId = asMessageId(update.message.id)
+          ?? asMessageId(update.message.messageId);
+
+        if (updateMessageId !== undefined) {
+          return updateMessageId;
+        }
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function parseMessageIds(value: unknown, fallbackMessageId: number): number[] {
+  if (Array.isArray(value)) {
+    const ids = value
+      .map((item) => Number(item))
+      .filter((item) => Number.isFinite(item));
+
+    return ids.length ? ids : [fallbackMessageId];
+  }
+
+  if (typeof value === 'string') {
+    const ids = value
+      .split(',')
+      .map((item) => Number(item.trim()))
+      .filter((item) => Number.isFinite(item));
+
+    return ids.length ? ids : [fallbackMessageId];
+  }
+
+  return [fallbackMessageId];
+}
+
+function getRenderedConfigString(
+  value: unknown,
+  pipelineData: Record<string, any>,
+): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const rendered = renderTemplate(value, pipelineData).trim();
+  return rendered || undefined;
+}
+
+async function sendMessageWithTracking(
+  params: SendTrackedMessageParams,
+): Promise<{ sentMessageId?: number; localSentMessageId?: number }> {
+  const { callApi } = await import('../../../api/gramjs');
+  const localMessage = await callApi('sendMessageLocal', params);
+
+  if (localMessage) {
+    const localSentMessageId = localMessage.id;
+    const result = await callApi('sendMessage', {
+      ...params,
+      localMessage,
+    });
+
+    return {
+      sentMessageId: extractSentMessageId(result) ?? localSentMessageId,
+      localSentMessageId,
+    };
+  }
+
+  const result = await callApi('sendMessage', params);
+
+  return {
+    sentMessageId: extractSentMessageId(result),
+  };
+}
+
+function getCaseMessages(pipelineData: Record<string, any>): ApiMessage[] {
+  if (!Array.isArray(pipelineData.caseMessages)) {
+    return [];
+  }
+
+  return pipelineData.caseMessages.filter((item): item is ApiMessage => {
+    return Boolean(item && typeof item === 'object' && 'content' in item && 'id' in item);
+  });
+}
+
+function getMessageSuggestedMedia(message: ApiMessage | undefined): MediaContent | undefined {
+  if (!message) {
+    return undefined;
+  }
+
+  if (message.content.photo) {
+    return { photo: message.content.photo };
+  }
+
+  if (message.content.video) {
+    return { video: message.content.video };
+  }
+
+  if (message.content.document) {
+    return { document: message.content.document };
   }
 
   return undefined;
@@ -269,13 +404,11 @@ export const actionAutoReplyCapability: Capability = {
         return undefined;
       })();
 
-      const result = await callApi('sendMessage', {
+      const sentMessage = await sendMessageWithTracking({
         chat,
         text: replyText,
         replyInfo,
       });
-
-      const sentMessageId = extractSentMessageId(result);
 
       if (typingActionActive) {
         callApi('sendMessageAction', {
@@ -292,7 +425,8 @@ export const actionAutoReplyCapability: Capability = {
         success: true,
         data: {
           repliedText: replyText,
-          sentMessageId,
+          sentMessageId: sentMessage.sentMessageId,
+          localSentMessageId: sentMessage.localSentMessageId,
         },
       };
     } catch (error) {
@@ -375,6 +509,118 @@ export const actionAddQueueCapability: Capability = {
       return {
         success: false,
         error: `Failed to add to queue: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  },
+};
+
+/**
+ * Mark a workbench case as resolved and save it as a success case
+ */
+export const actionResolveCaseCapability: Capability = {
+  id: 'action_resolve_case',
+  name: '标记 Case 已解决',
+  type: 'action',
+  description: '将当前工作台 case 标记为已解决并保存为成功样本',
+
+  configSchema: {
+    reason: {
+      type: 'string',
+      label: '解决原因',
+      placeholder: '例如：订单已成功，无需继续处理',
+    },
+    finalReplyTemplate: {
+      type: 'textarea',
+      label: '最终回复模板',
+      placeholder: '可选，支持 {{变量}}；留空表示无需回复',
+    },
+    summaryTemplate: {
+      type: 'textarea',
+      label: 'Case 摘要模板',
+      placeholder: '可选，默认使用 caseSummary',
+    },
+    intentTemplate: {
+      type: 'string',
+      label: '意图模板',
+      placeholder: '可选，默认使用 problemType',
+    },
+  },
+
+  async execute({ message, config, pipelineData, step }) {
+    try {
+      const [
+        { getMessageText },
+        { saveCustomerServiceSuccessCase },
+      ] = await Promise.all([
+        import('../messages'),
+        import('../customerServiceOncall'),
+      ]);
+
+      const caseId = typeof pipelineData.caseId === 'string' && pipelineData.caseId.trim()
+        ? pipelineData.caseId.trim()
+        : `message:${message.chatId}:${message.id}`;
+      const sourceText = typeof pipelineData.caseText === 'string' && pipelineData.caseText.trim()
+        ? pipelineData.caseText.trim()
+        : getMessageText(message)?.text || '';
+      const finalReply = getRenderedConfigString(config.finalReplyTemplate, pipelineData)
+        || (typeof pipelineData.finalReply === 'string' ? pipelineData.finalReply.trim() : '');
+      const aiDraft = typeof pipelineData.aiDraft === 'string'
+        ? pipelineData.aiDraft.trim()
+        : finalReply;
+      const reason = getRenderedConfigString(config.reason, pipelineData);
+      const aiSummary = getRenderedConfigString(config.summaryTemplate, pipelineData)
+        || (typeof pipelineData.caseSummary === 'string' ? pipelineData.caseSummary : undefined);
+      const aiIntent = getRenderedConfigString(config.intentTemplate, pipelineData)
+        || (typeof pipelineData.problemType === 'string' ? pipelineData.problemType : undefined)
+        || (typeof pipelineData.ruleName === 'string' ? pipelineData.ruleName : undefined);
+      const messageIds = parseMessageIds(pipelineData.messageIds, message.id);
+
+      const result = await saveCustomerServiceSuccessCase({
+        recordType: 'case_resolved',
+        caseId,
+        chatId: message.chatId,
+        senderId: message.senderId,
+        messageIds,
+        sourceText,
+        aiSummary,
+        aiIntent,
+        aiDraft,
+        finalReply,
+        wasEdited: Boolean(finalReply && aiDraft && finalReply !== aiDraft),
+        metadata: {
+          resolvedBy: 'rule_engine',
+          reason,
+          ruleId: pipelineData.ruleId,
+          ruleName: pipelineData.ruleName,
+          stepId: step?.id,
+          fields: pipelineData.fields,
+          missingFields: pipelineData.missingFields,
+          confidence: pipelineData.confidence,
+          resolvedAt: Date.now(),
+        },
+      });
+
+      if (!result.ok) {
+        return {
+          success: false,
+          error: result.error || 'Failed to save resolved case',
+        };
+      }
+
+      return {
+        success: true,
+        handled: true,
+        data: {
+          caseResolved: true,
+          resolvedCaseId: caseId,
+          resolvedReason: reason,
+          resolvedRecord: result.record,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: `Failed to resolve case: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   },
@@ -481,12 +727,10 @@ export const actionForwardCapability: Capability = {
           };
         }
 
-        const result = await callApi('sendMessage', {
+        const sentMessage = await sendMessageWithTracking({
           chat: toChat,
           text: renderedText,
         });
-
-        const sentMessageId = extractSentMessageId(result);
 
         return {
           success: true,
@@ -495,7 +739,8 @@ export const actionForwardCapability: Capability = {
             messageId: message.id,
             forwardMode: 'copy_text',
             sentText: renderedText,
-            sentMessageId,
+            sentMessageId: sentMessage.sentMessageId,
+            localSentMessageId: sentMessage.localSentMessageId,
           },
         };
       }
@@ -532,7 +777,7 @@ export const actionSendToCapability: Capability = {
   id: 'action_send_to',
   name: '发送消息到窗口',
   type: 'action',
-  description: '发送新消息到指定聊天窗口',
+  description: '发送新消息到指定聊天窗口,也可按模式写入草稿或带 case 媒体发送',
 
   configSchema: {
     toChatId: {
@@ -547,10 +792,41 @@ export const actionSendToCapability: Capability = {
       required: true,
       placeholder: '支持 {{变量}} 语法',
     },
+    deliveryMode: {
+      type: 'select',
+      label: '投递模式',
+      options: ['send', 'draft', 'draft_in_assist'],
+      default: 'send',
+    },
+    mediaSource: {
+      type: 'select',
+      label: '媒体来源',
+      options: ['none', 'current_message', 'case_first_media', 'case_last_media'],
+      default: 'none',
+    },
+    requireMedia: {
+      type: 'boolean',
+      label: '发送时要求带媒体',
+      default: false,
+    },
+    openChatOnDraft: {
+      type: 'boolean',
+      label: '写入草稿后打开目标窗口',
+      default: true,
+    },
   },
 
-  async execute({ message, config, pipelineData, global }) {
-    const { toChatId, template } = config;
+  async execute({
+    message, config, pipelineData, global, actions,
+  }) {
+    const {
+      toChatId,
+      template,
+      deliveryMode = 'send',
+      mediaSource = 'none',
+      requireMedia = false,
+      openChatOnDraft = true,
+    } = config;
     const resolvedToChatId = typeof toChatId === 'string'
       ? renderTemplate(toChatId, pipelineData).trim()
       : toChatId;
@@ -570,7 +846,6 @@ export const actionSendToCapability: Capability = {
     }
 
     try {
-      const { callApi } = await import('../../../api/gramjs');
       const { selectChat } = await import('../../selectors');
 
       const toChat = selectChat(global, resolvedToChatId);
@@ -583,20 +858,74 @@ export const actionSendToCapability: Capability = {
       }
 
       const text = renderTemplate(template, pipelineData);
+      const mode = global.customerServiceV2?.settings?.mode || 'oncall';
+      const shouldDraft = deliveryMode === 'draft' || (deliveryMode === 'draft_in_assist' && mode === 'assist');
 
-      const result = await callApi('sendMessage', {
+      if (shouldDraft) {
+        actions.saveDraft({
+          chatId: resolvedToChatId,
+          threadId: MAIN_THREAD_ID,
+          text,
+        });
+
+        if (openChatOnDraft) {
+          actions.openChat({
+            id: resolvedToChatId,
+          });
+        }
+
+        return {
+          success: true,
+          data: {
+            sentTo: resolvedToChatId,
+            sentText: text,
+            draftSaved: true,
+            deliveryMode: 'draft',
+          },
+        };
+      }
+
+      const mediaMessage = (() => {
+        if (mediaSource === 'current_message') {
+          return message;
+        }
+
+        const caseMessages = getCaseMessages(pipelineData);
+        if (mediaSource === 'case_first_media') {
+          return caseMessages.find((candidate) => Boolean(getMessageSuggestedMedia(candidate)));
+        }
+
+        if (mediaSource === 'case_last_media') {
+          return [...caseMessages].reverse().find((candidate) => Boolean(getMessageSuggestedMedia(candidate)));
+        }
+
+        return undefined;
+      })();
+      const suggestedMedia = getMessageSuggestedMedia(mediaMessage);
+
+      if (requireMedia && !suggestedMedia) {
+        return {
+          success: false,
+          error: 'Configured mediaSource did not resolve to media',
+        };
+      }
+
+      const sentMessage = await sendMessageWithTracking({
         chat: toChat,
         text,
+        suggestedMedia,
       });
-
-      const sentMessageId = extractSentMessageId(result);
 
       return {
         success: true,
         data: {
           sentTo: resolvedToChatId,
           sentText: text,
-          sentMessageId,
+          deliveryMode: 'send',
+          mediaMessageId: mediaMessage?.id,
+          hasMedia: Boolean(suggestedMedia),
+          sentMessageId: sentMessage.sentMessageId,
+          localSentMessageId: sentMessage.localSentMessageId,
         },
       };
     } catch (error) {

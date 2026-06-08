@@ -1,11 +1,23 @@
 import type React from '../../../../../lib/teact/teact';
 import type { FC } from '../../../../../lib/teact/teact';
-import { memo, useRef, useState } from '../../../../../lib/teact/teact';
+import { memo, useState } from '../../../../../lib/teact/teact';
 
-import type { UserRule } from '../../../../../global/types/customerServiceV2';
+import type {
+  ActionExecution,
+  CustomerServiceCasePlaybook,
+  PipelineStep,
+  UserRule,
+} from '../../../../../global/types/customerServiceV2';
 
 import { registerAllCapabilities } from '../../../../../global/helpers/capabilities';
-import { getAllRegisteredCapabilityIds, isCapabilityRegistered } from '../../../../../global/helpers/ruleEngine';
+import {
+  getDefaultCustomerServiceCasePlaybooks,
+  normalizeCustomerServiceCasePlaybooks,
+} from '../../../../../global/helpers/customerServiceV2Settings';
+import {
+  getAllRegisteredCapabilityIds,
+  isCapabilityRegistered,
+} from '../../../../../global/helpers/ruleEngine';
 
 import useLang from '../../../../../hooks/useLang';
 import useLastCallback from '../../../../../hooks/useLastCallback';
@@ -20,51 +32,188 @@ import RuleEngineDoc from '../RuleEngineDoc';
 import layoutStyles from '../CustomerServiceSettingsModal.module.scss';
 import styles from './RuleEngineTab.module.scss';
 
+type AutomationKind = 'message_rule' | 'case_playbook';
+type AutomationItem = UserRule | CustomerServiceCasePlaybook;
+
 type Props = {
   rules?: UserRule[];
+  casePlaybooks?: CustomerServiceCasePlaybook[];
   onRulesChange: (rules: UserRule[]) => void;
+  onCasePlaybooksChange: (playbooks: CustomerServiceCasePlaybook[]) => void;
 };
+
+function cloneAutomationItem<T extends AutomationItem>(item: T): T {
+  return JSON.parse(JSON.stringify(item)) as T;
+}
+
+function generateUniqueId(baseName: string = 'automation'): string {
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 8);
+  return `${baseName}_${timestamp}_${random}`;
+}
+
+function validateExecutionPolicy(value: unknown, source: string, errors: string[]): void {
+  if (value !== undefined && value !== 'auto' && value !== 'confirm') {
+    const displayValue = typeof value === 'string' ? value : JSON.stringify(value);
+    errors.push(`${source}: "${displayValue || '<invalid>'}"`);
+  }
+}
+
+function validateExecutionPolicyByMode(value: unknown, source: string, errors: string[]): void {
+  if (value === undefined) {
+    return;
+  }
+
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    errors.push(`${source}: "${JSON.stringify(value) || '<invalid>'}"`);
+    return;
+  }
+
+  Object.entries(value).forEach(([mode, policy]) => {
+    if (mode !== 'oncall' && mode !== 'assist') {
+      errors.push(`${source}.${mode}: "<invalid mode>"`);
+      return;
+    }
+    validateExecutionPolicy(policy, `${source}.${mode}`, errors);
+  });
+}
+
+function validateActionExecution(
+  actionExecution: ActionExecution | undefined,
+  source: string,
+  invalidCapabilities: string[],
+  invalidExecutionPolicies: string[],
+): void {
+  if (!actionExecution) {
+    return;
+  }
+
+  if (typeof actionExecution === 'string') {
+    if (!isCapabilityRegistered(actionExecution)) {
+      invalidCapabilities.push(`${source}: "${actionExecution}"`);
+    }
+    return;
+  }
+
+  if (typeof actionExecution.capabilityId === 'string' && !isCapabilityRegistered(actionExecution.capabilityId)) {
+    invalidCapabilities.push(`${source}: "${actionExecution.capabilityId}"`);
+  }
+  validateExecutionPolicy(actionExecution.executionPolicy, source, invalidExecutionPolicies);
+  validateExecutionPolicyByMode(
+    actionExecution.executionPolicyByMode,
+    `${source}.executionPolicyByMode`,
+    invalidExecutionPolicies,
+  );
+}
+
+function validatePipelineCapabilities(pipeline: PipelineStep[] | undefined): string | undefined {
+  if (!Array.isArray(pipeline)) {
+    return undefined;
+  }
+
+  registerAllCapabilities();
+
+  const registeredCapabilities = getAllRegisteredCapabilityIds().sort();
+  const invalidCapabilities: string[] = [];
+  const invalidExecutionPolicies: string[] = [];
+
+  pipeline.forEach((step, index) => {
+    const source = `步骤 ${index + 1}`;
+
+    if (step.capabilityId && !isCapabilityRegistered(step.capabilityId)) {
+      invalidCapabilities.push(`${source}: "${step.capabilityId}"`);
+    }
+
+    validateExecutionPolicy(step.executionPolicy, source, invalidExecutionPolicies);
+    validateExecutionPolicyByMode(
+      step.executionPolicyByMode,
+      `${source}.executionPolicyByMode`,
+      invalidExecutionPolicies,
+    );
+    validateActionExecution(
+      step.onSuccess?.executeAction,
+      `${source} onSuccess.executeAction`,
+      invalidCapabilities,
+      invalidExecutionPolicies,
+    );
+    validateActionExecution(
+      step.onFailure?.executeAction,
+      `${source} onFailure.executeAction`,
+      invalidCapabilities,
+      invalidExecutionPolicies,
+    );
+  });
+
+  if (invalidCapabilities.length > 0) {
+    return `发现未注册的能力:\n${invalidCapabilities.join('\n')}`
+      + (registeredCapabilities.length > 0 ? `\n\n可用能力:\n${registeredCapabilities.join('\n')}` : '')
+      + '\n\n请检查能力 ID 是否正确,或查看文档了解可用能力列表。';
+  }
+
+  if (invalidExecutionPolicies.length > 0) {
+    return `发现无效执行策略:\n${invalidExecutionPolicies.join('\n')}`
+      + '\n\nexecutionPolicy 只能是 "auto" 或 "confirm"; executionPolicyByMode 只支持 oncall/assist。';
+  }
+
+  return undefined;
+}
 
 const RuleEngineTab: FC<Props> = ({
   rules,
+  casePlaybooks,
   onRulesChange,
+  onCasePlaybooksChange,
 }) => {
   const lang = useLang();
   const safeRules = rules ? rules.slice() : [];
+  const safePlaybooks = normalizeCustomerServiceCasePlaybooks(casePlaybooks);
 
-  const [draggedIndex, setDraggedIndex] = useState<number | undefined>();
-  const dragHandleActiveRef = useRef(false);
-  const pendingRulesRef = useRef<UserRule[]>(safeRules);
-  pendingRulesRef.current = safeRules;
-  const [isRuleEditModalOpen, setIsRuleEditModalOpen] = useState(false);
-  const [editingRuleId, setEditingRuleId] = useState<string | undefined>();
-  const [editingRuleJson, setEditingRuleJson] = useState('');
-  const [ruleEditError, setRuleEditError] = useState<string | undefined>();
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingKind, setEditingKind] = useState<AutomationKind>('message_rule');
+  const [editingItemId, setEditingItemId] = useState<string | undefined>();
+  const [editingJson, setEditingJson] = useState('');
+  const [editError, setEditError] = useState<string | undefined>();
 
-  const updateRule = useLastCallback((ruleId: string, updater: (rule: UserRule) => UserRule) => {
-    onRulesChange(safeRules.map((rule) => (rule.id === ruleId ? updater(rule) : rule)));
+  const getItems = useLastCallback((kind: AutomationKind): AutomationItem[] => (
+    kind === 'case_playbook' ? safePlaybooks : safeRules
+  ));
+
+  const setItems = useLastCallback((kind: AutomationKind, items: AutomationItem[]) => {
+    if (kind === 'case_playbook') {
+      onCasePlaybooksChange(normalizeCustomerServiceCasePlaybooks(items));
+      return;
+    }
+
+    onRulesChange(items as UserRule[]);
   });
 
-  const handleRuleToggle = useLastCallback((ruleId: string, enabled: boolean) => {
-    updateRule(ruleId, (rule) => ({
-      ...rule,
-      enabled,
-    }));
+  const handleToggle = useLastCallback((kind: AutomationKind, itemId: string, enabled: boolean) => {
+    const items = getItems(kind);
+    setItems(kind, items.map((item) => (item.id === itemId ? { ...item, enabled } : item)));
   });
 
-  const handleDeleteRule = useLastCallback((ruleId: string) => {
-    onRulesChange(safeRules.filter((rule) => rule.id !== ruleId));
+  const handleDelete = useLastCallback((kind: AutomationKind, itemId: string) => {
+    setItems(kind, getItems(kind).filter((item) => item.id !== itemId));
   });
 
-  const generateUniqueRuleId = useLastCallback((baseName: string = 'rule') => {
-    const timestamp = Date.now();
-    const random = Math.random().toString(36).substring(2, 8);
-    return `${baseName}_${timestamp}_${random}`;
+  const handleMove = useLastCallback((kind: AutomationKind, itemId: string, offset: number) => {
+    const items = getItems(kind);
+    const index = items.findIndex((item) => item.id === itemId);
+    const nextIndex = index + offset;
+
+    if (index < 0 || nextIndex < 0 || nextIndex >= items.length) {
+      return;
+    }
+
+    const nextItems = items.slice();
+    const [moved] = nextItems.splice(index, 1);
+    nextItems.splice(nextIndex, 0, moved);
+    setItems(kind, nextItems);
   });
 
   const handleAddRule = useLastCallback(() => {
     const newRule: UserRule = {
-      id: generateUniqueRuleId('rule'),
+      id: generateUniqueId('rule'),
       name: `新规则 ${safeRules.length + 1}`,
       enabled: true,
       trigger: {
@@ -75,366 +224,251 @@ const RuleEngineTab: FC<Props> = ({
     onRulesChange([newRule, ...safeRules]);
   });
 
-  const handleRestoreDefaults = useLastCallback(() => {
-    onRulesChange([]);
+  const handleAddPlaybook = useLastCallback(() => {
+    const [defaultPlaybook] = getDefaultCustomerServiceCasePlaybooks();
+    const newPlaybook: CustomerServiceCasePlaybook = {
+      ...cloneAutomationItem(defaultPlaybook),
+      id: generateUniqueId('case_playbook'),
+      name: `Case Playbook ${safePlaybooks.length + 1}`,
+    };
+    onCasePlaybooksChange([newPlaybook, ...safePlaybooks]);
   });
 
-  const handleDragStart = useLastCallback((index: number) => (event: React.DragEvent<HTMLDivElement>) => {
-    if (!dragHandleActiveRef.current) {
-      event.preventDefault();
+  const openEditModal = useLastCallback((kind: AutomationKind, itemId: string) => {
+    const item = getItems(kind).find((candidate) => candidate.id === itemId);
+    if (!item) {
       return;
     }
 
-    if (pendingRulesRef.current.length <= 1) {
-      event.preventDefault();
-      return;
-    }
-
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', String(index));
-    setDraggedIndex(index);
+    setEditingKind(kind);
+    setEditingItemId(itemId);
+    setEditingJson(JSON.stringify(item, undefined, 2));
+    setEditError(undefined);
+    setIsEditModalOpen(true);
   });
 
-  const handleDragOver = useLastCallback((index: number) => (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-
-    if (pendingRulesRef.current.length <= 1) {
-      return;
-    }
-
-    if (draggedIndex === undefined || draggedIndex === index) {
-      return;
-    }
-
-    const next = pendingRulesRef.current.slice();
-    const [moved] = next.splice(draggedIndex, 1);
-    next.splice(index, 0, moved);
-    pendingRulesRef.current = next;
-    setDraggedIndex(index);
-    onRulesChange(next);
+  const handleJsonChange = useLastCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setEditingJson(event.currentTarget.value);
+    setEditError(undefined);
   });
 
-  const handleDragEnd = useLastCallback(() => {
-    setDraggedIndex(undefined);
-    dragHandleActiveRef.current = false;
-  });
-
-  const handleDrop = useLastCallback((event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    setDraggedIndex(undefined);
-    dragHandleActiveRef.current = false;
-  });
-
-  const markDragHandleActive = useLastCallback(() => {
-    dragHandleActiveRef.current = true;
-  });
-
-  const clearDragHandleActive = useLastCallback(() => {
-    dragHandleActiveRef.current = false;
-  });
-
-  const openRuleEditModal = useLastCallback((ruleId: string) => {
-    const targetRule = safeRules.find((rule) => rule.id === ruleId);
-    if (!targetRule) {
-      return;
-    }
-    setEditingRuleId(ruleId);
-    setEditingRuleJson(JSON.stringify(targetRule, undefined, 2));
-    setRuleEditError(undefined);
-    setIsRuleEditModalOpen(true);
-  });
-
-  const handleRuleJsonChange = useLastCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setEditingRuleJson(event.currentTarget.value);
-    setRuleEditError(undefined);
-  });
-
-  const handleFormatRuleJson = useLastCallback(() => {
+  const handleFormatJson = useLastCallback(() => {
     try {
-      const parsed = JSON.parse(editingRuleJson || '{}');
-      setEditingRuleJson(JSON.stringify(parsed, undefined, 2));
-      setRuleEditError(undefined);
+      const parsed = JSON.parse(editingJson || '{}');
+      setEditingJson(JSON.stringify(parsed, undefined, 2));
+      setEditError(undefined);
     } catch (error) {
-      setRuleEditError(error instanceof Error ? error.message : String(error));
+      setEditError(error instanceof Error ? error.message : String(error));
     }
   });
 
-  const handleApplyRuleEdit = useLastCallback(() => {
+  const handleApplyEdit = useLastCallback(() => {
     try {
-      // Ensure all capabilities are registered before validation
-      registerAllCapabilities();
-
-      const parsed = JSON.parse(editingRuleJson || '{}');
+      const parsed = JSON.parse(editingJson || '{}');
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
         throw new Error('JSON root 必须是对象');
       }
 
-      const updatedRule = parsed as UserRule;
-      if (!updatedRule.id) {
-        updatedRule.id = editingRuleId || generateUniqueRuleId('rule');
+      const items = getItems(editingKind);
+      const updatedItem = parsed as AutomationItem;
+      if (!updatedItem.id) {
+        updatedItem.id = editingItemId || generateUniqueId(editingKind);
       }
 
-      // Check for duplicate IDs (excluding the current editing rule)
-      const isDuplicateId = safeRules.some(
-        (rule) => rule.id !== editingRuleId && rule.id === updatedRule.id,
-      );
-
-      if (isDuplicateId) {
-        setRuleEditError(`规则 ID "${updatedRule.id}" 已存在。请使用唯一的 ID 或留空自动生成。`);
+      const duplicate = items.some((item) => item.id !== editingItemId && item.id === updatedItem.id);
+      if (duplicate) {
+        setEditError(`ID "${updatedItem.id}" 已存在。请使用唯一 ID 或留空自动生成。`);
         return;
       }
 
-      // Validate capability IDs in pipeline
-      if (updatedRule.pipeline && Array.isArray(updatedRule.pipeline)) {
-        const registeredCapabilities = getAllRegisteredCapabilityIds().sort();
-        const invalidCapabilities: string[] = [];
-        updatedRule.pipeline.forEach((step, index) => {
-          if (step.capabilityId && !isCapabilityRegistered(step.capabilityId)) {
-            invalidCapabilities.push(`步骤 ${index + 1}: "${step.capabilityId}"`);
-          }
-        });
-
-        if (invalidCapabilities.length > 0) {
-          setRuleEditError(
-            `发现未注册的能力:\n${invalidCapabilities.join('\n')}` +
-            (registeredCapabilities.length > 0
-              ? `\n\n可用能力:\n${registeredCapabilities.join('\n')}`
-              : '') +
-              '\n\n请检查能力 ID 是否正确,或查看文档了解可用能力列表。',
-          );
-          return;
-        }
+      const validationError = validatePipelineCapabilities(updatedItem.pipeline);
+      if (validationError) {
+        setEditError(validationError);
+        return;
       }
 
-      onRulesChange(safeRules.map((rule) => (rule.id === editingRuleId ? updatedRule : rule)));
-      setIsRuleEditModalOpen(false);
+      if (editingKind === 'case_playbook') {
+        const playbook = updatedItem as CustomerServiceCasePlaybook;
+        playbook.kind = 'case_playbook';
+        playbook.exposable = playbook.exposable !== false;
+        playbook.manualRunnable = playbook.manualRunnable !== false;
+        playbook.trigger = {
+          ...(playbook.trigger || {}),
+          eventType: 'case_manual',
+        };
+        setItems(editingKind, items.map((item) => (item.id === editingItemId ? playbook : item)));
+      } else {
+        setItems(editingKind, items.map((item) => (item.id === editingItemId ? updatedItem : item)));
+      }
+
+      setIsEditModalOpen(false);
     } catch (error) {
-      setRuleEditError(error instanceof Error ? error.message : String(error));
+      setEditError(error instanceof Error ? error.message : String(error));
     }
   });
 
-  return (
-    <div className={layoutStyles.tabContent}>
-      <div className={layoutStyles.sectionHeader}>
-        <h3>
-          <Icon name="settings" className={layoutStyles.sectionIcon} />
-          {lang('CustomerServiceRuleEngineRules')}
-        </h3>
+  const renderCard = (item: AutomationItem, kind: AutomationKind, index: number, total: number) => (
+    <div className={styles.ruleCard} key={item.id}>
+      <div className={styles.ruleRow}>
+        <div className={styles.ruleOrderControl}>
+          <button
+            type="button"
+            className={styles.ruleOrderMoveButton}
+            aria-label="上移"
+            disabled={index === 0}
+            onClick={() => handleMove(kind, item.id, -1)}
+          >
+            <Icon name="down" className={styles.ruleOrderMoveIconUp} />
+          </button>
+          <span className={styles.ruleOrderIndex}>
+            #
+            {index + 1}
+          </span>
+          <button
+            type="button"
+            className={styles.ruleOrderMoveButton}
+            aria-label="下移"
+            disabled={index >= total - 1}
+            onClick={() => handleMove(kind, item.id, 1)}
+          >
+            <Icon name="down" />
+          </button>
+        </div>
+        <div className={styles.ruleCardText}>
+          <div className={styles.ruleCardTitle}>
+            <div className={styles.ruleCardName}>
+              {item.name || (kind === 'case_playbook' ? 'Case Playbook' : lang('CustomerServiceRuleName'))}
+            </div>
+          </div>
+          <div className={styles.ruleCardMeta}>
+            <code>{item.id}</code>
+            <span className={styles.ruleCardMetaDivider}>/</span>
+            <span>{item.trigger?.eventType || 'any_message'}</span>
+            <span className={styles.ruleCardMetaDivider}>/</span>
+            <span>
+              {item.pipeline?.length || 0}
+              {' '}
+              steps
+            </span>
+          </div>
+        </div>
+        <div className={styles.ruleRowActions}>
+          <Switcher
+            label=""
+            checked={Boolean(item.enabled)}
+            onCheck={(value) => handleToggle(kind, item.id, value)}
+          />
+          <button
+            type="button"
+            className={styles.ruleActionButton}
+            aria-label={lang('CustomerServiceRuleEngineEditJson')}
+            onClick={() => openEditModal(kind, item.id)}
+          >
+            <Icon name="edit" />
+          </button>
+          <button
+            type="button"
+            className={styles.ruleActionButton}
+            aria-label={lang('CustomerServiceDeleteRule')}
+            onClick={() => handleDelete(kind, item.id)}
+          >
+            <Icon name="delete" />
+          </button>
+        </div>
       </div>
+      {kind === 'case_playbook' && 'description' in item && item.description && (
+        <p className={styles.ruleCardDescription}>{item.description}</p>
+      )}
+    </div>
+  );
 
+  const renderAutomationSection = (
+    kind: AutomationKind,
+    title: string,
+    description: string,
+    items: AutomationItem[],
+    onAdd: NoneToVoidFunction,
+    onRestore: NoneToVoidFunction,
+    emptyText: string,
+  ) => (
+    <section className={styles.automationSection}>
       <div className={layoutStyles.sectionHeader}>
         <div className={layoutStyles.sectionTitleRow}>
           <h3>
-            <Icon name="menu" className={layoutStyles.sectionIcon} />
-            规则列表
+            <Icon name={kind === 'case_playbook' ? 'bots' : 'menu'} className={layoutStyles.sectionIcon} />
+            {title}
           </h3>
           <div className={styles.ruleEngineActions}>
             <div>
               <Button
                 size="tiny"
                 color="primary"
-                onClick={handleAddRule}
+                onClick={onAdd}
               >
                 <Icon name="add" />
-                {lang('CustomerServiceRuleEngineAddRule')}
+                新增
               </Button>
             </div>
             <div>
               <Button
                 size="tiny"
                 color="translucent"
-                onClick={handleRestoreDefaults}
+                onClick={onRestore}
               >
                 <Icon name="reload" />
-                {lang('CustomerServiceRuleEngineRestoreDefault')}
+                {kind === 'case_playbook' ? '恢复 Demo' : lang('CustomerServiceRuleEngineRestoreDefault')}
               </Button>
             </div>
           </div>
         </div>
-        <p className={layoutStyles.sectionDescription}>
-          {lang('CustomerServiceRuleEngineOrderHint')}
-        </p>
+        <p className={layoutStyles.sectionDescription}>{description}</p>
       </div>
 
       <div className={styles.ruleList}>
-        {safeRules.length === 0 ? (
-          <div className={styles.ruleEmpty}>
-            {lang('CustomerServiceRuleEngineNoRules')}
-          </div>
+        {items.length ? (
+          items.map((item, index) => renderCard(item, kind, index, items.length))
         ) : (
-          <>
-            {(() => {
-              const preFilterRules = safeRules.filter((r) => r.executionPhase === 'pre-filter');
-              const postFilterRules = safeRules.filter((r) => !r.executionPhase || r.executionPhase === 'post-filter');
-
-              return (
-                <>
-                  {preFilterRules.length > 0 && (
-                    <>
-                      <div className={styles.ruleGroupHeader}>
-                        <Icon name="settings" />
-                        前置规则 (Pre-filter)
-                        <span className={styles.ruleGroupHint}>在过滤前执行</span>
-                      </div>
-                      {preFilterRules.map((rule) => {
-                        const index = safeRules.indexOf(rule);
-                        return (
-                          <div
-                            className={styles.ruleCard}
-                            key={rule.id}
-                            draggable={safeRules.length > 1}
-                            onDragStart={safeRules.length > 1 ? handleDragStart(index) : undefined}
-                            onDragOver={safeRules.length > 1 ? handleDragOver(index) : undefined}
-                            onDragEnd={safeRules.length > 1 ? handleDragEnd : undefined}
-                            onDrop={safeRules.length > 1 ? handleDrop : undefined}
-                          >
-                            <div className={styles.ruleRow}>
-                              <button
-                                type="button"
-                                className={styles.ruleCardDragHandle}
-                                aria-label={lang('DragToSortAria')}
-                                disabled={safeRules.length <= 1}
-                                onMouseDown={markDragHandleActive}
-                                onMouseUp={clearDragHandleActive}
-                                onMouseLeave={clearDragHandleActive}
-                                onTouchStart={markDragHandleActive}
-                                onTouchEnd={clearDragHandleActive}
-                                onTouchCancel={clearDragHandleActive}
-                              >
-                                <Icon name="sort" />
-                              </button>
-                              <div className={styles.ruleCardText}>
-                                <div className={styles.ruleCardTitle}>
-                                  <div className={styles.ruleOrderIndex}>
-                                    #
-                                    {index + 1}
-                                  </div>
-                                  <div className={styles.ruleCardName}>
-                                    {rule.name || lang('CustomerServiceRuleName')}
-                                  </div>
-                                </div>
-                                <div className={styles.ruleCardMeta}>
-                                  <code>{rule.id}</code>
-                                </div>
-                              </div>
-                              <div className={styles.ruleRowActions}>
-                                <Switcher
-                                  label=""
-                                  checked={Boolean(rule.enabled)}
-                                  onCheck={(value) => handleRuleToggle(rule.id, value)}
-                                />
-                                <button
-                                  type="button"
-                                  className={styles.ruleActionButton}
-                                  aria-label={lang('CustomerServiceRuleEngineEditJson')}
-                                  onClick={() => openRuleEditModal(rule.id)}
-                                >
-                                  <Icon name="edit" />
-                                </button>
-                                <button
-                                  type="button"
-                                  className={styles.ruleActionButton}
-                                  aria-label={lang('CustomerServiceDeleteRule')}
-                                  onClick={() => handleDeleteRule(rule.id)}
-                                >
-                                  <Icon name="delete" />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </>
-                  )}
-
-                  {postFilterRules.length > 0 && (
-                    <>
-                      <div className={styles.ruleGroupHeader}>
-                        <Icon name="check" />
-                        后置规则 (Post-filter)
-                        <span className={styles.ruleGroupHint}>在过滤后执行</span>
-                      </div>
-                      {postFilterRules.map((rule) => {
-                        const index = safeRules.indexOf(rule);
-                        return (
-                          <div
-                            className={styles.ruleCard}
-                            key={rule.id}
-                            draggable={safeRules.length > 1}
-                            onDragStart={safeRules.length > 1 ? handleDragStart(index) : undefined}
-                            onDragOver={safeRules.length > 1 ? handleDragOver(index) : undefined}
-                            onDragEnd={safeRules.length > 1 ? handleDragEnd : undefined}
-                            onDrop={safeRules.length > 1 ? handleDrop : undefined}
-                          >
-                            <div className={styles.ruleRow}>
-                              <button
-                                type="button"
-                                className={styles.ruleCardDragHandle}
-                                aria-label={lang('DragToSortAria')}
-                                disabled={safeRules.length <= 1}
-                                onMouseDown={markDragHandleActive}
-                                onMouseUp={clearDragHandleActive}
-                                onMouseLeave={clearDragHandleActive}
-                                onTouchStart={markDragHandleActive}
-                                onTouchEnd={clearDragHandleActive}
-                                onTouchCancel={clearDragHandleActive}
-                              >
-                                <Icon name="sort" />
-                              </button>
-                              <div className={styles.ruleCardText}>
-                                <div className={styles.ruleCardTitle}>
-                                  <div className={styles.ruleOrderIndex}>
-                                    #
-                                    {index + 1}
-                                  </div>
-                                  <div className={styles.ruleCardName}>
-                                    {rule.name || lang('CustomerServiceRuleName')}
-                                  </div>
-                                </div>
-                                <div className={styles.ruleCardMeta}>
-                                  <code>{rule.id}</code>
-                                </div>
-                              </div>
-                              <div className={styles.ruleRowActions}>
-                                <Switcher
-                                  label=""
-                                  checked={Boolean(rule.enabled)}
-                                  onCheck={(value) => handleRuleToggle(rule.id, value)}
-                                />
-                                <button
-                                  type="button"
-                                  className={styles.ruleActionButton}
-                                  aria-label={lang('CustomerServiceRuleEngineEditJson')}
-                                  onClick={() => openRuleEditModal(rule.id)}
-                                >
-                                  <Icon name="edit" />
-                                </button>
-                                <button
-                                  type="button"
-                                  className={styles.ruleActionButton}
-                                  aria-label={lang('CustomerServiceDeleteRule')}
-                                  onClick={() => handleDeleteRule(rule.id)}
-                                >
-                                  <Icon name="delete" />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </>
-                  )}
-                </>
-              );
-            })()}
-          </>
+          <div className={styles.ruleEmpty}>{emptyText}</div>
         )}
       </div>
+    </section>
+  );
+
+  return (
+    <div className={layoutStyles.tabContent}>
+      <div className={layoutStyles.sectionHeader}>
+        <h3>
+          <Icon name="settings" className={layoutStyles.sectionIcon} />
+          自动化
+        </h3>
+        <p className={layoutStyles.sectionDescription}>
+          消息规则处理单条 Telegram 消息；Case Playbook 以工作台 case 为入口，供 AI 推荐和人工点击执行。
+        </p>
+      </div>
+
+      {renderAutomationSection(
+        'message_rule',
+        '消息规则',
+        '兼容当前生产规则，按单条消息触发，适合转发、过滤、自动回复和消息保障前置处理。',
+        safeRules,
+        handleAddRule,
+        () => onRulesChange([]),
+        lang('CustomerServiceRuleEngineNoRules'),
+      )}
+
+      {renderAutomationSection(
+        'case_playbook',
+        'Case Playbook',
+        '以工作台 case 为单位执行 pipeline。可读取 caseText、caseSummary、orderNumber 等上下文，适合查单、反馈上游、等待机器人回复。',
+        safePlaybooks,
+        handleAddPlaybook,
+        () => onCasePlaybooksChange(getDefaultCustomerServiceCasePlaybooks()),
+        '暂无 Case Playbook。可恢复 Demo 或新增 JSON。',
+      )}
 
       <Modal
-        isOpen={isRuleEditModalOpen}
-        onClose={() => setIsRuleEditModalOpen(false)}
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
         className={styles.ruleEditModal}
       >
         <div className={styles.ruleEditSplit}>
@@ -451,7 +485,7 @@ const RuleEngineTab: FC<Props> = ({
                   <Button
                     size="tiny"
                     color="translucent"
-                    onClick={handleFormatRuleJson}
+                    onClick={handleFormatJson}
                   >
                     <Icon name="reload" />
                     格式化
@@ -461,16 +495,16 @@ const RuleEngineTab: FC<Props> = ({
             </div>
             <TextArea
               className={styles.ruleEditTextArea}
-              value={editingRuleJson}
-              onChange={handleRuleJsonChange}
+              value={editingJson}
+              onChange={handleJsonChange}
               noReplaceNewlines
               autoResize={false}
             />
             <div className={styles.ruleEditFooter}>
-              {ruleEditError && (
+              {editError && (
                 <div className={styles.ruleEngineError}>
                   <Icon name="warning" />
-                  {ruleEditError}
+                  {editError}
                 </div>
               )}
               <div className={styles.ruleEditActionButtons}>
@@ -478,7 +512,7 @@ const RuleEngineTab: FC<Props> = ({
                   <Button
                     size="smaller"
                     color="translucent"
-                    onClick={() => setIsRuleEditModalOpen(false)}
+                    onClick={() => setIsEditModalOpen(false)}
                   >
                     <Icon name="close" />
                     取消
@@ -488,7 +522,7 @@ const RuleEngineTab: FC<Props> = ({
                   <Button
                     size="smaller"
                     color="primary"
-                    onClick={handleApplyRuleEdit}
+                    onClick={handleApplyEdit}
                   >
                     <Icon name="check" />
                     应用
