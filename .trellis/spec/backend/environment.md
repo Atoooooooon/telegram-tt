@@ -107,3 +107,32 @@ const getDbPath = () => {
 | Use `app.isPackaged`        | Most reliable detection    |
 | Set path in separate module | ESM hoisting               |
 | Import env-setup first      | Before any userData access |
+
+---
+
+## Portable Backend Bundle Dependencies
+
+The deploy workflow builds with dev dependencies available, then runs
+`npm prune --omit=dev` in `.github/workflows/main.yml` before packaging the
+portable bundle. Any package imported at runtime by `server/index.mjs` or its
+transitive backend modules must be listed in `package.json` `dependencies`, not
+`devDependencies`.
+
+Good:
+
+- `server/index.mjs` imports `dotenv/config`
+- `package.json` lists `"dotenv"` under `dependencies`
+- `npm ls dotenv --omit=dev` shows the package remains available
+
+Bad:
+
+- `server/index.mjs` imports `dotenv/config`
+- `package.json` lists `"dotenv"` only under `devDependencies`
+- Production startup fails with `ERR_MODULE_NOT_FOUND` after pruning
+
+Validation:
+
+```bash
+npm ls dotenv --omit=dev
+node -e "import('dotenv/config').then(() => console.log('dotenv import ok'))"
+```
