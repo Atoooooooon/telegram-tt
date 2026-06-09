@@ -749,6 +749,7 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
             hasRunnablePlaybook: false,
             reason: result.error || 'AI 推荐失败。',
             error: result.error || 'AI 推荐失败。',
+            rawContent: result.rawContent,
             knowledgeAvailable: Boolean(scenarioKnowledge.record?.content),
             knowledgeSource: scenarioKnowledge.source,
             knowledgeError: scenarioKnowledge.error,

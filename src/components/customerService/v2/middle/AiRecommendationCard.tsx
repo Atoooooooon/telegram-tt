@@ -6,6 +6,7 @@ import type { AiPlaybookRecommendation } from './CustomerServiceAiRecommendation
 
 import buildClassName from '../../../../util/buildClassName';
 
+import Icon from '../../../common/icons/Icon';
 import styles from './CustomerServiceMessageList.module.scss';
 
 type OwnProps = {
@@ -32,11 +33,30 @@ const AiRecommendationCard: FC<OwnProps> = ({
         : recommendation
           ? recommendation.reason
           : '等待 case 上下文稳定后生成意图识别。';
+  const rawOutputParts = [
+    recommendation?.rawContent ? `AI 原始返回:\n${recommendation.rawContent}` : '',
+    recommendation?.rawJsonText && recommendation.rawJsonText !== recommendation.rawContent
+      ? `提取的 JSON 片段:\n${recommendation.rawJsonText}`
+      : '',
+  ].filter(Boolean);
+  const rawOutput = rawOutputParts.join('\n\n');
 
   return (
     <div className={styles.aiRecommendationBox}>
       <div className={styles.aiRecommendationText}>
-        <strong className={styles.caseActionTitle}>AI 推荐</strong>
+        <div className={styles.aiRecommendationTitleRow}>
+          <strong className={styles.caseActionTitle}>AI 推荐</strong>
+          {rawOutput && (
+            <span
+              className={styles.aiRecommendationRawTrigger}
+              tabIndex={0}
+              aria-label="查看 AI 原始返回"
+            >
+              <Icon name="info" />
+              <span className={styles.aiRecommendationRawTooltip}>{rawOutput}</span>
+            </span>
+          )}
+        </div>
         <span className={buildClassName(styles.caseActionDescription, styles.aiRecommendationDescription)}>
           {description}
         </span>
@@ -105,19 +125,6 @@ const AiRecommendationCard: FC<OwnProps> = ({
           <span className={styles.aiRecommendationNoPlaybook}>暂无可执行 playbook</span>
         )}
       </div>
-      {recommendation?.rawContent && (
-        <details className={styles.aiRecommendationRaw}>
-          <summary className={styles.aiRecommendationRawSummary}>AI 原始返回</summary>
-          <pre className={styles.aiRecommendationRawContent}>{recommendation.rawContent}</pre>
-        </details>
-      )}
-      {recommendation?.rawJsonText
-        && recommendation.rawJsonText !== recommendation.rawContent && (
-        <details className={styles.aiRecommendationRaw}>
-          <summary className={styles.aiRecommendationRawSummary}>提取的 JSON 片段</summary>
-          <pre className={styles.aiRecommendationRawContent}>{recommendation.rawJsonText}</pre>
-        </details>
-      )}
     </div>
   );
 };

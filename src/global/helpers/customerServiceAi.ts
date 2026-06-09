@@ -36,6 +36,7 @@ export type CustomerServiceAiProfileSelection = {
 export type CustomerServiceAiChatResult = {
   ok: boolean;
   content?: string;
+  rawContent?: string;
   model?: string;
   usage?: unknown;
   finishReason?: string;
@@ -598,6 +599,7 @@ export async function requestCustomerServiceAiChat(
       return {
         ok: false,
         error: getAiProxyResponseError(response, responseText, data),
+        rawContent: data?.detail || data?.error || responseText,
       };
     }
 

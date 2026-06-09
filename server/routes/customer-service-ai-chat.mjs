@@ -270,6 +270,7 @@ function buildGeminiRequestBody(payload, messages) {
     generationConfig.maxOutputTokens = Math.floor(maxTokens);
   }
   if (responseMimeType) {
+    generationConfig.response_mime_type = responseMimeType;
     generationConfig.responseMimeType = responseMimeType;
   }
   if (Object.keys(generationConfig).length) {
