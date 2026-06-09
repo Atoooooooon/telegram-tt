@@ -330,6 +330,10 @@ export type CustomerServiceRuleEventType = 'customer_message' | 'bot_reply' | 'a
 export type CustomerServiceCasePlaybook = UserRule & {
   kind?: 'case_playbook';
   description?: string;
+  aiAutoRun?: {
+    enabled?: boolean;
+    minConfidence?: number;
+  };
   exposable?: boolean;
   manualRunnable?: boolean;
   scope?: 'case' | 'standalone' | 'both';

@@ -140,6 +140,7 @@ const DEFAULT_QUEUE_PANE_WIDTH = 320;
 const MIN_QUEUE_PANE_WIDTH = 240;
 const MAX_QUEUE_PANE_WIDTH = 520;
 const MIN_DETAIL_PANE_WIDTH = 360;
+const DEFAULT_AI_AUTO_RUN_MIN_CONFIDENCE = 85;
 
 function normalizeFieldKey(label: string) {
   if (/订单|单号|order/i.test(label)) {
@@ -199,7 +200,21 @@ function canRunPlaybookStandalone(playbook: CustomerServiceCasePlaybook) {
 
 function getEnabledManualPlaybooks(settings?: CustomerServiceSettings) {
   return (settings?.casePlaybooks || [])
-    .filter((playbook) => playbook.enabled && playbook.exposable !== false && playbook.manualRunnable !== false);
+    .filter((playbook) => playbook.enabled && playbook.manualRunnable !== false);
+}
+
+function getEnabledExposablePlaybooks(settings?: CustomerServiceSettings) {
+  return (settings?.casePlaybooks || [])
+    .filter((playbook) => playbook.enabled && playbook.exposable !== false);
+}
+
+function getAiAutoRunMinConfidence(playbook: CustomerServiceCasePlaybook) {
+  const minConfidence = playbook.aiAutoRun?.minConfidence;
+  if (typeof minConfidence !== 'number' || !Number.isFinite(minConfidence)) {
+    return DEFAULT_AI_AUTO_RUN_MIN_CONFIDENCE;
+  }
+
+  return Math.max(0, Math.min(100, minConfidence));
 }
 
 function getStatusLabel(
@@ -336,6 +351,7 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
     firstChangedAt: number;
     scheduleKey?: string;
   }>();
+  const aiAutoRunKeysRef = useRef<Set<string>>(new Set());
 
   const refreshResolvedCaseRecords = useLastCallback(async () => {
     const result = await listCustomerServiceSuccessCases(80);
@@ -563,11 +579,15 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
   }, [getAssistantInsight, selectedGroup]);
 
   const caseRunnablePlaybooks = useMemo(() => (
-    getEnabledManualPlaybooks(settings).filter(canRunPlaybookWithCase)
+    getEnabledExposablePlaybooks(settings).filter(canRunPlaybookWithCase)
   ), [settings]);
 
   const standaloneRunnablePlaybooks = useMemo(() => (
     getEnabledManualPlaybooks(settings).filter(canRunPlaybookStandalone)
+  ), [settings]);
+
+  const manualRunnablePlaybooks = useMemo(() => (
+    getEnabledManualPlaybooks(settings).filter(canRunPlaybookWithCase)
   ), [settings]);
 
   const manualPlaybookEntries = useMemo<RecommendedPlaybook[]>(() => {
@@ -578,7 +598,7 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
     const caseContext = buildCaseReplyContext(selectedGroup);
     const normalizedText = caseContext.caseContextText.toLowerCase();
 
-    return caseRunnablePlaybooks.map((playbook) => {
+    return manualRunnablePlaybooks.map((playbook) => {
       const matcher = playbook.caseMatcher;
       const requiredFields = matcher?.requiresFields || [];
       const missingFields = requiredFields.filter((field) => (
@@ -605,7 +625,7 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
 
       return left.playbook.name.localeCompare(right.playbook.name);
     });
-  }, [buildCaseReplyContext, caseRunnablePlaybooks, selectedGroup, selectedInsight]);
+  }, [buildCaseReplyContext, manualRunnablePlaybooks, selectedGroup, selectedInsight]);
 
   const aiPlaybookRecommendation = selectedGroup
     ? aiRecommendationByGroupId[selectedGroup.id]
@@ -1265,6 +1285,72 @@ const CustomerServiceMessageList: FC<OwnProps & StateProps> = ({
   const handleRunStandalonePlaybook = useLastCallback((playbook: CustomerServiceCasePlaybook) => {
     void handleRunPlaybook(playbook);
   });
+
+  useEffect(() => {
+    if (!selectedGroup || !selectedInsight || !aiPlaybookRecommendation || !aiRecommendedPlaybook) {
+      return;
+    }
+
+    if (aiRecommendedPlaybook.aiAutoRun?.enabled !== true || !aiPlaybookRecommendation.hasRunnablePlaybook) {
+      return;
+    }
+
+    const minConfidence = getAiAutoRunMinConfidence(aiRecommendedPlaybook);
+    const recommendationConfidence = aiPlaybookRecommendation.confidence ?? 0;
+    if (recommendationConfidence < minConfidence) {
+      return;
+    }
+
+    const status = getStatusLabel(selectedGroup.id, repliedGroupIds, processingGroupIds, resolvedGroupIds);
+    if (status !== '待处理') {
+      return;
+    }
+
+    const caseContext = buildCaseReplyContext(selectedGroup);
+    const orderNumber = getCaseFieldValue(selectedInsight, 'orderNumber', caseContext.caseContextText);
+    if (!orderNumber) {
+      return;
+    }
+
+    const existingRuns = playbookRunsByGroupId[selectedGroup.id] || [];
+    if (existingRuns.some((run) => run.playbookId === aiRecommendedPlaybook.id)) {
+      return;
+    }
+
+    const autoRunKey = [
+      selectedGroup.id,
+      aiRecommendedPlaybook.id,
+      aiPlaybookRecommendation.requestKey,
+    ].join('::');
+    if (aiAutoRunKeysRef.current.has(autoRunKey)) {
+      return;
+    }
+
+    aiAutoRunKeysRef.current.add(autoRunKey);
+    const autoRunNote = [
+      `AI 置信度 ${recommendationConfidence}% >= ${minConfidence}%`,
+      `已自动执行 ${aiRecommendedPlaybook.name}。`,
+    ].join('，');
+    setLookupNotesByGroupId((prev) => ({
+      ...prev,
+      [selectedGroup.id]: autoRunNote,
+    }));
+    void handleRunPlaybook(aiRecommendedPlaybook, {
+      group: selectedGroup,
+      insight: selectedInsight,
+    });
+  }, [
+    aiPlaybookRecommendation,
+    aiRecommendedPlaybook,
+    buildCaseReplyContext,
+    handleRunPlaybook,
+    playbookRunsByGroupId,
+    processingGroupIds,
+    repliedGroupIds,
+    resolvedGroupIds,
+    selectedGroup,
+    selectedInsight,
+  ]);
 
   const handleSkipSuggestedActions = useLastCallback(() => {
     if (!selectedGroup) {

@@ -330,6 +330,147 @@ Manual assertion points:
 }
 ```
 
+## Scenario: AI Auto-Run Case Playbooks
+
+### 1. Scope / Trigger
+
+Use this contract when a case playbook may be executed automatically after AI recommends it with high confidence. The first production use is auto-running the low-risk `/ds` pay-in lookup playbook after AI identifies a customer payment-order lookup from text/image context.
+
+### 2. Signatures
+
+Case playbook JSON:
+
+```ts
+type CustomerServiceCasePlaybook = UserRule & {
+  kind?: 'case_playbook';
+  exposable?: boolean;
+  manualRunnable?: boolean;
+  aiAutoRun?: {
+    enabled?: boolean;
+    minConfidence?: number; // 0-100, default 85
+  };
+};
+```
+
+Recommended JSON snippet:
+
+```json
+{
+  "id": "case_va_order_feedback_demo",
+  "exposable": true,
+  "manualRunnable": true,
+  "aiAutoRun": {
+    "enabled": true,
+    "minConfidence": 85
+  }
+}
+```
+
+### 3. Contracts
+
+`exposable` controls AI visibility. If `exposable` is false, the playbook must not be sent to the AI playbook recommender and cannot be AI auto-run.
+
+`manualRunnable` controls the workbench manual button. If `manualRunnable` is false, the playbook is hidden from the manual execution list, but it may still be AI-recommended or AI auto-run when `exposable` and `aiAutoRun.enabled` are true.
+
+`aiAutoRun.enabled` permits automatic execution only after AI returns the same playbook id with `hasRunnablePlaybook=true`.
+
+`aiAutoRun.minConfidence` is the minimum AI recommendation confidence. Missing or invalid values default to 85 and runtime clamps values into 0-100.
+
+Auto-run must reuse the same `handleRunPlaybook` path as manual execution. Do not add a separate send-message path.
+
+### 4. Validation & Error Matrix
+
+| Input / Condition | Behavior |
+| --- | --- |
+| `aiAutoRun` missing | Never auto-run; show recommendation/manual controls only |
+| `aiAutoRun.enabled=false` | Never auto-run |
+| `exposable=false` | AI does not see the playbook; no AI recommendation or auto-run |
+| `manualRunnable=false` and `exposable=true` | Hidden from manual list; still eligible for AI recommendation/auto-run |
+| AI confidence below threshold | Do not auto-run |
+| Missing `orderNumber` | Do not auto-run lookup playbook |
+| Case already processing/resolved/replied | Do not auto-run |
+| Same recommendation rendered multiple times | Run at most once per case/playbook/recommendation key |
+
+### 5. Good / Base / Bad Cases
+
+Good case:
+
+```json
+{
+  "playbookId": "case_va_order_feedback_demo",
+  "aiConfidence": 92,
+  "orderNumber": "idn6603150418xap",
+  "status": "待处理",
+  "expected": "auto-run /ds playbook"
+}
+```
+
+Base case:
+
+```json
+{
+  "playbookId": "case_va_order_feedback_demo",
+  "aiConfidence": 70,
+  "expected": "show recommendation only"
+}
+```
+
+Bad case:
+
+```json
+{
+  "playbookId": "case_payout_no_funds_demo",
+  "aiConfidence": 95,
+  "aiAutoRun": {
+    "enabled": false
+  },
+  "expected": "must not auto-run payout follow-up"
+}
+```
+
+### 6. Tests Required
+
+Required verification for this contract:
+
+```bash
+npx tsc --noEmit --pretty false
+npx eslint --cache --cache-location .cache/.eslintcache --rule react-hooks-static-deps/exhaustive-deps:off src/components/customerService/v2/middle/CustomerServiceMessageList.tsx src/components/customerService/v2/setting/tabs/RuleEngineTab.tsx src/components/customerService/v2/setting/RuleEngineDoc.tsx src/global/helpers/customerServiceV2Settings.ts src/global/types/customerServiceV2.ts
+git diff --check
+```
+
+Manual assertion points:
+
+1. The default `/ds` playbook JSON includes `aiAutoRun.enabled=true` and `minConfidence=85`.
+2. A high-confidence AI recommendation auto-runs the `/ds` playbook once.
+3. Low-confidence recommendations remain manual.
+4. `manualRunnable=false` hides the manual button without hiding the playbook from AI when `exposable=true`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```json
+{
+  "exposable": false,
+  "aiAutoRun": {
+    "enabled": true
+  }
+}
+```
+
+#### Correct
+
+```json
+{
+  "exposable": true,
+  "manualRunnable": true,
+  "aiAutoRun": {
+    "enabled": true,
+    "minConfidence": 85
+  }
+}
+```
+
 ## Scenario: Scenario Knowledge Redis Seeding
 
 ### 1. Scope / Trigger

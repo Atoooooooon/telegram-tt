@@ -157,12 +157,186 @@ function getDefaultCustomerServicePlaybookRecommenderAiProfile(): CustomerServic
 export function getDefaultCustomerServiceCasePlaybooks(): CustomerServiceCasePlaybook[] {
   return [
     {
-      id: 'case_va_order_feedback_demo',
-      name: '收款查单 Demo: /ds 后判断 VA',
-      enabled: true,
+      id: 'case_ai_auto_ds_safe',
+      name: 'AI 自动 /ds（高置信度代收查单）',
+      enabled: false,
       kind: 'case_playbook',
       exposable: true,
       manualRunnable: true,
+      aiAutoRun: {
+        enabled: true,
+        minConfidence: 85,
+      },
+      scope: 'case',
+      description: '生产可用：AI 高置信度判断为代收查单后自动执行 /ds。保留旧版排除词和群组机器人路由，不包含后续上游反馈。',
+      trigger: {
+        eventType: 'case_manual',
+      },
+      caseMatcher: {
+        intent: '支付订单查询',
+        keywords: ['查单', '订单', '单号', '凭证', '支付', '代收', 'payin', 'ds'],
+        requiresFields: ['orderNumber'],
+      },
+      pipeline: [
+        {
+          id: 'normalize_context',
+          capabilityId: 'text_processor',
+          config: {
+            inputField: 'caseContextText',
+            outputField: 'normalizedText',
+            cleanEnabled: true,
+            cleanTrim: true,
+            transformEnabled: true,
+            transformCase: 'lower',
+          },
+          onFailure: {
+            stopPipeline: true,
+          },
+        },
+        {
+          id: 'block_by_context_text',
+          capabilityId: 'check_message',
+          config: {
+            variableKey: 'normalizedText',
+            variableOperator: 'regex',
+            variableExpectedValue:
+              '(汇率|回u|payout|withdraw|(^|[^a-z])wd([^a-z]|$)|代付|提现|导出数据|导不出|导出|出款|结算|余额|银行卡|rrn)',
+          },
+          onSuccess: {
+            executeAction: 'action_add_queue',
+            stopPipeline: true,
+          },
+        },
+        {
+          id: 'clean_order',
+          capabilityId: 'text_processor',
+          config: {
+            inputField: 'caseContextText',
+            outputField: 'orderNumber',
+            cleanEnabled: true,
+            cleanPrefixes: '/ds,/df,/d,/订单,/单号,订单号,单号,order',
+            cleanTrim: true,
+            cleanRemoveSpecial: false,
+            extractEnabled: true,
+            extractPattern: '([A-Za-z0-9][A-Za-z0-9-]{12,63})',
+            extractGroupIndex: 1,
+            validateEnabled: true,
+            validateMinLength: 8,
+            validateMaxLength: 64,
+            validateNumeric: false,
+          },
+          onFailure: {
+            stopPipeline: true,
+          },
+        },
+        {
+          id: 'block_by_order_content',
+          capabilityId: 'check_message',
+          config: {
+            variableKey: 'orderNumber',
+            variableOperator: 'regex',
+            variableExpectedValue:
+              '([Rr][Rr][Nn]|[Pp][Aa][Yy][Oo][Uu][Tt]|[Ww][Ii][Tt][Hh][Dd][Rr][Aa][Ww]'
+              + '|[Hh][Tt][Tt][Pp][Ss]?|(^|[^A-Za-z])[Ww][Dd]([^A-Za-z]|$))',
+          },
+          onSuccess: {
+            executeAction: 'action_add_queue',
+            stopPipeline: true,
+          },
+        },
+        {
+          id: 'check_group_paying',
+          capabilityId: 'check_message',
+          config: {
+            variableKey: 'chatTitle',
+            variableOperator: 'regex',
+            variableExpectedValue: '[Pp][Aa][Yy][Ii][Nn][Gg]',
+          },
+          onSuccess: {
+            gotoStep: 'reply_ds_paying',
+          },
+          onFailure: {
+            gotoStep: 'check_group_sec',
+          },
+        },
+        {
+          id: 'check_group_sec',
+          capabilityId: 'check_message',
+          config: {
+            variableKey: 'chatTitle',
+            variableOperator: 'regex',
+            variableExpectedValue: '[Ss][Ee][Cc]',
+          },
+          onSuccess: {
+            gotoStep: 'reply_ds_sec',
+          },
+          onFailure: {
+            gotoStep: 'reply_ds_default',
+          },
+        },
+        {
+          id: 'reply_ds_paying',
+          capabilityId: 'action_auto_reply',
+          config: {
+            template: '/ds@PayingId_Bot {{orderNumber}}',
+            replyToOriginal: true,
+            typingDelayMs: 2200,
+          },
+          onSuccess: {
+            gotoStep: 'add_to_queue',
+          },
+          onFailure: {
+            gotoStep: 'add_to_queue',
+          },
+        },
+        {
+          id: 'reply_ds_sec',
+          capabilityId: 'action_auto_reply',
+          config: {
+            template: '/ds@secpaybd2_bot {{orderNumber}}',
+            replyToOriginal: true,
+            typingDelayMs: 2200,
+          },
+          onSuccess: {
+            gotoStep: 'add_to_queue',
+          },
+          onFailure: {
+            gotoStep: 'add_to_queue',
+          },
+        },
+        {
+          id: 'reply_ds_default',
+          capabilityId: 'action_auto_reply',
+          config: {
+            template: '/ds {{orderNumber}}',
+            replyToOriginal: true,
+            typingDelayMs: 2200,
+          },
+          onSuccess: {
+            gotoStep: 'add_to_queue',
+          },
+          onFailure: {
+            gotoStep: 'add_to_queue',
+          },
+        },
+        {
+          id: 'add_to_queue',
+          capabilityId: 'action_add_queue',
+          config: {},
+        },
+      ],
+    },
+    {
+      id: 'case_va_order_feedback_demo',
+      name: '收款查单 Demo: /ds 后判断 VA',
+      enabled: false,
+      kind: 'case_playbook',
+      exposable: true,
+      manualRunnable: true,
+      aiAutoRun: {
+        enabled: false,
+        minConfidence: 85,
+      },
       scope: 'case',
       description: '用户发送图片和单号时,先在客户群执行 /ds,不在用户消息阶段猜 VA/QRIS。'
         + '若机器人回复显示订单成功则标记解决；若显示处理中且 VA/URL 是数字 VA,再反馈上游。',
@@ -401,7 +575,7 @@ export function getDefaultCustomerServiceCasePlaybooks(): CustomerServiceCasePla
     {
       id: 'case_payout_no_funds_demo',
       name: '代付未到账 Demo: /df + 人工视频确认 + /dolist',
-      enabled: true,
+      enabled: false,
       kind: 'case_playbook',
       exposable: true,
       manualRunnable: true,
@@ -631,7 +805,7 @@ export function getDefaultCustomerServiceCasePlaybooks(): CustomerServiceCasePla
     {
       id: 'standalone_stuck_orders_dpgroup_demo',
       name: '卡单统计 Demo: /dpgroup',
-      enabled: true,
+      enabled: false,
       kind: 'case_playbook',
       exposable: true,
       manualRunnable: true,
@@ -697,6 +871,12 @@ export function normalizeCustomerServiceCasePlaybooks(raw: unknown): CustomerSer
       kind: 'case_playbook',
       exposable: item.exposable !== false,
       manualRunnable: item.manualRunnable !== false,
+      aiAutoRun: isRecord(item.aiAutoRun)
+        ? {
+          enabled: item.aiAutoRun.enabled === true,
+          minConfidence: toNonNegativeNumber(item.aiAutoRun.minConfidence, 85),
+        }
+        : undefined,
       scope: item.scope === 'standalone' || item.scope === 'both' ? item.scope : 'case',
       trigger: isRecord(item.trigger)
         ? {

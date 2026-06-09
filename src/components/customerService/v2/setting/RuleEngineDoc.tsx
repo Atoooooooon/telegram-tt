@@ -95,6 +95,41 @@ const RuleEngineDoc: FC = () => {
               。当前工作台会用这些信息决定是否优先展示。
             </li>
             <li>
+              <code>exposable</code>
+              : 是否暴露给 AI 推荐器 (boolean, 默认 true)。
+              设为 false 时，AI 不会看到这个 playbook，也不会自动执行它；但仍可配合
+              {' '}
+              <code>manualRunnable</code>
+              {' '}
+              作为人工工具保留。
+            </li>
+            <li>
+              <code>manualRunnable</code>
+              : 是否显示在工作台“手动执行”区域 (boolean, 默认 true)。
+              设为 false 时，人工按钮隐藏；如果
+              {' '}
+              <code>exposable</code>
+              {' '}
+              仍为 true，AI 仍可推荐或按
+              {' '}
+              <code>aiAutoRun</code>
+              {' '}
+              自动执行。
+            </li>
+            <li>
+              <code>aiAutoRun</code>
+              : AI 高置信度推荐后是否自动执行 (object, 可选)。推荐只给低风险内部查询开启，例如先敲
+              {' '}
+              <code>/ds</code>
+              ；上游反馈、发送客户回复等高风险动作应继续人工确认。
+              <pre className={styles.codeExample}>
+                {`"aiAutoRun": {
+  "enabled": true,
+  "minConfidence": 85
+}`}
+              </pre>
+            </li>
+            <li>
               <code>scope</code>
               : 可选，
               <code>case</code>

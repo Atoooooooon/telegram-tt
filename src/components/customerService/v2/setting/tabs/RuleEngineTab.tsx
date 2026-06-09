@@ -314,6 +314,19 @@ const RuleEngineTab: FC<Props> = ({
         playbook.kind = 'case_playbook';
         playbook.exposable = playbook.exposable !== false;
         playbook.manualRunnable = playbook.manualRunnable !== false;
+        if (playbook.aiAutoRun !== undefined) {
+          if (!playbook.aiAutoRun || typeof playbook.aiAutoRun !== 'object' || Array.isArray(playbook.aiAutoRun)) {
+            delete playbook.aiAutoRun;
+          } else {
+            playbook.aiAutoRun = {
+              enabled: playbook.aiAutoRun.enabled === true,
+              minConfidence: typeof playbook.aiAutoRun.minConfidence === 'number'
+                && Number.isFinite(playbook.aiAutoRun.minConfidence)
+                ? Math.max(0, Math.min(100, playbook.aiAutoRun.minConfidence))
+                : 85,
+            };
+          }
+        }
         playbook.trigger = {
           ...(playbook.trigger || {}),
           eventType: 'case_manual',
@@ -438,7 +451,7 @@ const RuleEngineTab: FC<Props> = ({
                 onClick={onRestore}
               >
                 <Icon name="reload" />
-                {kind === 'case_playbook' ? '恢复 Demo' : lang('CustomerServiceRuleEngineRestoreDefault')}
+                {kind === 'case_playbook' ? '恢复默认' : lang('CustomerServiceRuleEngineRestoreDefault')}
               </Button>
             </div>
           </div>
@@ -515,7 +528,7 @@ const RuleEngineTab: FC<Props> = ({
         safePlaybooks,
         handleAddPlaybook,
         () => onCasePlaybooksChange(getDefaultCustomerServiceCasePlaybooks()),
-        '暂无 Case Playbook。可恢复 Demo 或新增 JSON。',
+        '暂无 Case Playbook。可恢复默认或新增 JSON。',
       )}
 
       <Modal
